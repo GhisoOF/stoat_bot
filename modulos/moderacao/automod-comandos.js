@@ -7,6 +7,7 @@ import * as engine from "./automod-engine.js";
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import { analisarConteudo } from "./scorecard.js";
+import { registrarErro } from "../core/erros.js";
 import { tr, lingua, idiomaDe } from "../core/i18n.js";
 import { maisParecido } from "../core/parecido.js";
 import { erroDeUso, semPermissao } from "./punir.js";
@@ -422,6 +423,14 @@ export async function cmdAutomod(message, args, ctx) {
     return onOff(acao === "on", nome);
   }
 
+  // (31 out 2026, P3a, staff) quantos casos duvidosos a staff DESTE servidor já julgou (✅/❌) —
+  // o que ajusta a Judy aqui. Nada quando ainda não há nenhum.
+  function julgadosPelaStaff(tipo) {
+    let n = 0;
+    try { n = db.staffContarJulgados(ctx.serverId, tipo); } catch (e) { registrarErro("AUTOMOD:julgados", e); }
+    return n ? [`⚖️ ${n} caso(s) duvidoso(s) julgado(s) pela staff daqui`, `⚖️ ${n} doubtful case(s) judged by the staff here`, `⚖️ ${n} caso(s) dudoso(s) juzgado(s) por el staff de aquí`] : null;
+  }
+
   // ── &automod sentinela assuntos … (temas proibidos pela regra) ──
   // A tela mostra o estado; cada mudança responde uma linha (R1: antes o painel
   // inteiro era reenviado a cada alteração).
@@ -439,6 +448,7 @@ export async function cmdAutomod(message, args, ctx) {
           return `${assuntos.TEMAS[t].emoji} \`${nomeTema(t, l)}\` — \`${nomeAcaoTema(ac, l)}\`${extras ? ` · +${extras}` : ""}`;
         }),
         mod.canaisLiberados.length ? `${T("Liberados", "Allowed", "Permitidos")}: ${mod.canaisLiberados.map((c) => `<#${c}>`).join(" ")}` : null,
+        ((j) => (j ? T(...j) : null))(julgadosPelaStaff("assunto")),
       ].filter(Boolean).join("\n") });
     }
     if (op === "on" || op === "off") {
@@ -500,10 +510,11 @@ export async function cmdAutomod(message, args, ctx) {
     const op = a[0]?.toLowerCase();
     if (!op || op === "status" || op === "config") {
       const acao = avatar.acaoDoAvatar(mod);
+      const julgados = julgadosPelaStaff("perfil-");
       return linha(COR.mod,
-        `🖼️ Perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "pt")}\`${acao === "silenciar" ? " até trocar" : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ sem visão (só o texto)"}`,
-        `🖼️ Profile ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "en")}\`${acao === "silenciar" ? " until changed" : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ no vision (text only)"}`,
-        `🖼️ Perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "es")}\`${acao === "silenciar" ? " hasta que cambie" : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ sin visión (solo el texto)"}`);
+        `🖼️ Perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "pt")}\`${acao === "silenciar" ? " até trocar" : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ sem visão (só o texto)"}${julgados ? `\n${julgados[0]}` : ""}`,
+        `🖼️ Profile ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "en")}\`${acao === "silenciar" ? " until changed" : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ no vision (text only)"}${julgados ? `\n${julgados[1]}` : ""}`,
+        `🖼️ Perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "es")}\`${acao === "silenciar" ? " hasta que cambie" : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ sin visión (solo el texto)"}${julgados ? `\n${julgados[2]}` : ""}`);
     }
     if (op === "on" || op === "off") { mod.enabled = op === "on"; salvarConfig(); return onOff(op === "on", ["perfil", "profile", "perfil"]); }
     if (op === "acao" || op === "ação" || op === "action") {

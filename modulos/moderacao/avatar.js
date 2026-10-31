@@ -9,9 +9,9 @@
 // (31 out 2026, P3a) O perfil inteiro (bio, nome, status, foto e banner) passou
 // para perfil.js; aqui fica o que é de IMAGEM — a nota da descrição, o hash
 // (dHash, pelo ia-servico) — e a execução da ação com o alerta à staff. A
-// decisão passa pela CERTEZA (certeza.js): nota alta → age; média/baixa → fila
-// do dono, sem punir. Os nomes antigos (`aoEntrar`, `verificar`…) continuam
-// aqui e levam ao perfil.js (o main.js e os testes os usam).
+// decisão passa pela CERTEZA (certeza.js): nota alta → age; média/baixa → alerta
+// à staff do servidor com ✅/❌, sem punir (31 out 2026, P3a, staff; antes: fila do
+// dono). Os nomes antigos (`aoEntrar`, `verificar`…) continuam aqui e levam ao perfil.js (o main.js e os testes os usam).
 //
 // A ação é por servidor (`&automod sentinela avatar acao …`): `alertar`,
 // `silenciar` (padrão: timeout nativo ATÉ TROCAR o que apitou + alerta),
@@ -238,12 +238,12 @@ export const CAMPO = {
 const IMAGEM = new Set(["avatar", "avatarServidor", "banner"]);
 const MOTIVO_EN = { "sexual explícito": "explicit sexual", "menor + sexual": "minor + sexual", nudez: "nudity", "ódio": "hate", gore: "gore",
   sugestivo: "suggestive", "símbolo de ódio": "hate symbol", "arte em texto": "text art", "arte em texto conhecida": "known text art",
-  "texto sexual": "sexual text", "texto de ódio": "hateful text", "texto de golpe": "scam text", "confirmado pelo dono do bot": "confirmed by the bot owner",
+  "texto sexual": "sexual text", "texto de ódio": "hateful text", "texto de golpe": "scam text", "já conhecido (lista do bot)": "already known (the bot's list)", "confirmado pela staff": "confirmed by the staff",
   "possível conteúdo sexual (o modelo não confirmou o risco)": "possible sexual content (the model didn't confirm the risk)",
   "o modelo de visão se recusou a descrever a foto — confira": "the vision model refused to describe the picture — check it" };
 const MOTIVO_ES = { "sexual explícito": "sexual explícito", "menor + sexual": "menor + sexual", nudez: "desnudez", "ódio": "odio", gore: "gore",
   sugestivo: "sugerente", "símbolo de ódio": "símbolo de odio", "arte em texto": "arte en texto", "arte em texto conhecida": "arte en texto conocida",
-  "texto sexual": "texto sexual", "texto de ódio": "texto de odio", "texto de golpe": "texto de estafa", "confirmado pelo dono do bot": "confirmado por el dueño del bot",
+  "texto sexual": "texto sexual", "texto de ódio": "texto de odio", "texto de golpe": "texto de estafa", "já conhecido (lista do bot)": "ya conocido (lista del bot)", "confirmado pela staff": "confirmado por el staff",
   "possível conteúdo sexual (o modelo não confirmou o risco)": "posible contenido sexual (el modelo no confirmó el riesgo)",
   "o modelo de visão se recusou a descrever a foto — confira": "el modelo de visión se negó a describir la foto — revísala" };
 const motivoEm = (m, L) => (L === "es" ? MOTIVO_ES[m] ?? m : L === "en" ? MOTIVO_EN[m] ?? m : m);
@@ -306,11 +306,16 @@ export async function aplicarAcao({ ctx, server, userId, acao, motivo, L }) {
   }
 }
 
-// O alerta à staff (só quando o bot agiu — ou, sem a fila do dono, o "para conferir").
-// Nunca leva a imagem nem o texto do perfil: o que apitou e a descrição do modelo.
+// O alerta à staff: quando o bot agiu, ou (`conferir`) o caso duvidoso que a staff julga
+// com ✅/❌ (casos-staff.js manda e guarda). Nunca leva a imagem nem o texto do perfil: o
+// que apitou e a descrição do modelo.
 export async function alertar(ctx, { server, userId, origem, achados, feito, acao, L, conferir = false }) {
   const destino = await canalDaStaff(ctx, server);
   if (!destino) { console.warn(`[AVATAR] alerta NÃO entregue: servidor ${server.id} sem canal de alerta do sentinela nem de log`); return null; }
+  await ctx.sendEmbed(destino, embedDoAlerta(ctx, { server, userId, origem, achados, feito, acao, L, conferir }));
+  return destino.id ?? null;
+}
+export function embedDoAlerta(ctx, { userId, origem, achados, feito, acao, L, conferir = false }) {
   const en = L === "en", es = L === "es";
   const P = ctx.PREFIXO ?? "&";
   const staff = (ctx.config?.acesso?.cargosStaff ?? []).map((id) => `<%${id}>`).join(" ");
@@ -322,7 +327,7 @@ export async function alertar(ctx, { server, userId, origem, achados, feito, aca
   const i = es ? 2 : en ? 1 : 0;
   const trocou = achados.length === 1 ? CAMPO[achados[0].campo]?.troca?.[i] : null;
   const descricoes = achados.filter((a) => a.descricao).map((a) => `> ${a.descricao.replace(/\n+/g, " ").slice(0, 400)}`);
-  await ctx.sendEmbed(destino, {
+  return {
     title: pronto(grave ? (es ? "🚨 Perfil — posible material de abuso" : en ? "🚨 Profile — possible abuse material" : "🚨 Perfil — possível material de abuso")
       : conferir ? (soFotos ? (es ? "🖼️ Foto de perfil para revisar" : en ? "🖼️ Profile picture to check" : "🖼️ Foto de perfil para conferir") : (es ? "🪪 Perfil para revisar" : en ? "🪪 Profile to check" : "🪪 Perfil para conferir"))
       : soFotos ? (es ? "🖼️ Foto de perfil inapropiada" : en ? "🖼️ Inappropriate profile picture" : "🖼️ Foto de perfil imprópria")
@@ -330,7 +335,7 @@ export async function alertar(ctx, { server, userId, origem, achados, feito, aca
     description: pronto([
       staff || null,
       `<@${userId}> · ${origem === "troca" ? (trocou ?? (es ? "cambió su perfil" : en ? "changed their profile" : "trocou o perfil"))
-        : origem === "revisao" ? (es ? "el dueño del bot confirmó un caso parecido" : en ? "the bot owner confirmed a similar case" : "o dono do bot confirmou um caso parecido")
+        : origem === "staff" ? (es ? "el staff decidió" : en ? "the staff decided" : "a staff decidiu")
           : (es ? "acaba de entrar" : en ? "just joined" : "acabou de entrar")}`,
       `**${es ? "Señales" : en ? "Signals" : "Sinais"}:** ${sinaisDe(achados, L)}`,
       `**${es ? "Acción" : en ? "Action" : "Ação"}:** ${feito}`,
@@ -339,18 +344,17 @@ export async function alertar(ctx, { server, userId, origem, achados, feito, aca
       temImagem
         ? (es ? "**La foto NO se vuelve a publicar aquí.** Es la descripción de un modelo — revisa el perfil." : en ? "**The picture is NOT reposted here.** It's a model's description — check the profile." : "**A foto NÃO é repostada aqui.** É a descrição de um modelo — confira o perfil.")
         : (es ? "**El texto del perfil NO se vuelve a publicar aquí** — revisa el perfil." : en ? "**The profile text is NOT reposted here** — check the profile." : "**O texto do perfil NÃO é repostado aqui** — confira o perfil."),
-      acao !== "banir" ? (es ? `\`${citar("automod.sentinela.liberar", "es", P)} ${userId}\` · \`${citar("automod.sentinela.banir", "es", P)} ${userId}\`` : en ? `\`${citarInterno("automod.sentinela.liberar", P)} ${userId}\` · \`${citarInterno("automod.sentinela.banir", P)} ${userId}\`` : `\`${citarInterno("automod.sentinela.liberar", P)} ${userId}\` · \`${citarInterno("automod.sentinela.banir", P)} ${userId}\``) : null,
+      !conferir && acao !== "banir" ? (es ? `\`${citar("automod.sentinela.liberar", "es", P)} ${userId}\` · \`${citar("automod.sentinela.banir", "es", P)} ${userId}\`` : en ? `\`${citarInterno("automod.sentinela.liberar", P)} ${userId}\` · \`${citarInterno("automod.sentinela.banir", P)} ${userId}\`` : `\`${citarInterno("automod.sentinela.liberar", P)} ${userId}\` · \`${citarInterno("automod.sentinela.banir", P)} ${userId}\``) : null,
     ].filter((x) => x !== null).join("\n")),
     colour: grave ? ctx.COR?.erro : ctx.COR?.aviso,
-  });
-  return destino.id ?? null;
+  };
 }
 
 // O registro no canal de log de punições (o alerta já foi para lá? não repete).
 // `motivo` e `feito` já vêm no idioma do servidor (L); o log escolhe o título.
 export async function registrarNoLog(ctx, { userId, origem, motivo, feito, alertouEm }) {
   if (alertouEm && alertouEm === ctx.config?.log?.canalId) return;
-  const quando = { troca: ["trocou o perfil", "changed the profile", "cambió el perfil"], revisao: ["revisão do dono do bot", "bot owner's review", "revisión del dueño del bot"] }[origem]
+  const quando = { troca: ["trocou o perfil", "changed the profile", "cambió el perfil"], staff: ["decisão da staff", "staff decision", "decisión del staff"] }[origem]
     ?? ["ao entrar", "on join", "al entrar"];
   await log.registrar(ctx, "punicoes", {
     titulo: "🖼️ Perfil impróprio",

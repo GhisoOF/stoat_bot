@@ -11872,17 +11872,20 @@ editados.length = 0; enviados.length = 0;
 res = await av.verificar({ ctx: ctxAv(cfgAv()), server: servidor("S8"), userId: "NOVO", avatar: { id: "FOTO_TERNO" } });
 ok(res?.apitou === false && !editados.length && !enviados.length, "  → e pela checagem inteira: ninguém silenciado, nenhum alerta");
 descricao = "Close de genitália masculina."; risco = false; editados.length = 0; enviados.length = 0;
-// (31 out 2026, P3a) certeza média → a fila do dono (DM), sem punir e sem chamar a staff (decisão do dono:
-// nada depende da staff); sem a fila no pacote, o caminho antigo ("para conferir") continua
+// (31 out 2026, P3a) certeza média → a fila do dono (DM), sem punir e sem chamar a staff; sem a fila, "para conferir".
+// (31 out 2026, P3a, staff — R13) antes: a dúvida ia para a fila do dono e a staff NÃO era chamada. agora: a staff do servidor
+// recebe o alerta "para conferir" com ✅/❌ (ninguém silenciado); a amostra do dono só mede (o caso com o link na origem);
+// e sem a fila do dono, a staff continua recebendo o mesmo alerta
 const casosAv = [], czAv = await import("./modulos/moderacao/certeza.js");
-const filaAntesAv = czAv._trocarFila({ registrarCaso: (c) => { casosAv.push(c); return { codigo: "C1", herdado: null }; }, vereditoParecido: () => null, limiar: (_c, p) => p, amostrar: () => false });
+const filaAntesAv = czAv._trocarFila({ registrarCaso: (c) => { casosAv.push(c); return { codigo: "C1" }; }, amostrar: () => false });
 res = await av.verificar({ ctx: ctxAv(cfgAv()), server: servidor("S8"), userId: "NOVO", avatar: { id: "FOTO_SEM_VOTO" } });
-ok(res?.suspeita && !editados.length && !enviados.length && casosAv.length === 1 && casosAv[0].certeza === "media" && casosAv[0].acao === "nenhuma"
+ok(res?.suspeita && !editados.length && enviados.length === 1 && /para conferir/.test(enviados[0].title) && /✅ silenciar até trocar · ❌ não fazer nada/.test(enviados[0].description)
+  && !/liberar NOVO/.test(enviados[0].description) && casosAv.length === 1 && casosAv[0].certeza === "media"
   && casosAv[0].tipo === "perfil-imagem" && casosAv[0].categoria === "sexual" && casosAv[0].evidencia.link === "https://cdn.stoatusercontent.com/avatars/FOTO_SEM_VOTO",
-  "★ termo explícito sem o voto do modelo: certeza média → fila do dono (com o link na origem); ninguém silenciado, staff não chamada");
-czAv._trocarFila(null);
+  "★ termo explícito sem o voto do modelo: certeza média → alerta à staff com ✅/❌ (e a amostra do dono, com o link na origem); ninguém silenciado");
+czAv._trocarFila(null); enviados.length = 0;
 res = await av.verificar({ ctx: ctxAv(cfgAv()), server: servidor("S8"), userId: "NOVO", avatar: { id: "FOTO_SEM_VOTO_2" } });
-ok(res?.suspeita && !editados.length && enviados.some((e) => /para conferir/.test(e.title) && /confira o perfil/.test(e.description)), "  → sem a fila: só avisa a staff (\"para conferir\"), não silencia");
+ok(res?.suspeita && !editados.length && enviados.some((e) => /para conferir/.test(e.title) && /confira o perfil/.test(e.description) && /✅ .* · ❌ /.test(e.description)), "  → sem a fila do dono: a staff recebe o mesmo alerta (\"para conferir\", ✅/❌), não silencia");
 czAv._trocarFila(filaAntesAv);
 // sem permissão: o erro do Stoat em texto de gente, e um alerta só (o canal de alerta É o de log)
 risco = true; enviados.length = 0;
@@ -23047,10 +23050,22 @@ await quieto(() => db.abrirBanco(DB_UNI));
 const rev = await import("./modulos/moderacao/revisao.js");
 const cru = new DatabaseSync(DB_UNI);
 // (31 out 2026, P3a) a fila desligada (sem `configurar`) não grava nada: os testes de unidade ligam a fila sem cliente e sem timer
-const limpar = () => { db.filaPorEstado("candidato"); for (const tb of ["revisao_casos", "revisao_limiares", "revisao_servidores", "revisao_estado"]) cru.exec(`DELETE FROM ${tb}`); rev._zerar(); rev._ligarParaTestes(); };
+const st = await import("./modulos/moderacao/casos-staff.js");
+// (31 out 2026, P3a, staff) a fila do dono só guarda a AMOSTRA (o sorteio de REVISAO_AMOSTRA): nos testes de unidade
+// o sorteio sai fixo em 0 (sorteado) — `reg` — e os casos da staff de cada servidor também são zerados
+const limpar = () => { db.filaPorEstado("amostra"); db.staffContarJulgados("x"); for (const tb of ["revisao_casos", "revisao_limiares", "revisao_estado", "staff_casos", "staff_limiares"]) cru.exec(`DELETE FROM ${tb}`); rev._zerar(); st._zerar(); rev._ligarParaTestes(); rev._trocarSorteio(() => 0); };
 const DIA = 86400e3, AGORA = Date.UTC(2026, 9, 31, 12, 0, 0);
 const caso = (x = {}) => ({ tipo: "perfil-imagem", categoria: "sexual", serverId: SID, userId: ANA, origem: "detector", certeza: "media", nota: 0.7, acao: "nenhuma", evidencia: {}, detector: "teste", ...x });
 const reg = (x = {}, agora = AGORA) => rev.registrarCaso(caso(x), { agora });
+// um caso julgado pela staff de um servidor (a herança e o limiar dele: casos-staff.js)
+let nStaff = 0;
+const julgarStaff = (x = {}, veredito = "certo", agora = AGORA) => {
+  const { hash, impressao } = rev.impressoesDe(x.evidencia ?? {});
+  const id = db.staffInserir({ serverId: x.serverId ?? SID, tipo: x.tipo ?? "perfil-imagem", categoria: x.categoria ?? "sexual", nota: x.nota ?? null,
+    parte: "avatar", userId: ANA, alertaMsgId: `AL${++nStaff}`, hash, impressao, criadoEm: agora });
+  db.staffJulgar(id, veredito, agora); st._zerar();
+  return id;
+};
 const linha = (codigo) => db.filaCaso(codigo);
 
 console.log("── 1. registrar ──");
@@ -23058,7 +23073,9 @@ await t("★ registrarCaso devolve um código curto (sem dado pessoal) e guarda 
   limpar();
   const r = reg({ evidencia: { link: "https://cdn.stoatusercontent.com/avatars/" + U(999), hash: "C37379279F3D6633" } });
   assert.match(r.codigo, rev.CODIGO);
-  assert.equal(r.herdado, null);
+  // (31 out 2026, P3a, staff) antes: `r.herdado === null` (o veredito do dono virava herança). agora: só o código —
+  // nada de herança vinda do dono (a herança é da staff de cada servidor)
+  assert.deepEqual(Object.keys(r), ["codigo"]);
   assert.ok(!/[AEIOU]/.test(r.codigo) && /\d/.test(r.codigo), r.codigo);
   const l = linha(r.codigo);
   assert.equal(l.tipo, "perfil-imagem"); assert.equal(l.categoria, "sexual"); assert.equal(l.userId, ANA); assert.equal(l.serverId, SID);
@@ -23083,51 +23100,67 @@ await t("★ entrada inválida (tipo, origem, certeza, ação, categoria) → c�
   for (const ruim of [{ tipo: "video" }, { origem: "usuario" }, { certeza: "total" }, { acao: "banido" }, { categoria: "Sexual Explícito!" }]) {
     let r;
     const log = await capturar(() => { r = reg(ruim); });
-    assert.deepEqual(r, { codigo: null, herdado: null }, JSON.stringify(ruim));
+    // (31 out 2026, P3a, staff) antes: { codigo: null, herdado: null }. agora: { codigo: null } (sem herança do dono)
+    assert.deepEqual(r, { codigo: null }, JSON.stringify(ruim));
     assert.match(log, /\[REVISAO\] caso recusado/);
   }
-  const r = reg({ userId: "não é id", canalId: "<#x>", serverId: "../../etc" });
+  const r = reg({ userId: "não é id", canalId: "<#x>" });
   const l = linha(r.codigo);
-  assert.equal(l.userId, null); assert.equal(l.canalId, null); assert.equal(l.serverId, null); assert.equal(l.servidor, null);
+  assert.equal(l.userId, null); assert.equal(l.canalId, null);
+  // (31 out 2026, P3a, staff) antes: o servidor "../../etc" virava null e o caso ficava. agora: sem servidor não há
+  // amostra (os tetos são por servidor) — nada é guardado
+  assert.deepEqual(reg({ serverId: "../../etc" }), { codigo: null });
 });
 await t("★ nada de exceção para quem chama: banco fechado/erro vira log e { codigo: null }", async () => {
   limpar();
   let r;
   const log = await capturar(() => { r = rev.registrarCaso(null); });
-  assert.deepEqual(r, { codigo: null, herdado: null });
+  // (31 out 2026, P3a, staff) antes: { codigo: null, herdado: null }. agora: { codigo: null }
+  assert.deepEqual(r, { codigo: null });
   assert.match(log, /^\[REVISAO:registrar\]/);
 });
 
 console.log("── 2. quem entra na fila ──");
-await t("★ média/baixa, staff e discordância → fila; certeza alta → só registro (amostra); amostra → amostra", () => {
+// (31 out 2026, P3a, staff — R13) antes: "média/baixa, staff e discordância → fila (candidato); certeza alta → só
+// registro". agora: ao dono só a AMOSTRA — toda decisão do detector passa pelo sorteio (qualquer certeza); o sinal da
+// staff não existe mais (origem/tipo "staff" recusados)
+await t("★ só a amostra: decisão do detector sorteada → registro, não sorteada → nada (qualquer certeza); amostra → amostra; staff recusada", async () => {
   limpar();
-  const est = (x) => linha(reg(x).codigo).estado;
-  assert.equal(est({ certeza: "media" }), "candidato");
-  assert.equal(est({ certeza: "baixa", nota: 0.4 }), "candidato");
-  assert.equal(est({ origem: "staff", tipo: "staff", certeza: null, nota: null, acao: "punido" }), "candidato");
-  assert.equal(est({ origem: "discordancia", certeza: "media" }), "candidato");
-  // (31 out 2026, P3a) antes: certeza alta do detector sempre virava "registro". agora: só a que o sorteio
-  // da amostra pega vira "registro"; a não sorteada não é guardada (código null) — o herdado ainda vem
-  assert.equal(linha(rev.registrarCaso(caso({ certeza: "alta", nota: 0.95, acao: "punido" }), { agora: AGORA, sorteio: () => 0 }).codigo).estado, "registro");
-  assert.deepEqual(rev.registrarCaso(caso({ certeza: "alta", nota: 0.95, acao: "punido" }), { agora: AGORA, sorteio: () => 0.5 }), { codigo: null, herdado: null });
-  assert.equal(est({ origem: "amostra", certeza: null, nota: 0.1 }), "amostra");
+  const com = (x, sorteio) => rev.registrarCaso(caso(x), { agora: AGORA, sorteio });
+  for (const x of [{ certeza: "media" }, { certeza: "baixa", nota: 0.4 }, { origem: "discordancia", certeza: "media", serverId: SID2 }, { certeza: "alta", nota: 0.95, acao: "punido", serverId: SID2 }, { certeza: "media", acao: "alertado", serverId: SID3 }]) {
+    assert.equal(linha(com(x, () => 0).codigo).estado, "registro", JSON.stringify(x));
+    assert.deepEqual(com(x, () => 0.5), { codigo: null }, `não sorteado: ${JSON.stringify(x)}`);
+  }
+  assert.equal(db.filaContar(["candidato"]), 0, "nada vira \"candidato\" (a dúvida é da staff)");
+  assert.equal(linha(reg({ origem: "amostra", certeza: null, nota: 0.1, serverId: U(301) }).codigo).estado, "amostra");
+  for (const ruim of [{ origem: "staff", tipo: "staff", certeza: null, nota: null, acao: "punido" }, { origem: "staff" }, { tipo: "staff" }, { origem: "dono" }]) {
+    let r;
+    const log = await capturar(() => { r = com({ ...ruim, serverId: U(302) }, () => 0); });
+    assert.deepEqual(r, { codigo: null }, JSON.stringify(ruim));
+    assert.match(log, /\[REVISAO\] caso recusado: (origem|tipo)/);
+  }
 });
-await t("★ a ação da staff é só sinal: a fila não pune (nenhum gancho roda ao registrar)", async () => {
-  limpar();
-  let chamou = 0; rev.quandoJulgado(() => { chamou++; });
-  reg({ origem: "staff", tipo: "staff", acao: "punido" });
-  assert.equal(chamou, 0);
+// (31 out 2026, P3a, staff — R13) antes: "a ação da staff é só sinal: nenhum gancho roda ao registrar". agora: a fila
+// não tem gancho nenhum — o veredito do dono nunca chega a um detector (nem o registro)
+await t("★ a fila não tem ganchos nem caminho de punição: sem `quandoJulgado`, `registrarPerdido`, `definirModoServidor`, `configurarPerfil`", () => {
+  for (const n of ["quandoJulgado", "registrarPerdido", "definirModoServidor", "modoDoServidor", "configurarPerfil", "ganchosDoPerfil", "vereditoParecido"]) assert.equal(rev[n], undefined, n);
+  assert.ok(!rev.ORIGENS.has("staff") && !rev.ORIGENS.has("dono") && !rev.TIPOS.has("staff"));
+  const src = fs.readFileSync("modulos/moderacao/revisao.js", "utf8");
+  assert.doesNotMatch(src, /aplicarAcao|aplicarPunicao|tirarTimeout|banir\(|kickUser|perfilSilencio/);
 });
 
 console.log("── 3. a amostra ──");
 await t("★ amostrar: fração pequena (REVISAO_AMOSTRA), teto por servidor e por dia, sem servidor → false", async () => {
   limpar();
-  assert.equal(rev.amostrar({ serverId: SID }, { agora: AGORA, sorteio: () => 0.5 }), false);   // 0,5 ≥ 0,002
+  assert.equal(rev.amostrar({ serverId: SID }, { agora: AGORA, sorteio: () => 0.5 }), false);   // 0,5 ≥ 0,02 (o padrão)
+  assert.equal(rev.fracaoDaAmostra(), 0.02, "(31 out 2026, P3a, staff) o padrão passou de 0,002 a 0,02");
+  assert.equal(rev.amostrar({ serverId: SID }, { agora: AGORA, sorteio: () => 0.019 }), true, "abaixo de 0,02: sorteado");
   assert.equal(rev.amostrar({ serverId: SID }, { agora: AGORA, sorteio: () => 0 }), true);
   assert.equal(rev.amostrar({}, { agora: AGORA, sorteio: () => 0 }), false);
   for (let i = 0; i < rev.AMOSTRA_TETO_SERVIDOR; i++) assert.ok(reg({ origem: "amostra" }).codigo);
   assert.equal(rev.amostrar({ serverId: SID }, { agora: AGORA, sorteio: () => 0 }), false, "teto do servidor");
-  assert.deepEqual(reg({ origem: "amostra" }), { codigo: null, herdado: null }, "registrarCaso respeita o teto também");
+  // (31 out 2026, P3a, staff) antes: { codigo: null, herdado: null }. agora: { codigo: null }
+  assert.deepEqual(reg({ origem: "amostra" }), { codigo: null }, "registrarCaso respeita o teto também");
   assert.equal(rev.amostrar({ serverId: SID2 }, { agora: AGORA, sorteio: () => 0 }), true, "outro servidor tem o seu");
   assert.equal(rev.amostrar({ serverId: SID }, { agora: AGORA + DIA, sorteio: () => 0 }), true, "no dia seguinte zera");
   await comEnv({ REVISAO_AMOSTRA: "0" }, () => assert.equal(rev.amostrar({ serverId: SID3 }, { agora: AGORA, sorteio: () => 0 }), false));
@@ -23145,11 +23178,13 @@ await t("★ teto diário das amostras somando todos os servidores", () => {
 console.log("── 4. a escolha do dia ──");
 await t("★ teto diário (REVISAO_POR_DIA): no máximo N por dia, contando os já enviados hoje", async () => {
   limpar();
-  for (let i = 0; i < 15; i++) reg({ nota: 0.5 + i / 100 });
+  // (31 out 2026, P3a, staff) antes: 15 casos de dúvida do mesmo servidor. agora: a amostra pega um por servidor
+  // (e guarda no máximo 3 por servidor por dia): 15 servidores
+  for (let i = 0; i < 15; i++) reg({ nota: 0.5 + i / 100, serverId: U(6000 + i) });
   assert.equal(rev.escolherDoDia({ agora: AGORA }).length, 10);
   await comEnv({ REVISAO_POR_DIA: "3" }, () => {
     assert.equal(rev.escolherDoDia({ agora: AGORA }).length, 3);
-    const [a] = db.filaPorEstado("candidato");
+    const [a] = db.filaPorEstado("registro");
     db.filaAtualizar(a.codigo, { estado: "enviado", enviadoEm: AGORA - 1000 });
     assert.equal(rev.escolherDoDia({ agora: AGORA }).length, 2, "um já foi hoje");
     assert.equal(rev.escolherDoDia({ agora: AGORA + DIA }).length, 3, "amanhã o teto volta");
@@ -23157,20 +23192,21 @@ await t("★ teto diário (REVISAO_POR_DIA): no máximo N por dia, contando os j
   await comEnv({ REVISAO_POR_DIA: "0" }, () => assert.throws(() => rev.porDia(), /REVISAO_POR_DIA/));
   await comEnv({ REVISAO_POR_DIA: "dez" }, () => assert.throws(() => rev.porDia(), /REVISAO_POR_DIA/));
 });
-await t("★ ordem por dúvida: nota mais perto do limiar primeiro; staff/discordância sem nota no topo; amostra com vaga reservada", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "ordem por dúvida: nota mais perto do limiar primeiro; staff/discordância
+// no topo; amostra com vaga reservada". agora: não há fila de dúvida — a escolha é só a amostra, sorteada, um por servidor
+await t("★ a escolha do dia é só a amostra: sorteada (o sorteio decide a ordem), um caso por servidor, até o teto", async () => {
   limpar();
-  rev.limiar("sexual", 0.8);   // o detector anotou o padrão dele
-  const longe = reg({ nota: 0.3 }).codigo, perto = reg({ nota: 0.78 }).codigo, meio = reg({ nota: 0.6 }).codigo;
-  const staff = reg({ origem: "staff", tipo: "staff", nota: null, certeza: null, acao: "punido" }).codigo;
-  const amostra = reg({ origem: "amostra", certeza: null, nota: 0.1, serverId: SID2 }).codigo;
+  const cods = [SID, SID2, SID3].map((s, i) => reg({ nota: 0.3 + i / 10, serverId: s }).codigo);
+  const mesmo = reg({ nota: 0.9, serverId: SID }).codigo;
+  const am = reg({ origem: "amostra", certeza: null, nota: 0.1, serverId: U(310) }).codigo;
   await comEnv({ REVISAO_POR_DIA: "5" }, () => {
     const e = rev.escolherDoDia({ agora: AGORA, sorteio: () => 0 }).map((c) => c.codigo);
-    assert.deepEqual(e, [staff, perto, meio, longe, amostra]);
+    assert.equal(e.length, 4, e.join());
+    assert.equal(e.filter((c) => c === cods[0] || c === mesmo).length, 1, "um só do mesmo servidor");
+    for (const c of [cods[1], cods[2], am]) assert.ok(e.includes(c), c);
   });
-  await comEnv({ REVISAO_POR_DIA: "3" }, () => {
-    const e = rev.escolherDoDia({ agora: AGORA, sorteio: () => 0 }).map((c) => c.codigo);
-    assert.deepEqual(e, [staff, perto, amostra], "a amostra entra mesmo com a fila cheia de dúvida");
-  });
+  await comEnv({ REVISAO_POR_DIA: "2" }, () => assert.equal(rev.escolherDoDia({ agora: AGORA, sorteio: () => 0.99 }).length, 2));
+  assert.equal(typeof rev.duvida, "undefined", "sem conta de dúvida");
 });
 await t("★ a amostra pega no máximo um caso por servidor no dia, e inclui os de certeza alta (mede a faixa alta)", async () => {
   limpar();
@@ -23192,84 +23228,90 @@ await t("caso com mais de 14 dias não é escolhido", () => {
   assert.equal(rev.escolherDoDia({ agora: AGORA }).length, 0);
 });
 
-console.log("── 5. a herança ──");
+console.log("── 5. a herança (da staff, por servidor) ──");
+// (31 out 2026, P3a, staff — R13) antes: o veredito do DONO virava herança para todos os servidores (`rev.vereditoParecido`).
+// agora: a herança é do veredito da STAFF, só no servidor dela (`casos-staff.vereditoParecido`), com a MESMA comparação
+// (`rev.maisParecido`: dHash ≤ 6 bits, MinHash ≥ 0,8). Cada checagem antiga continua, mais a de outro servidor.
 const julgarJa = async (x, veredito) => { const r = reg(x); await rev.julgar(r.codigo, veredito, { agora: AGORA }); return r.codigo; };
-await t("★ dHash: distância de Hamming ≤ 6 herda o veredito; 7+ não; outra categoria não", async () => {
+await t("★ dHash: distância de Hamming ≤ 6 herda o veredito da staff; 7+ não; outra categoria não; OUTRO servidor não", async () => {
   limpar();
-  await julgarJa({ evidencia: { hash: "c37379279f3d6633" } }, "certo");
+  julgarStaff({ evidencia: { hash: "c37379279f3d6633" } }, "certo");
   assert.equal(rev.distanciaHash("c37379279f3d6633", "c37379279f3d6630"), 2);
-  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "c37379279f3d6630" }), "certo");
-  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "c37379279f3d66cc" }), null, "8 bits");
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "sexual", hash: "c37379279f3d6630" }), "certo");
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "sexual", hash: "c37379279f3d66cc" }), null, "8 bits");
   assert.equal(rev.distanciaHash("c37379279f3d6633", "c37379279f3d664c"), 7);
-  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "c37379279f3d664c" }), null, "7 bits");
-  assert.equal(rev.vereditoParecido({ categoria: "odio", hash: "c37379279f3d6633" }), null);
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "sexual", hash: "c37379279f3d664c" }), null, "7 bits");
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "odio", hash: "c37379279f3d6633" }), null);
+  assert.equal(st.vereditoParecido({ serverId: SID2, categoria: "sexual", hash: "c37379279f3d6630" }), null, "o veredito de um servidor não vale em outro");
+  assert.equal(st.vereditoParecido({ categoria: "sexual", hash: "c37379279f3d6630" }), null, "sem servidor: nada");
+  // a fila do dono não herda nem guarda "herdado": o caso parecido é só mais uma amostra
   const r = reg({ certeza: "baixa", evidencia: { hash: "c37379279f3d6631" } });
-  assert.equal(r.herdado, "certo");
-  const l = linha(r.codigo);
-  assert.equal(l.estado, "herdado");
-  assert.equal(l.userId, null, "o herdado não guarda quem");
-  assert.equal(l.trecho, null);
+  assert.deepEqual(Object.keys(r), ["codigo"]);
+  assert.equal(linha(r.codigo).estado, "registro");
 });
 await t("★ sha256 (e outro formato de hash) só casa igual", async () => {
   limpar();
   const sha = "a2213b462b39303f3aba0c4fbcd9beca06c10aaf6e3a75e335cce1bd9083ccdc";
-  await julgarJa({ tipo: "perfil-texto", categoria: "arte-texto", evidencia: { hash: sha } }, "certo");
-  assert.equal(rev.vereditoParecido({ categoria: "arte-texto", hash: sha }), "certo");
-  assert.equal(rev.vereditoParecido({ categoria: "arte-texto", hash: sha.replace(/c$/, "d") }), null);
+  julgarStaff({ tipo: "perfil-texto", categoria: "arte-texto", evidencia: { hash: sha } }, "certo");
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "arte-texto", hash: sha }), "certo");
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "arte-texto", hash: sha.replace(/c$/, "d") }), null);
+  assert.ok(rev.maisParecido([{ hash: sha }], { hash: sha }) && !rev.maisParecido([{ hash: sha }], { hash: sha.replace(/c$/, "d") }));
 });
 await t("★ texto: trigramas parecidos (MinHash) herdam; texto diferente não; a impressão não contém o texto", async () => {
   limpar();
   const base = "vocês são todos uns lixos e eu vou acabar com esse servidor hoje à noite";
-  await julgarJa({ tipo: "assunto", categoria: "ataque", evidencia: { trecho: base } }, "certo");
-  assert.equal(rev.vereditoParecido({ categoria: "ataque", texto: "Vocês são todos uns lixos e eu vou acabar com esse servidor hoje a noite!!" }), "certo");
-  assert.equal(rev.vereditoParecido({ categoria: "ataque", texto: "alguém sabe que horas começa o evento de hoje?" }), null);
+  julgarStaff({ tipo: "assunto", categoria: "ataque", evidencia: { trecho: base } }, "certo");
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "ataque", texto: "Vocês são todos uns lixos e eu vou acabar com esse servidor hoje a noite!!" }), "certo");
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "ataque", texto: "alguém sabe que horas começa o evento de hoje?" }), null);
   const imp = rev.impressaoDeTexto(base);
   assert.match(imp, /^m1:[0-9a-f]{512}$/);
   assert.ok(!imp.includes("lixo"));
   assert.ok(rev.semelhancaTexto(imp, rev.impressaoDeTexto(base)) === 1);
   assert.ok(rev.semelhancaTexto(imp, rev.impressaoDeTexto("outra frase sem nada a ver com a primeira")) < 0.3);
   assert.equal(rev.impressaoDeTexto("oi"), null);
-  // o texto inteiro (`evidencia.texto`) só serve para a impressão: não é guardado
+  // o texto inteiro (`evidencia.texto`) só serve para a impressão: não é guardado (nem na fila, nem nos casos da staff)
   const r = reg({ tipo: "assunto", categoria: "zoeira", evidencia: { texto: "um texto inteiro que não pode ser guardado" } });
   const l = linha(r.codigo);
   assert.equal(l.trecho, null);
   assert.ok(!JSON.stringify(l).includes("não pode ser guardado"));
   assert.match(l.impressao, /^m1:/);
+  const idS = julgarStaff({ tipo: "assunto", categoria: "zoeira", evidencia: { texto: "um texto inteiro que não pode ser guardado" } }, "errou");
+  assert.ok(!JSON.stringify(db.staffCaso(idS)).includes("não pode ser guardado"));
 });
-await t("★ \"errou\" também é herdado (o detector não pune o que o dono disse que é engano); o veredito mais novo vence", async () => {
+await t("★ \"errou\" (❌ da staff) também é herdado; o veredito mais novo vence; o mais parecido vence", async () => {
   limpar();
-  const c = await julgarJa({ evidencia: { hash: "0000000000000000" } }, "errou");
-  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "0000000000000001" }), "errou");
-  await rev.julgar(c, "certo", { agora: AGORA + 10 });
-  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "0000000000000001" }), "certo", "o dono mudou de ideia");
-  const c2 = await julgarJa({ evidencia: { hash: "0000000000000003" } }, "errou");
-  assert.ok(c2);
-  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "0000000000000003" }), "errou", "o mais parecido (distância 0) vence");
+  julgarStaff({ evidencia: { hash: "0000000000000000" } }, "errou", AGORA);
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "sexual", hash: "0000000000000001" }), "errou");
+  julgarStaff({ evidencia: { hash: "0000000000000000" } }, "certo", AGORA + 10);
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "sexual", hash: "0000000000000001" }), "certo", "a staff mudou de ideia num caso novo");
+  julgarStaff({ evidencia: { hash: "0000000000000003" } }, "errou", AGORA + 20);
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "sexual", hash: "0000000000000003" }), "errou", "o mais parecido (distância 0) vence");
 });
-await t("★ violação = (dono disse certo) === (o bot alegou): amostra do que o bot não puniu, com ✅, NÃO é violação", async () => {
+await t("★ violação = (dono disse certo) === (o bot alegou) — e o veredito do dono NÃO vira herança em servidor nenhum", async () => {
   limpar();
   const a = reg({ origem: "amostra", certeza: null, acao: "nenhuma", evidencia: { hash: "ffff000000000000" } }).codigo;
   const j = await rev.julgar(a, "certo", { agora: AGORA });
   assert.equal(j.violacao, 0);
-  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "ffff000000000000" }), "errou");
-  const b = reg({ origem: "amostra", certeza: null, acao: "nenhuma", evidencia: { hash: "00ff000000000000" } }).codigo;
-  assert.equal((await rev.julgar(b, "errou", { agora: AGORA })).violacao, 1, "o bot deixou passar");
+  // (31 out 2026, P3a, staff) antes: rev.vereditoParecido(...) === "errou". agora: nada herda do dono
+  for (const s of [SID, SID2]) assert.equal(st.vereditoParecido({ serverId: s, categoria: "sexual", hash: "ffff000000000000" }), null);
+  const b2 = reg({ origem: "amostra", certeza: null, acao: "nenhuma", evidencia: { hash: "00ff000000000000" } }).codigo;
+  assert.equal((await rev.julgar(b2, "errou", { agora: AGORA })).violacao, 1, "o bot deixou passar");
   const c = reg({ certeza: "media", evidencia: {} }).codigo;
   assert.equal((await rev.julgar(c, "certo", { agora: AGORA })).violacao, 1);
   assert.equal(await rev.julgar(c, "talvez"), null);
   assert.equal(await rev.julgar("B2CD3", "certo"), null);
 });
-await t("★ quandoJulgado: o detector recebe o veredito com os IDs (ex.: punir no ✅ o perfil de certeza média)", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "quandoJulgado: o detector recebe o veredito com os IDs (ex.: punir no ✅ o
+// perfil de certeza média)". agora: o veredito do dono não age sobre ninguém — julgar só grava o veredito
+await t("★ o julgamento do dono não age: só grava veredito/violação (nenhum caso da staff, nenhum silêncio, nenhum registro novo)", async () => {
   limpar();
-  const recebidos = [];
-  rev.quandoJulgado((x) => { recebidos.push(x); });
-  rev.quandoJulgado(() => { throw new Error("gancho quebrado"); });
   const r = reg({ evidencia: { link: "https://cdn.stoatusercontent.com/avatars/" + U(7), hash: "1234123412341234" } });
-  await quieto(() => rev.julgar(r.codigo, "certo", { agora: AGORA }));
-  assert.equal(recebidos.length, 1);
-  assert.equal(recebidos[0].userId, ANA); assert.equal(recebidos[0].serverId, SID);
-  assert.equal(recebidos[0].veredito, "certo"); assert.equal(recebidos[0].violacao, true);
-  assert.equal(recebidos[0].evidencia.hash, "1234123412341234");
+  const antes = cru.prepare("SELECT (SELECT COUNT(*) FROM revisao_casos) a, (SELECT COUNT(*) FROM staff_casos) b").get();
+  const j = await quieto(() => rev.julgar(r.codigo, "certo", { agora: AGORA }));
+  assert.equal(j.veredito, "certo"); assert.equal(j.violacao, 1);
+  assert.deepEqual(cru.prepare("SELECT (SELECT COUNT(*) FROM revisao_casos) a, (SELECT COUNT(*) FROM staff_casos) b").get(), antes);
+  assert.equal(db.perfilSilencioLer(SID, ANA), null);
+  assert.equal(linha(r.codigo).userId, ANA, "o caso continua com a pessoa até a retenção (não é julgamento de staff)");
 });
 
 console.log("── 6. o limiar da noite ──");
@@ -23294,32 +23336,42 @@ await t("★ menos de 20 julgados → nada muda (null); limites seguros [0,5; 0,
   const empate = [...sinteticos(10, () => ({ nota: 0.9, violacao: true })), ...sinteticos(10, () => ({ nota: 0.8, violacao: false })), { nota: 0.8, violacao: true }];
   assert.equal(rev.calcularLimiar(empate).alvo, 0.9);
 });
-await t("★ limiar(): o padrão até 20 julgados; depois o calibrado; servidor rígido desce 0,1 (nunca abaixo de 0,5)", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "...; servidor rígido (`&caso servidor <id> rigido`) desce 0,1". agora: não há
+// rígido do dono; cada servidor tem o limiar que a staff dele calibra (casos-staff.limiar), partindo do global
+await t("★ limiar(): o padrão até 20 julgados; depois o calibrado (global); o de um servidor sai dos vereditos da staff dele, partindo do global", async () => {
   limpar();
   assert.equal(rev.limiar("odio", 0.8), 0.8);
-  for (let i = 0; i < 40; i++) { const r = reg({ tipo: "assunto", categoria: "odio", nota: i / 40 }); await rev.julgar(r.codigo, i >= 30 ? "certo" : "errou", { agora: AGORA }); }
+  // (31 out 2026, P3a, staff) a amostra guarda no máximo 3 por servidor por dia: os 40 julgados vêm de 40 servidores
+  for (let i = 0; i < 40; i++) { const r = reg({ tipo: "assunto", categoria: "odio", nota: i / 40, serverId: U(7000 + i) }); await rev.julgar(r.codigo, i >= 30 ? "certo" : "errou", { agora: AGORA }); }
   assert.equal(rev.limiar("odio", 0.8), 0.8, "antes da noite, o padrão");
   const mud = rev.recalcularLimiares(AGORA);
   assert.deepEqual(mud.map((m) => m.categoria), ["odio"]);
   assert.equal(rev.limiar("odio", 0.8), 0.75, "alvo 0,75, a 0,05 do padrão");
   assert.equal(rev.limiar("outra", 0.6), 0.6);
-  rev.definirModoServidor(SID, "rigido");
-  assert.equal(rev.limiar("odio", 0.8, { serverId: SID }), 0.65);
-  assert.equal(rev.limiar("odio", 0.8, { serverId: SID2 }), 0.75);
-  assert.equal(rev.limiar("x", 0.55, { serverId: SID }), 0.5);
-  rev.definirModoServidor(SID, "padrao");
-  assert.equal(rev.limiar("odio", 0.8, { serverId: SID }), 0.75);
-  assert.equal(rev.definirModoServidor(SID, "frouxo"), false);
+  assert.equal(st.limiar("odio", 0.8, { serverId: SID }), 0.75, "sem casos da staff: o global");
+  // a staff de SID julga 25 casos: tudo ≥ 0,6 é violação → o limiar de SID desce (0,05 por noite, a partir do global 0,75)
+  for (let i = 0; i < 25; i++) julgarStaff({ tipo: "assunto", categoria: "odio", nota: 0.5 + i / 50 }, 0.5 + i / 50 >= 0.6 ? "certo" : "errou");
+  const mudou = st.recalcularLimiares(AGORA);
+  assert.deepEqual(mudou.map((m) => [m.serverId, m.categoria]), [[SID, "odio"]]);
+  assert.equal(st.limiar("odio", 0.8, { serverId: SID }), 0.7);
+  assert.equal(st.limiar("odio", 0.8, { serverId: SID2 }), 0.75, "o outro servidor continua no global");
+  assert.equal(rev.limiar("odio", 0.8), 0.75, "e o global não muda com a staff");
   // casos que a precisão da faixa alta mede: com 95%, a faixa acima do limiar calibrado
   const l = db.filaLimiar("odio");
   assert.ok(l.precisao >= rev.PRECISAO_ALVO, String(l.precisao));
   assert.equal(l.casos, 40);
 });
-await t("★ herdados e os apontados pelo dono (`perdeu`) não entram na conta do limiar", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "herdados e os apontados pelo dono (`perdeu`) não entram na conta do limiar".
+// agora: não há herdado nem `perdeu`; o que não entra é o que é de OUTRO lado — os vereditos da staff não mexem no
+// global, e os do dono não entram no limiar de servidor nenhum
+await t("★ os vereditos da staff não entram no limiar global; os do dono não entram no de servidor nenhum", async () => {
   limpar();
-  for (let i = 0; i < 25; i++) { const r = reg({ tipo: "assunto", categoria: "c1", nota: 0.9, evidencia: { hash: "abcdabcdabcdabcd" } }); if (i === 0) await rev.julgar(r.codigo, "certo", { agora: AGORA }); }
-  assert.equal(db.filaJulgados({ categoria: "c1" }).length, 1, "só o primeiro foi julgado; os outros herdaram");
-  assert.deepEqual(rev.recalcularLimiares(AGORA), []);
+  for (let i = 0; i < 25; i++) julgarStaff({ tipo: "assunto", categoria: "c1", nota: 0.9, evidencia: { hash: "abcdabcdabcdabcd" } }, "certo");
+  assert.deepEqual(rev.recalcularLimiares(AGORA), [], "25 da staff: o global nem se mexe");
+  assert.equal(db.filaLimiar("c1"), null);
+  for (let i = 0; i < 25; i++) { const r = reg({ tipo: "assunto", categoria: "c2", nota: 0.9, serverId: U(7100 + i) }); await rev.julgar(r.codigo, "certo", { agora: AGORA }); }
+  st.recalcularLimiares(AGORA);
+  assert.equal(cru.prepare("SELECT COUNT(*) n FROM staff_limiares WHERE categoria = 'c2'").get().n, 0, "25 do dono: nenhum servidor ganha limiar");
 });
 
 console.log("── 7. retenção ──");
@@ -23329,11 +23381,13 @@ await t("★ trecho e link somem em 7 dias; julgado fica só com hash/impressão
   // cada um com o seu hash e o seu texto (senão o segundo herdaria o veredito do primeiro)
   const FRASES = { 1: "um trecho qualquer", 2: "outra frase bem diferente", 3: "terceira mensagem sem relação", 4: "quarto texto inventado agora", 5: "por fim, a quinta linha" };
   const ev = (h) => ({ trecho: FRASES[h], link: "https://cdn.stoatusercontent.com/attachments/" + U(8), hash: h.repeat(16) });
-  const pend8 = reg({ evidencia: ev("1") }, velho).codigo;
-  const julg8 = reg({ evidencia: ev("2") }, velho).codigo; await rev.julgar(julg8, "certo", { agora: velho + 1000 });
-  const pend15 = reg({ evidencia: ev("3") }, muito).codigo;
-  const julg15 = reg({ evidencia: ev("4") }, muito).codigo; await rev.julgar(julg15, "errou", { agora: muito + 1000 });
-  const novo = reg({ evidencia: ev("5") }, AGORA).codigo;
+  // (31 out 2026, P3a, staff) cada caso de um servidor: a amostra tem teto por servidor e por dia
+  const sv = (h) => U(9000 + Number(h));
+  const pend8 = reg({ evidencia: ev("1"), serverId: sv("1") }, velho).codigo;
+  const julg8 = reg({ evidencia: ev("2"), serverId: sv("2") }, velho).codigo; await rev.julgar(julg8, "certo", { agora: velho + 1000 });
+  const pend15 = reg({ evidencia: ev("3"), serverId: sv("3") }, muito).codigo;
+  const julg15 = reg({ evidencia: ev("4"), serverId: sv("4") }, muito).codigo; await rev.julgar(julg15, "errou", { agora: muito + 1000 });
+  const novo = reg({ evidencia: ev("5"), serverId: sv("5") }, AGORA).codigo;
   const r = rev.reter(AGORA);
   assert.deepEqual(r, { trecho: 4, limpos: 2, apagados: 1 });
   assert.equal(linha(pend8).trecho, null); assert.equal(linha(pend8).link, null); assert.equal(linha(pend8).userId, ANA, "pendente ainda pode ser julgado");
@@ -23350,7 +23404,10 @@ await t("★ a amostra que a escolha do dia não pegou é apagada na rodada; a p
   limpar();
   // (31 out 2026, P3a) a certeza alta sorteada para a amostra (a não sorteada nem é guardada)
   const a = reg({ origem: "amostra", certeza: null }).codigo, alta = rev.registrarCaso(caso({ certeza: "alta", nota: 0.99, acao: "punido", serverId: SID2 }), { agora: AGORA, sorteio: () => 0 }).codigo;
+  // (31 out 2026, P3a, staff) antes: um caso "candidato" (dúvida) sobrevivia ao descarte. agora: não há candidato —
+  // o que sobrevive é o que foi enviado ao dono
   const cand = reg({}).codigo;
+  db.filaAtualizar(cand, { estado: "enviado", enviadoEm: AGORA });
   assert.equal(db.filaDescartarNaoEscolhidos(AGORA + 1), 2);
   assert.equal(linha(a), null); assert.equal(linha(alta), null); assert.ok(linha(cand));
   assert.equal(db.filaEsquecerUsuario(ANA), 1);
@@ -23365,8 +23422,9 @@ await t("★ regressão: impressão com ID do Stoat (`arquivo:<id>`, a do perfil
   assert.match(linha(c).impressao, /^h1:[0-9a-f]{32}$/);
   assert.ok(!JSON.stringify(linha(c)).includes(U(77)));
   await rev.julgar(c, "errou", { agora: AGORA });
-  assert.equal(rev.vereditoParecido({ categoria: "sexual", impressao: imp }), "errou");
-  assert.equal(rev.vereditoParecido({ categoria: "sexual", impressao: "arquivo:" + U(78) }), null);
+  // (31 out 2026, P3a, staff) antes: rev.vereditoParecido(...). agora: a mesma comparação (`maisParecido`), usada pela staff
+  assert.ok(rev.maisParecido([linha(c)], { impressao: imp }));
+  assert.equal(rev.maisParecido([linha(c)], { impressao: "arquivo:" + U(78) }), null);
   assert.equal(linha(reg({ evidencia: { impressao: "dhash:c37379279f3d6633" } }).codigo).impressao, "dhash:c37379279f3d6633", "sem ID: como veio");
 });
 await t("★ exportar: sem nome, sem ID de pessoa nem de servidor (nem pseudônimo), sem trecho nem link; imagem só como hash", async () => {
@@ -23429,15 +23487,17 @@ await t("★ rodadaDiaria: retenção, limiares, resumo com o acerto medido e os
   dm.sendMessage = async (p) => { dm.enviados.push(p); const id = U(800 + dm.enviados.length); return { id, react: async (e) => { dm.reacoes.push([id, decodeURIComponent(e)]); } }; };
   const client = { users: new Map([[DONO, { id: DONO, openDM: async () => dm }]]) };
   rev.configurar({ client, enviar: (canal, emb) => canal.sendMessage({ embeds: [emb] }) });
-  for (let i = 0; i < 25; i++) { const r = reg({ categoria: "odio", tipo: "assunto", nota: 0.5 + i / 50 }, AGORA - 2 * DIA); await rev.julgar(r.codigo, i >= 10 ? "certo" : "errou", { agora: AGORA - DIA }); }
-  for (let i = 0; i < 12; i++) reg({ nota: 0.4 + i / 30, evidencia: { trecho: `caso ${i}` } });
-  reg({ origem: "amostra", certeza: null, serverId: SID3 });
+  // (31 out 2026, P3a, staff) a amostra guarda no máximo 3 por servidor por dia: cada caso vem de um servidor
+  for (let i = 0; i < 25; i++) { const r = reg({ categoria: "odio", tipo: "assunto", nota: 0.5 + i / 50, serverId: U(7200 + i) }, AGORA - 2 * DIA); await rev.julgar(r.codigo, i >= 10 ? "certo" : "errou", { agora: AGORA - DIA }); }
+  for (let i = 0; i < 12; i++) reg({ nota: 0.4 + i / 30, evidencia: { trecho: `caso ${i}` }, serverId: U(7300 + i) }, AGORA - 60e3);
+  reg({ origem: "amostra", certeza: null, serverId: SID3 }, AGORA - 60e3);
   const r = await rev.rodadaDiaria({ agora: AGORA });
   rev.desligar();
   assert.equal(r.enviados.length, 10);
   const textos = dm.enviados.map((p) => `${p.embeds[0].title}\n${p.embeds[0].description}`);
   assert.match(textos[0], /Fila de revisão|Review queue/);
   assert.match(textos[0], /odio.*60%.*\(15\/25\)/s, textos[0]);
+  assert.doesNotMatch(textos[0], /herdad|inherited|heredad/, "sem herança do dono");
   assert.equal(textos.length, 11, "resumo + 10 casos");
   for (const x of textos.slice(1)) {
     assert.match(x, /^🔎 [B-Z0-9]{5} · /);
@@ -23484,15 +23544,16 @@ await t("★ aoReagir: só ✅/❌, só do dono, só no canal da DM do caso; out
   assert.equal(await rev.aoReagir("MSGDM", DONO, "❌️"), true);
   assert.equal(linha(c).veredito, "errou", "a última reação vale");
 });
-await t("★ registrarPerdido (`&caso perdeu`): caso julgado do dono, vale para a herança em qualquer categoria; sem evidência → null", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "registrarPerdido (`&caso perdeu`): caso julgado do dono, vale para a herança em
+// qualquer categoria". agora: o dono não aponta caso de servidor — nada do dono vira herança nem caso
+await t("★ sem `&caso perdeu`: a fila não grava caso do dono (origem \"dono\" recusada) e nada do dono vira herança", async () => {
   limpar();
-  let gancho = null; rev.quandoJulgado((x) => { gancho = x; });
-  const p = await rev.registrarPerdido({ tipo: "perfil-imagem", userId: ANA, evidencia: { hash: "5555666677778888" } }, { agora: AGORA });
-  assert.equal(p.origem, "dono"); assert.equal(p.veredito, "certo"); assert.equal(p.violacao, 1);
-  assert.equal(gancho.origem, "dono"); assert.equal(gancho.userId, ANA);
-  assert.equal(rev.vereditoParecido({ categoria: "sexual", hash: "5555666677778889" }), "certo");
-  assert.equal(rev.vereditoParecido({ categoria: "qualquer", hash: "5555666677778888" }), "certo");
-  assert.equal(await rev.registrarPerdido({ tipo: "perfil-imagem", evidencia: {} }), null);
+  assert.equal(rev.registrarPerdido, undefined);
+  let r;
+  const log = await capturar(() => { r = rev.registrarCaso({ ...caso({ evidencia: { hash: "5555666677778888" } }), origem: "dono" }); });
+  assert.deepEqual(r, { codigo: null });
+  assert.match(log, /caso recusado: origem "dono"/);
+  for (const cat of ["sexual", "qualquer"]) assert.equal(st.vereditoParecido({ serverId: SID, categoria: cat, hash: "5555666677778889" }), null);
 });
 
 console.log("── 12. revisão do P3a (31 out 2026) ──");
@@ -23502,16 +23563,18 @@ await t("★ certeza alta do detector: não sorteada → nada gravado (o herdado
   const j = reg({ evidencia: { hash: HJ } }).codigo; await rev.julgar(j, "certo", { agora: AGORA });
   const n0 = cru.prepare("SELECT COUNT(*) n FROM revisao_casos").get().n;
   const alta = (x = {}, sorteio = () => 0.5) => rev.registrarCaso(caso({ certeza: "alta", nota: 0.97, acao: "punido", ...x }), { agora: AGORA, sorteio });
-  assert.deepEqual(alta({ evidencia: { hash: HJ } }), { codigo: null, herdado: "certo" }, "o herdado é calculado mesmo sem gravar");
-  assert.deepEqual(alta({ evidencia: { hash: "0f0f0f0f0f0f0f0f" } }), { codigo: null, herdado: null });
+  // (31 out 2026, P3a, staff) antes: { codigo: null, herdado: "certo" } (a herança do dono vinha mesmo sem gravar).
+  // agora: { codigo: null } — o dono não dá herança
+  assert.deepEqual(alta({ evidencia: { hash: HJ } }), { codigo: null });
+  assert.deepEqual(alta({ evidencia: { hash: "0f0f0f0f0f0f0f0f" } }), { codigo: null });
   assert.equal(cru.prepare("SELECT COUNT(*) n FROM revisao_casos").get().n, n0, "nada foi gravado");
   // sorteada: até 3 por servidor por dia, somando com a amostra comum
   assert.ok(reg({ origem: "amostra", certeza: null, serverId: SID3 }).codigo);
   assert.ok(alta({ serverId: SID3, evidencia: { hash: "1111000011110000" } }, () => 0).codigo);
   assert.ok(alta({ serverId: SID3, evidencia: { hash: "2222000022220000" } }, () => 0).codigo);
-  assert.deepEqual(alta({ serverId: SID3, evidencia: { hash: "3333000033330000" } }, () => 0), { codigo: null, herdado: null }, "teto do servidor");
+  assert.deepEqual(alta({ serverId: SID3, evidencia: { hash: "3333000033330000" } }, () => 0), { codigo: null }, "teto do servidor");
   assert.equal(rev.amostrar({ serverId: SID3 }, { agora: AGORA, sorteio: () => 0 }), false, "a amostra comum vê o mesmo teto");
-  assert.deepEqual(alta({ serverId: null }, () => 0), { codigo: null, herdado: null }, "sem servidor não há amostra");
+  assert.deepEqual(alta({ serverId: null }, () => 0), { codigo: null }, "sem servidor não há amostra");
 });
 await t("★ fila desligada (sem configurar, ou REVISAO_* inválido): nada gravado, amostrar false; a retenção do boot roda mesmo assim", async () => {
   limpar();
@@ -23519,9 +23582,10 @@ await t("★ fila desligada (sem configurar, ou REVISAO_* inválido): nada grava
   const c = reg({ evidencia: { trecho: "trecho antigo" } }, velho).codigo;
   db.filaAtualizar(c, { estado: "enviado", enviadoEm: velho, dmCanalId: "CANALDM", dmMsgId: "MSGVELHA" });
   rev.desligar();
-  assert.deepEqual(reg({}), { codigo: null, herdado: null }, "sem configurar");
+  // (31 out 2026, P3a, staff) antes: { codigo: null, herdado: null } e o `registrarPerdido` → null. agora: { codigo: null }
+  // (o `registrarPerdido` saiu: ver "sem `&caso perdeu`")
+  assert.deepEqual(reg({}), { codigo: null }, "sem configurar");
   assert.equal(rev.amostrar({ serverId: SID }, { agora: AGORA, sorteio: () => 0 }), false);
-  assert.equal(await rev.registrarPerdido({ tipo: "perfil-imagem", userId: ANA, evidencia: { hash: "5555666677778888" } }), null);
   const editadas = [];
   let erro = null;
   await comEnv({ REVISAO_POR_DIA: "0" }, async () => {
@@ -23533,26 +23597,30 @@ await t("★ fila desligada (sem configurar, ou REVISAO_* inválido): nada grava
   assert.equal(linha(c).trecho, null, "a retenção rodou no boot");
   assert.deepEqual(editadas.map((x) => x.slice(0, 2)), [["CANALDM", "MSGVELHA"]], "e editou a DM");
   assert.equal(linha(c).dmMsgId, null);
-  assert.deepEqual(reg({}), { codigo: null, herdado: null }, "a fila continua desligada");
+  assert.deepEqual(reg({}), { codigo: null }, "a fila continua desligada");
   assert.equal(rev.timerLigado(), false);
-  // o herdado ainda vem com a fila desligada
-  rev._ligarParaTestes(); const j = reg({ evidencia: { hash: "7777777777777777" } }).codigo; await rev.julgar(j, "errou", { agora: AGORA }); rev.desligar();
-  assert.deepEqual(reg({ evidencia: { hash: "7777777777777777" } }), { codigo: null, herdado: "errou" });
+  // (31 out 2026, P3a, staff) antes: "o herdado (do dono) ainda vem com a fila desligada". agora: a herança é da staff e
+  // não depende da fila do dono — com ela desligada, o veredito da staff continua valendo no servidor dela
+  julgarStaff({ evidencia: { hash: "7777777777777777" } }, "errou");
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "sexual", hash: "7777777777777777" }), "errou");
 });
-await t("★ retenção: julgado com 7 dias perde também o pseudônimo do servidor; herdado some em 30 dias; o que ainda aponta para a DM espera a edição", async () => {
+// (31 out 2026, P3a, staff) antes: "...; herdado some em 30 dias; ...". agora: não nasce herdado; uma linha "herdado"
+// antiga sai como qualquer caso não julgado, em 14 dias (mais cedo que os 30)
+await t("★ retenção: julgado com 7 dias perde também o pseudônimo do servidor; a linha \"herdado\" antiga sai em 14 dias; o que ainda aponta para a DM espera a edição", async () => {
   limpar();
   const j = reg({ evidencia: { hash: "1212343456567878", trecho: "x1" } }, AGORA - 8 * DIA).codigo;
   await rev.julgar(j, "certo", { agora: AGORA - 8 * DIA });
   assert.match(linha(j).servidor, /^~/);
-  const h31 = reg({ evidencia: { hash: "1212343456567879" } }, AGORA - 31 * DIA), h29 = reg({ evidencia: { hash: "1212343456567879" } }, AGORA - 29 * DIA);
-  assert.equal(h31.herdado, "certo");
-  assert.equal(linha(h29.codigo).servidor, null, "o herdado nasce sem o pseudônimo");
+  const legado = (codigo, dias) => db.filaInserir({ codigo, criadoEm: AGORA - dias * DIA, tipo: "perfil-imagem", categoria: "sexual", origem: "detector", estado: "herdado", hash: "1212343456567879", veredito: "certo", violacao: 1, julgadoEm: AGORA - dias * DIA, limpoEm: AGORA - dias * DIA });
+  legado("H2B3C", 15); legado("H2B3D", 13);
+  const h31 = { codigo: "H2B3C" }, h29 = { codigo: "H2B3D" };
+  assert.equal(reg({ evidencia: { hash: "1212343456567879" } }).codigo === null, false, "e um parecido novo não herda nada do dono: é amostra comum");
   const pend = reg({ evidencia: { trecho: "pendente velho" } }, AGORA - 15 * DIA).codigo;
   db.filaAtualizar(pend, { estado: "enviado", dmCanalId: "C", dmMsgId: "MPEND" });
   rev.reter(AGORA);
   assert.equal(linha(j).servidor, null); assert.equal(linha(j).serverId, null);
-  assert.equal(linha(h31.codigo), null, "herdado com 31 dias: apagado");
-  assert.ok(linha(h29.codigo), "herdado com 29 dias: fica");
+  assert.equal(linha(h31.codigo), null, "\"herdado\" antigo com 15 dias: apagado");
+  assert.ok(linha(h29.codigo), "com 13 dias: fica");
   assert.ok(linha(pend), "a mensagem da DM ainda não foi editada: a linha espera");
   const ed = [];
   rev._ligarParaTestes({ editar: async (cn, m, e) => { ed.push(e.description); } });
@@ -23601,40 +23669,42 @@ await t("★ a DM perde o trecho e o link: com 7 dias, ou no `&privacidade apaga
   assert.match(log, new RegExp(`${novo}.*NotFound`));
   assert.doesNotMatch(log, new RegExp(`${ANA}|${BIA}|trecho novo|trecho velho|trecho da bia|https?:|sumiu`));
 });
-await t("★ escolha do dia: no máximo 3 sinais da staff por dia (contando os já enviados); o resto espera", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "escolha do dia: no máximo 3 sinais da staff por dia; o resto espera". agora: o
+// sinal da staff não existe — a punição manual não chega ao dono nem como caso nem na escolha do dia
+await t("★ o sinal da staff não entra: `staff:<tipo>` recusado e a escolha do dia nunca tem caso de origem staff", async () => {
   limpar();
-  const staff = Array.from({ length: 5 }, () => reg({ origem: "staff", tipo: "staff", categoria: "staff:kick", nota: null, certeza: "media", acao: "nenhuma" }).codigo);
-  const outros = Array.from({ length: 4 }, (_, i) => reg({ nota: 0.6 + i / 100 }).codigo);
+  for (let i = 0; i < 5; i++) await quieto(() => rev.registrarCaso({ ...caso({ serverId: U(7400 + i) }), origem: "staff", tipo: "staff", categoria: "staff:kick", nota: null, certeza: "media", acao: "nenhuma" }, { agora: AGORA, sorteio: () => 0 }));
+  const outros = Array.from({ length: 4 }, (_, i) => reg({ nota: 0.6 + i / 100, serverId: U(7500 + i) }).codigo);
   const e = rev.escolherDoDia({ agora: AGORA }).map((c) => c.codigo);
-  assert.equal(e.filter((c) => staff.includes(c)).length, rev.STAFF_POR_DIA);
-  assert.equal(e.filter((c) => outros.includes(c)).length, 4);
-  db.filaAtualizar(staff[0], { estado: "enviado", enviadoEm: AGORA - 1000 });
-  assert.equal(rev.escolherDoDia({ agora: AGORA }).filter((c) => c.origem === "staff").length, 2, "um já foi hoje");
-  assert.equal(rev.escolherDoDia({ agora: AGORA + DIA }).filter((c) => c.origem === "staff").length, 3, "amanhã volta");
-  assert.equal(db.filaContar(["candidato"]), 8, "os que não foram esperam");
+  assert.equal(e.filter((c) => linha(c).origem === "staff").length, 0);
+  assert.deepEqual([...e].sort(), [...outros].sort());
+  assert.equal(cru.prepare("SELECT COUNT(*) n FROM revisao_casos WHERE origem = 'staff' OR tipo = 'staff'").get().n, 0);
+  assert.equal(rev.STAFF_POR_DIA, undefined);
 });
-await t("★ servidor rígido nunca fica mais permissivo que o normal: limiar = max(0,5; normal − 0,1), e o certeza.js aceita [0,5; 0,98]", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "servidor rígido (`&caso servidor`) nunca fica mais permissivo que o normal:
+// max(0,5; normal − 0,1), e o certeza.js aceita [0,5; 0,98]". agora: sem o rígido do dono — o limiar do servidor é o
+// calibrado pela staff dele, sempre em [0,5; 0,98], e o certeza.js continua aceitando só esse intervalo
+await t("★ o limiar do servidor (staff) fica em [0,5; 0,98] e vale no certeza.js só para ele; fora do intervalo, o padrão do detector", async () => {
   limpar();
   const cz = await import("./modulos/moderacao/certeza.js");
-  const antes = cz._trocarFila(rev);
+  const antes = cz._trocarStaff(st);
   try {
-    rev.definirModoServidor(SID, "rigido");
-    for (const [normal, rigido] of [[0.6, 0.5], [0.5, 0.5], [0.8, 0.7]]) {
-      const cat = `r${String(normal).replace(".", "")}`;
-      db.filaSalvarLimiar(cat, { limiar: normal, padrao: 0.9, casos: 25, precisao: 1 });
-      rev._zerar(); rev._ligarParaTestes();
-      assert.equal(rev.limiar(cat, 0.9, { serverId: SID }), rigido, cat);
-      assert.equal(await cz.limiarAlta(cat, 0.9, SID), rigido, `certeza.js ${cat} (antes: 0,5 caía no padrão 0,9)`);
-      assert.equal(await cz.limiarAlta(cat, 0.9, SID2), normal, `normal ${cat}`);
-      assert.ok(await cz.limiarAlta(cat, 0.9, SID) <= await cz.limiarAlta(cat, 0.9, SID2), "rígido ≤ normal");
-      assert.equal(cz.certezaDe(rigido, await cz.limiarAlta(cat, 0.9, SID)), "alta");
+    for (const [lim, cat] of [[0.5, "r05"], [0.62, "r062"], [0.98, "r098"]]) {
+      db.staffSalvarLimiar(SID, cat, { limiar: lim, casos: 25, precisao: 1 });
+      db.filaSalvarLimiar(cat, { limiar: 0.8, padrao: 0.9, casos: 25, precisao: 1 });
+      rev._zerar(); st._zerar(); rev._ligarParaTestes();
+      assert.equal(st.limiar(cat, 0.9, { serverId: SID }), lim, cat);
+      assert.equal(await cz.limiarAlta(cat, 0.9, SID), lim, `certeza.js ${cat}`);
+      assert.equal(await cz.limiarAlta(cat, 0.9, SID2), 0.8, `outro servidor: o global (${cat})`);
+      assert.equal(cz.certezaDe(lim, await cz.limiarAlta(cat, 0.9, SID)), "alta");
     }
-    assert.equal(rev.limiar("abaixo", 0.45, { serverId: SID }), 0.45, "padrão abaixo de 0,5: o rígido não sobe");
-    // fora do intervalo da fila: o padrão do detector
-    cz._trocarFila({ limiar: () => 0.49 }); assert.equal(await cz.limiarAlta("x", 0.9), 0.9);
-    cz._trocarFila({ limiar: () => 0.99 }); assert.equal(await cz.limiarAlta("x", 0.9), 0.9);
-    cz._trocarFila({ limiar: () => 0.98 }); assert.equal(await cz.limiarAlta("x", 0.9), 0.98);
-  } finally { cz._trocarFila(antes); rev.definirModoServidor(SID, "padrao"); }
+    db.staffSalvarLimiar(SID, "poucos", { limiar: 0.6, casos: 19, precisao: 1 });
+    assert.equal(st.limiar("poucos", 0.9, { serverId: SID }), 0.9, "menos de 20 julgados: não vale");
+    // fora do intervalo calibrável: o padrão do detector
+    cz._trocarStaff({ limiar: () => 0.49 }); assert.equal(await cz.limiarAlta("x", 0.9), 0.9);
+    cz._trocarStaff({ limiar: () => 0.99 }); assert.equal(await cz.limiarAlta("x", 0.9), 0.9);
+    cz._trocarStaff({ limiar: () => 0.98 }); assert.equal(await cz.limiarAlta("x", 0.9), 0.98);
+  } finally { cz._trocarStaff(antes); }
 });
 await t("★ regressão: toda impressão `arquivo:<id>` vira `h1:` (sha256), mesmo com um ID de 42 caracteres estilo nanoid", async () => {
   limpar();
@@ -23647,9 +23717,14 @@ await t("★ regressão: toda impressão `arquivo:<id>` vira `h1:` (sha256), mes
   assert.ok(!JSON.stringify(linha(c)).includes(NANO));
   await rev.julgar(c, "certo", { agora: AGORA });
   assert.ok(!JSON.stringify(rev.exportar(AGORA)).includes(NANO));
-  assert.equal(rev.vereditoParecido({ categoria: "sexual", impressao: imp }), "certo", "ainda casa igual");
-  assert.equal(rev.vereditoParecido({ categoria: "sexual", impressao: "arquivo:" + NANO.replace("a", "b") }), null);
-  for (const raro of ["qualquer:coisa", "m1:abc", "dhash:xyz"]) assert.match(linha(reg({ evidencia: { impressao: raro } }).codigo).impressao, /^h1:/, raro);
+  // (31 out 2026, P3a, staff) antes: rev.vereditoParecido. agora: a mesma comparação, `maisParecido` (e a staff, por servidor)
+  assert.ok(rev.maisParecido([linha(c)], { impressao: imp }), "ainda casa igual");
+  assert.equal(rev.maisParecido([linha(c)], { impressao: "arquivo:" + NANO.replace("a", "b") }), null);
+  julgarStaff({ evidencia: { impressao: imp } }, "certo");
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "sexual", impressao: imp }), "certo");
+  assert.ok(!JSON.stringify(cru.prepare("SELECT * FROM staff_casos").all()).includes(NANO), "nem a staff guarda o ID");
+  // (31 out 2026, P3a, staff) cada um de um servidor (o teto da amostra é por servidor)
+  for (const [i, raro] of ["qualquer:coisa", "m1:abc", "dhash:xyz"].entries()) assert.match(linha(reg({ evidencia: { impressao: raro }, serverId: U(9100 + i) }).codigo).impressao, /^h1:/, raro);
 });
 await t("★ impressão de texto: a gravação (trecho já sem menções) e a consulta (texto cru, outra menção) normalizam igual", async () => {
   limpar();
@@ -23659,13 +23734,16 @@ await t("★ impressão de texto: a gravação (trecho já sem menções) e a co
   await rev.julgar(j, "certo", { agora: AGORA });
   assert.equal(rev.impressaoDeTexto(cruTexto), rev.impressaoDeTexto(as.trechoDoCaso(cruTexto)));
   assert.equal(rev.impressaoDeTexto(`oi <@${ANA}> tudo bem com você`), rev.impressaoDeTexto(`oi <@${BIA}> tudo bem com você`));
-  assert.equal(rev.vereditoParecido({ categoria: "assunto:politica", texto: cruTexto.replace(ANA, BIA) }), "certo");
+  // (31 out 2026, P3a, staff) antes: rev.vereditoParecido. agora: a mesma comparação (`maisParecido`)
+  assert.ok(rev.maisParecido([linha(j)], { texto: cruTexto.replace(ANA, BIA) }));
   // e o texto inteiro, quando vem, é o que vale para a impressão (não o trecho cortado)
   const longo = "palavra ".repeat(80) + "fim diferente aqui";
   const r = reg({ tipo: "assunto", categoria: "assunto:religiao", evidencia: { trecho: longo.slice(0, 50), texto: longo } }).codigo;
   assert.equal(linha(r).impressao, rev.impressaoDeTexto(longo));
 });
-await t("★ índices para a rodada (origem, enviadoEm, limpoEm); `registrarPerdido` liga o timer como o `registrarCaso`", async () => {
+// (31 out 2026, P3a, staff) antes: "...; `registrarPerdido` liga o timer". agora: o `registrarPerdido` saiu; e o veredito
+// da STAFF não depende do timer do dono — o limiar do servidor é recalculado no ciclo de 6 h (decisão do coordenador)
+await t("★ índices para a rodada (origem, enviadoEm, limpoEm) e os da staff; o veredito da staff NÃO liga o timer do dono (o limiar do servidor é do ciclo de 6 h)", async () => {
   limpar();
   const idx = cru.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'revisao_casos'").all().map((x) => x.name);
   for (const n of ["idx_revisao_origem", "idx_revisao_enviado", "idx_revisao_limpo"]) assert.ok(idx.includes(n), n);
@@ -23675,9 +23753,17 @@ await t("★ índices para a rodada (origem, enviadoEm, limpoEm); `registrarPerd
   rev.desligar();
   rev.configurar({ client: null, enviar: async () => null });
   assert.equal(rev.timerLigado(), false);
-  const p = await rev.registrarPerdido({ tipo: "perfil-imagem", userId: ANA, evidencia: { hash: "5555666677778888", link: "https://cdn.stoatusercontent.com/avatars/" + U(3) } });
-  assert.ok(p?.codigo);
-  assert.equal(rev.timerLigado(), true, "o caso tem IDs: a retenção precisa do timer");
+  const idxS = cru.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'staff_casos'").all().map((x) => x.name);
+  for (const n of ["idx_staff_alerta", "idx_staff_servidor", "idx_staff_criado", "idx_staff_pessoa"]) assert.ok(idxS.includes(n), n);
+  assert.match(plano("SELECT 1 FROM staff_casos WHERE alertaMsgId = 'x'"), /idx_staff_alerta/);
+  db.filaDefinirEstado("ultimaRodada", Date.now() - 1000);
+  const idCaso = db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:politica", nota: 0.5, userId: ANA, alertaMsgId: "ALX", criadoEm: Date.now() });
+  assert.equal(rev.timerLigado(), false);
+  await quieto(() => st.julgar(db.staffCaso(idCaso), "errou", { ctx: { config: {}, serverId: SID }, server: { id: SID }, quem: MOD, mod: { decisaoDaStaff: async () => null } }));
+  assert.equal(db.staffCaso(idCaso).veredito, "errou");
+  assert.equal(rev.timerLigado(), false, "o timer do dono continua desligado");
+  assert.doesNotMatch(fs.readFileSync("modulos/moderacao/revisao.js", "utf8"), /^import .*casos-staff|casosStaff\.|recalcularLimiares\(agora\);\s*\n.*limiar-servidor/m, "a rodada do dono não mexe nos servidores (nem importa o casos-staff)");
+  assert.match(fs.readFileSync("main.js", "utf8"), /casosStaff\.recalcularLimiares\(Date\.now\(\)\)/, "o ciclo de 6 h recalcula");
   rev.desligar();
 });
 
@@ -23689,6 +23775,7 @@ console.log("── 11. integração (main.js) ──");
 const mudo = async (fn) => { const o = [process.stdout.write, process.stderr.write]; process.stdout.write = process.stderr.write = () => true; try { return await fn(); } finally { [process.stdout.write, process.stderr.write] = o; } };
 await mudo(() => import("./main.js"));
 const store = await import("./modulos/core/config-store.js");
+const cru2 = () => db.getDb();
 const c = globalThis.__client;
 const saidas = [];
 const textoDe = (p) => typeof p === "string" ? p : `${p?.embeds?.[0]?.title ?? ""}\n${p?.embeds?.[0]?.description ?? ""}${typeof p?.content === "string" ? "\n" + p.content : ""}`;
@@ -23726,8 +23813,12 @@ async function diz(autor, conteudo, onde = "dm") {
 await t("★ no boot: a fila configurada, sem timer com o banco vazio", () => {
   assert.equal(rev.timerLigado(), false);
 });
+// (31 out 2026, P3a, staff) a amostra sorteada sempre (o sorteio fixo) e cada caso de um servidor (o teto é por servidor)
+rev._trocarSorteio(() => 0);
+let nSrv = 0;
+const casoI = (x = {}) => caso({ serverId: U(8000 + ++nSrv), ...x });
 await t("★ caso novo liga o timer; `&caso` na DM do dono manda os casos com ✅ e ❌", async () => {
-  const r = rev.registrarCaso(caso({ evidencia: { trecho: "um trecho para o dono ver", hash: "aaaa0000aaaa0000" } }));
+  const r = rev.registrarCaso(casoI({ evidencia: { trecho: "um trecho para o dono ver", hash: "aaaa0000aaaa0000" } }));
   assert.ok(r.codigo);
   assert.equal(rev.timerLigado(), true);
   reacoes.length = 0;
@@ -23740,7 +23831,7 @@ await t("★ caso novo liga o timer; `&caso` na DM do dono manda os casos com �
   assert.equal(linha(r.codigo).dmCanalId, DMID);
 });
 await t("★ reação ✅ de outra pessoa não julga; a do dono, na DM, julga (evento normal e evento cru fora do cache)", async () => {
-  const r = rev.registrarCaso(caso({ evidencia: { hash: "bbbb0000bbbb0000" } }));
+  const r = rev.registrarCaso(casoI({ evidencia: { hash: "bbbb0000bbbb0000" } }));
   reacoes.length = 0;
   await diz(DONO, "&caso");
   const msgId = reacoes.find((x) => x[1] === "✅")?.[0];
@@ -23756,7 +23847,7 @@ await t("★ reação ✅ de outra pessoa não julga; a do dono, na DM, julga (e
   assert.equal(linha(r.codigo).veredito, "errou", "evento cru de outra pessoa");
 });
 await t("★ `&caso <código> certo|errou` (e em inglês/espanhol: right/wrong, acierto/fallo)", async () => {
-  const a = rev.registrarCaso(caso({})).codigo, b = rev.registrarCaso(caso({})).codigo, d = rev.registrarCaso(caso({})).codigo;
+  const a = rev.registrarCaso(casoI({})).codigo, b = rev.registrarCaso(casoI({})).codigo, d = rev.registrarCaso(casoI({})).codigo;
   assert.match(await diz(DONO, `&caso ${a} certo`), new RegExp(`\`${a}\` ✅`));
   assert.equal(linha(a).veredito, "certo");
   await diz(DONO, `&case ${b.toLowerCase()} wrong`);
@@ -23768,12 +23859,20 @@ await t("★ `&caso <código> certo|errou` (e em inglês/espanhol: right/wrong, 
   assert.match(await diz(DONO, "&caso blabla"), /help caso|help case/);
 });
 await t("★ `&caso <código>` mostra o caso de novo na DM (reação passa a valer na mensagem nova); no servidor, não", async () => {
-  const a = rev.registrarCaso(caso({ evidencia: { trecho: "trecho secreto de outro servidor" } })).codigo;
+  const a = rev.registrarCaso(casoI({ evidencia: { trecho: "trecho secreto de outro servidor" } })).codigo;
   reacoes.length = 0;
   assert.match(await diz(DONO, `&caso ${a}`), /trecho secreto/);
   const msgId = reacoes[0]?.[0];
   await quieto(() => c.emitAll("messageReactionAdd", { id: msgId, channelId: DMID }, DONO, "❌"));
   assert.equal(linha(a).veredito, "errou");
+  // (revisão staff) reenviar o caso: a mensagem antiga na DM vira a versão curta (sem o trecho) antes de o ID mudar
+  const patches = [], patchAntes = c.api.patch;
+  c.api.patch = async (rota, payload) => { patches.push([rota, payload]); return {}; };
+  try {
+    assert.match(await diz(DONO, `&caso ${a}`), /trecho secreto/);
+    assert.ok(patches.some(([rota, pl]) => rota.includes(msgId) && /trecho apagado/.test(pl.embeds[0].description) && !/trecho secreto/.test(JSON.stringify(pl))), JSON.stringify(patches));
+    assert.notEqual(linha(a).dmMsgId, msgId);
+  } finally { c.api.patch = patchAntes; }
   const out = await diz(DONO, `&caso ${a}`, "srv1");
   assert.doesNotMatch(out, /trecho secreto/);
   // (31 out 2026, P3a) antes: /só aparece na DM|only show in DMs/. agora: só a linha que pede a DM — nem o código volta
@@ -23785,7 +23884,7 @@ await t("★ só o dono do bot: outra pessoa (mesmo na DM ou no próprio servido
     const out = await diz(OUTRO, "&caso exportar", onde);
     assert.match(out, /Só o dono do bot|Bot owner only/, onde);
   }
-  const a = rev.registrarCaso(caso({})).codigo;
+  const a = rev.registrarCaso(casoI({})).codigo;
   await diz(OUTRO, `&caso ${a} certo`);
   assert.equal(linha(a).veredito, null);
 });
@@ -23809,42 +23908,34 @@ await t("★ `&caso` no servidor do dono: nada da fila (nem a situação) — s�
     assert.match(o, /^🔒 (Use na DM com a Judy|Use it in your DM with Judy)\.$/m, cmd);
     assert.doesNotMatch(o, /📦|~[0-9a-f]{10}|Não há caso|There's no case/, cmd);
   }
-  assert.equal(rev.modoDoServidor(SID2), "padrao");
+  // (31 out 2026, P3a, staff) antes: o modo do servidor continuava "padrao" (`rev.modoDoServidor`). agora: não há modo do
+  // dono — e nenhum limiar de servidor foi criado
+  assert.equal(cru2().prepare("SELECT COUNT(*) n FROM staff_limiares").get().n, 0);
   assert.equal(dm.enviados.length, 0);
 });
-await t("★ `&caso servidor <id> rigido|padrao` (e strict/default): o limiar daquele servidor desce; ID de fora recusado", async () => {
-  assert.match(await diz(DONO, `&caso servidor ${SID2} rigido`), /✅ `~[0-9a-f]{10}` · (rígido|strict)/);
-  assert.equal(rev.limiar("teste-srv", 0.8, { serverId: SID2 }), 0.7);
-  assert.match(await diz(DONO, `&caso servidor ${SID2}`), /(rígido|strict)/);
-  await diz(DONO, `&case server ${SID2} default`);
-  assert.equal(rev.limiar("teste-srv", 0.8, { serverId: SID2 }), 0.8);
-  assert.match(await diz(DONO, `&caso servidor ${U(4444)} rigido`), /não está nesse servidor|isn't on that server/);
-  assert.match(await diz(DONO, `&caso servidor ${SID2} frouxo`), /help caso|help case/);
-  assert.match(await diz(DONO, "&caso servidor"), /help caso|help case/);
-  assert.doesNotMatch(await diz(DONO, `&caso servidor ${SID2}`), new RegExp(SID2), "o ID não volta na tela");
+// (31 out 2026, P3a, staff — R13) antes: "`&caso servidor <id> rigido|padrao` (e strict/default): o limiar daquele servidor
+// desce; ID de fora recusado". agora: o subcomando não existe — cai no uso (a configuração de servidor é da staff dele)
+await t("★ `&caso servidor` não existe mais (pt/en/es): cai no uso e nada muda", async () => {
+  for (const cmd of [`&caso servidor ${SID2} rigido`, `&case server ${SID2} strict`, `&caso servidor ${SID2}`, "&caso servidor", `&case server ${SID2} default`]) {
+    const o = await diz(DONO, cmd);
+    assert.match(o, /help caso|help case/, cmd);
+    assert.doesNotMatch(o, /✅ `~[0-9a-f]{10}`|rígido|strict ·|estricto/, cmd);
+  }
+  assert.equal(cru2().prepare("SELECT COUNT(*) n FROM staff_limiares").get().n, 0);
+  assert.equal(rev.limiar("teste-srv", 0.8), 0.8);
+  assert.equal(st.limiar("teste-srv", 0.8, { serverId: SID2 }), 0.8, "o limiar do servidor só muda com a staff dele");
 });
-await t("★ `&caso perdeu @pessoa avatar|bio` e `perdeu <link>`: caso do dono; a bio vira impressão e passa a ser herdada", async () => {
-  const out = await diz(DONO, `&caso perdeu <@${ANA}> avatar`);
-  const cod = out.match(/🎯 `([A-Z0-9]{5})`/)?.[1];
-  assert.ok(cod, out);
-  assert.equal(linha(cod).link, `https://cdn.stoatusercontent.com/avatars/${AVATAR}`);
-  assert.equal(linha(cod).origem, "dono");
-  const out2 = await diz(DONO, `&caso perdeu <@${ANA}> bio`);
-  const cod2 = out2.match(/🎯 `([A-Z0-9]{5})`/)?.[1];
-  assert.ok(cod2, out2);
-  assert.match(linha(cod2).impressao, /^m1:/);
-  assert.equal(rev.vereditoParecido({ categoria: "arte-texto", texto: "minha bio com um desenho que não devia estar aqui e mais texto para a impressão" }), "certo");
-  assert.match(await diz(DONO, `&caso perdeu <@${ANA}> unhas`), /help caso|help case/);
-  assert.match(await diz(DONO, `&caso perdeu <@${U(4321)}> avatar`), /Não achei|couldn't find/);
-  const out3 = await diz(DONO, `&caso perdeu https://cdn.stoatusercontent.com/attachments/${U(952)}`);
-  assert.match(out3, /🎯/);
-  assert.match(await diz(DONO, "&caso perdeu https://golpe.example/x.png"), /help caso|help case/);
-  // o gancho da área perfil (hash) entra quando registrado
-  rev.configurarPerfil({ evidenciaDoPerfil: async ({ userId, parte }) => (userId === ANA && parte === "banner" ? { link: "https://cdn.stoatusercontent.com/backgrounds/x", hash: "1212121212121212" } : null) });
-  const out4 = await diz(DONO, `&caso perdeu <@${ANA}> banner`);
-  const cod4 = out4.match(/🎯 `([A-Z0-9]{5})`/)?.[1];
-  assert.equal(linha(cod4).hash, "1212121212121212");
-  rev.configurarPerfil({});
+// (31 out 2026, P3a, staff — R13) antes: "`&caso perdeu @pessoa avatar|bio` e `perdeu <link>`: caso do dono; a bio vira
+// impressão e passa a ser herdada". agora: o subcomando não existe — cai no uso, nada é gravado nem herdado
+await t("★ `&caso perdeu` não existe mais (pt/en/es): cai no uso; nada gravado, nada herdado", async () => {
+  const n0 = cru2().prepare("SELECT COUNT(*) n FROM revisao_casos").get().n;
+  for (const cmd of [`&caso perdeu <@${ANA}> avatar`, `&caso perdeu <@${ANA}> bio`, `&case missed <@${ANA}> avatar`, `&caso perdio <@${ANA}> banner`, `&caso perdeu https://cdn.stoatusercontent.com/attachments/${U(952)}`]) {
+    const o = await diz(DONO, cmd);
+    assert.match(o, /help caso|help case/, cmd);
+    assert.doesNotMatch(o, /🎯/, cmd);
+  }
+  assert.equal(cru2().prepare("SELECT COUNT(*) n FROM revisao_casos").get().n, n0);
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "arte-texto", texto: "minha bio com um desenho que não devia estar aqui e mais texto para a impressão" }), null);
 });
 await t("★ `&caso exportar`: um arquivo .json pelo CDN, sem ID nem nome, na DM", async () => {
   let corpo = "";
@@ -23863,15 +23954,19 @@ await t("★ `&caso exportar`: um arquivo .json pelo CDN, sem ID nem nome, na DM
   assert.match(await diz(DONO, "&caso exportar"), /Não consegui subir|couldn't upload/);
 });
 await t("★ a ajuda do &caso: o dono vê nos 3 idiomas; nem o membro comum nem a staff veem", async () => {
+  // (31 out 2026, P3a, staff) antes: a ajuda listava `perdeu`/`missed`/`perdio`. agora: só a amostra (e `exportar`), sem
+  // `perdeu` nem `servidor`, e diz que o veredito do dono nunca age sobre ninguém
   const pt = await diz(DONO, "&help caso", "srv1");
-  assert.match(pt, /REVISAO_POR_DIA/);
-  assert.match(pt, /perdeu/);
+  assert.match(pt, /REVISAO_POR_DIA[\s\S]*nunca age sobre ninguém[\s\S]*exportar/);
+  assert.doesNotMatch(pt, /perdeu|rigido|servidor ‹id›/);
   store.configDoServidor(SID).language = "en"; store.salvarConfigServidor(SID);
   const en = await diz(DONO, "&help case", "srv1");
-  assert.match(en, /REVISAO_POR_DIA[\s\S]*missed/);
+  assert.match(en, /REVISAO_POR_DIA[\s\S]*never acts on anyone[\s\S]*export/);
+  assert.doesNotMatch(en, /missed|strict/);
   store.configDoServidor(SID).language = "es"; store.salvarConfigServidor(SID);
   const es = await diz(DONO, "&help caso", "srv1");
-  assert.match(es, /REVISAO_POR_DIA[\s\S]*perdio/);
+  assert.match(es, /REVISAO_POR_DIA[\s\S]*nunca actúa sobre nadie[\s\S]*exportar/);
+  assert.doesNotMatch(es, /perdio|estricto/);
   store.configDoServidor(SID).language = "pt"; store.salvarConfigServidor(SID);
   const membro = await diz(ANA, "&help caso", "srv1");
   assert.doesNotMatch(membro, /REVISAO_POR_DIA/);
@@ -23880,7 +23975,7 @@ await t("★ a ajuda do &caso: o dono vê nos 3 idiomas; nem o membro comum nem 
   // nem a staff: a página é do dono (visao.js: `caso: { padrao: "dono" }`)
   const staff = await diz(MOD, "&help caso", "srv1");
   assert.ok(staff.trim(), "responde alguma coisa");
-  assert.doesNotMatch(staff, /REVISAO_POR_DIA|perdeu/);
+  assert.doesNotMatch(staff, /REVISAO_POR_DIA|exportar/);
   assert.doesNotMatch(await diz(MOD, "&help", "srv1"), /&caso/);
 });
 await t("★ o main.js passa as reações à fila antes do reaction-role e no evento cru (fora do cache)", () => {
@@ -23889,6 +23984,10 @@ await t("★ o main.js passa as reações à fila antes do reaction-role e no ev
   assert.match(src, /revisao\.aoReagir\(ev\.id, ev\.user_id, ev\.emoji_id/);
   assert.ok(src.indexOf("revisao.aoReagir(msgId") < src.indexOf("reactionRoles.aoReagir("));
   assert.match(src, /revisao\.configurar\(\{ client, enviar/);
+  // (31 out 2026, P3a, staff) e o ✅/❌ da staff nos alertas de caso duvidoso, nos dois caminhos
+  assert.match(src, /casosStaff\.aoReagir\(msgId, userId, emoji, \{ client, criarContexto \}\)/);
+  assert.match(src, /casosStaff\.aoReagir\(ev\.id, ev\.user_id, ev\.emoji_id, \{ client, criarContexto \}\)/);
+  assert.ok(src.indexOf("casosStaff.aoReagir(msgId") < src.indexOf("reactionRoles.aoReagir("));
 });
 
 rev.desligar();
@@ -23928,13 +24027,16 @@ const as = await import("./modulos/moderacao/assuntos.js");
 const engine = await import("./modulos/moderacao/automod-engine.js");
 const punir = await import("./modulos/moderacao/punir.js");
 
-// ── o dublê da fila do dono (a interface do BRIEF-P3a: registrarCaso, vereditoParecido, limiar) ──
-const fila = { casos: [], consultas: [], limiares: [], parecido: {}, limiarValor: null, quebrar: false,
-  registrarCaso(c) { if (this.quebrar) throw new Error("fila fora"); this.casos.push(c); return { codigo: `K${this.casos.length}`, herdado: null }; },
+// ── o dublê da amostra do dono (registrarCaso) e dos casos da staff (vereditoParecido, limiar, alertar) ──
+// (31 out 2026, P3a, staff) antes um dublê só (a fila do dono fazia tudo). agora o mesmo objeto faz os dois papéis:
+// `usarFila` (a amostra do dono) e `usarStaff` (a herança, o limiar e o alerta do caso duvidoso, por servidor)
+const fila = { casos: [], consultas: [], limiares: [], alertas: [], parecido: {}, limiarValor: null, quebrar: false,
+  registrarCaso(c) { if (this.quebrar) throw new Error("fila fora"); this.casos.push(c); return { codigo: `K${this.casos.length}` }; },
   vereditoParecido(q) { this.consultas.push(q); return this.parecido[q.categoria] ?? null; },
-  limiar(categoria, padrao) { this.limiares.push([categoria, padrao]); return this.limiarValor ?? padrao; },
-  zerar() { this.casos = []; this.consultas = []; this.limiares = []; this.parecido = {}; this.limiarValor = null; this.quebrar = false; } };
-as.usarFila(fila);
+  limiar(categoria, padrao, o) { this.limiares.push([categoria, padrao, o?.serverId]); return this.limiarValor ?? padrao; },
+  alertar(a) { if (this.quebrar) throw new Error("staff fora"); this.alertas.push(a); return { id: this.alertas.length, msgId: `A${this.alertas.length}` }; },
+  zerar() { this.casos = []; this.consultas = []; this.limiares = []; this.alertas = []; this.parecido = {}; this.limiarValor = null; this.quebrar = false; } };
+as.usarFila(fila); as.usarStaff(fila);
 
 // ── o juiz de mentira: devolve a categoria pedida e guarda o que leu ──
 let resposta = '{"categoria": "zoeira", "motivo": "x"}';
@@ -24020,8 +24122,11 @@ await t("★ o juiz diz zoeira: nada, mesmo com o tema em `punir` e a nota alta 
   const { r, m } = await checar(POL_PUNIR, "quem vota no Bolsonaro é burro, a eleição foi roubada");
   assert.equal(r.acao, "nada"); assert.ok(!m.apagada); assert.equal(punicoes.length, 0);
   assert.equal(fila.casos.length, 1);
-  assert.equal(fila.casos[0].categoria, "assunto:politica:zoeira"); assert.equal(fila.casos[0].acao, "nenhuma");
-  assert.equal(fila.casos[0].origem, "discordancia", "a nota 8 discorda do juiz: vai para a fila");
+  // (31 out 2026, P3a, staff) antes: acao "nenhuma" (a dúvida ia para a fila do dono). agora: a discordância vai à staff
+  // deste servidor (alerta com ✅/❌, sem punir) — "alertado" na amostra do dono
+  assert.equal(fila.casos[0].categoria, "assunto:politica:zoeira"); assert.equal(fila.casos[0].acao, "alertado");
+  assert.equal(fila.casos[0].origem, "discordancia", "a nota 8 discorda do juiz: caso duvidoso");
+  assert.equal(fila.alertas.length, 1); assert.equal(fila.alertas[0].caso.parte, "discussao"); assert.equal(fila.alertas[0].caso.categoria, "assunto:politica");
 });
 await t("★ o texto rindo: mesmo com o juiz dizendo ataque/discussão, não pune (certeza baixa, só a fila)", async () => {
   for (const c of ["ataque", "discussao"]) {
@@ -24074,10 +24179,19 @@ console.log("\n── a fila do dono: certeza, limiar e herdado ──");
 await t("★ o limiar vem da fila (no lugar do fixo): calibrado acima da nota → certeza média → só a fila, sem punir", async () => {
   novo(); juiz("ataque"); fila.limiarValor = 0.95;
   const { r, m } = await checar(POL_PUNIR, "quem vota no Bolsonaro é burro, a eleição foi roubada");
-  assert.deepEqual(fila.limiares[0], ["assunto:politica", as.LIMIAR_ALTA_PADRAO]);
+  // (31 out 2026, P3a, staff) antes: [categoria, padrão]. agora: também o servidor (o limiar é o dele, senão o global)
+  assert.deepEqual(fila.limiares[0], ["assunto:politica", as.LIMIAR_ALTA_PADRAO, SRV]);
   assert.equal(r.certeza, "media"); assert.equal(r.acao, "nada"); assert.ok(!m.apagada && !punicoes.length);
+  // o caso duvidoso vai à staff deste servidor, com ✅/❌ e sem o texto da mensagem
+  assert.equal(fila.alertas.length, 1); assert.equal(r.alertou, true);
+  const al = fila.alertas[0];
+  assert.deepEqual([al.caso.tipo, al.caso.categoria, al.caso.userId, al.caso.canalId, al.caso.msgId, al.caso.parte], ["assunto", "assunto:politica", ANA, C1, m.id, "ataque"]);
+  assert.deepEqual(al.oQueFaz, ["apagar e punir (a escada do módulo)", "delete and punish (the module's ladder)", "borrar y castigar (la escalera del módulo)"]);
+  assert.match(al.embed.title, /para conferir/); assert.match(al.embed.description, new RegExp(`<#${C1}>`));
+  assert.doesNotMatch(al.embed.description, /quem vota no Bolsonaro|eleição foi roubada|^> /m, "o alerta não republica a mensagem");
   const c = fila.casos[0];
-  assert.equal(c.tipo, "assunto"); assert.equal(c.certeza, "media"); assert.equal(c.acao, "nenhuma"); assert.equal(c.origem, "detector");
+  // (31 out 2026, P3a, staff) antes: acao "nenhuma" (ia para a fila do dono). agora: "alertado" (foi à staff) — a amostra do dono só mede
+  assert.equal(c.tipo, "assunto"); assert.equal(c.certeza, "media"); assert.equal(c.acao, "alertado"); assert.equal(c.origem, "detector");
   assert.equal(c.serverId, SRV); assert.equal(c.userId, ANA); assert.equal(c.canalId, C1); assert.equal(c.msgId, m.id);
   assert.ok(c.nota > 0 && c.nota <= 1, `nota de 0 a 1: ${c.nota}`); assert.equal(c.detector, "assuntos:ataque");
   assert.match(c.evidencia.trecho, /Bolsonaro/); assert.equal(r.codigo, "K1");
@@ -24092,30 +24206,35 @@ await t("★ a sensibilidade da staff não mexe na faixa alta: portão baixo (al
   const { r, m } = await checar(cfgT({ politica: "apagar" }, { sensibilidade: "alta" }), x);
   assert.equal(r.certeza, "media"); assert.equal(r.acao, "nada"); assert.ok(!m.apagada);
 });
-await t("★ herdado: o dono disse ❌ num parecido → não pune; disse ✅ → pune mesmo com o limiar alto", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "o DONO disse ❌/✅ num parecido". agora: a STAFF DESTE servidor (a consulta leva o
+// servidor); o ❌ herdado nem vira alerta
+await t("★ herdado: a staff deste servidor disse ❌ num parecido → não pune nem alerta; disse ✅ → pune mesmo com o limiar alto", async () => {
   const X = "quem vota no Bolsonaro é burro, a eleição foi roubada";
   novo(); juiz("ataque"); fila.parecido["assunto:politica"] = "errou";
   let { r } = await checar(POL_PUNIR, X);
   assert.equal(r.herdado, "nao"); assert.equal(r.acao, "nada"); assert.equal(punicoes.length, 0);
+  assert.equal(fila.alertas.length, 0, "❌ herdado: nem alerta");
   assert.equal(fila.consultas[0].categoria, "assunto:politica"); assert.equal(fila.consultas[0].tipo, "assunto"); assert.equal(fila.consultas[0].texto, X);
-  novo(); juiz("ataque"); fila.parecido["assunto:politica:zoeira"] = "certo";   // "era zoeira", confirmado
-  ({ r } = await checar(POL_PUNIR, X));
-  assert.equal(r.herdado, "nao"); assert.equal(punicoes.length, 0);
+  // (31 out 2026, P3a, staff) antes: o "era zoeira" confirmado em `assunto:politica:zoeira` também dava "nao". agora o caso da
+  // staff é sempre `assunto:<tema>` (✅ = era violação): a consulta é uma só, e leva o servidor
+  assert.equal(fila.consultas.length, 1); assert.equal(fila.consultas[0].serverId, SRV);
   novo(); juiz("ataque"); fila.parecido["assunto:politica"] = "certo"; fila.limiarValor = 0.95;
   ({ r } = await checar(POL_PUNIR, X));
   assert.equal(r.herdado, "seria"); assert.equal(r.certeza, "alta"); assert.equal(r.acao, "punir"); assert.equal(punicoes.length, 1);
+  assert.equal(fila.alertas.length, 0, "✅ herdado: age direto, sem alerta");
   novo(); juiz("zoeira"); fila.parecido["assunto:politica"] = "certo";
   ({ r } = await checar(POL_PUNIR, X));
-  assert.equal(r.acao, "nada", "zoeira nunca pune, nem com herança"); assert.equal(r.certeza, "baixa");
+  assert.equal(r.acao, "nada", "zoeira nunca pune sozinha, nem com herança"); assert.equal(r.certeza, "baixa");
+  assert.equal(fila.alertas.length, 1, "o juiz e a staff discordam: a staff decide de novo");
 });
-await t("★ a fila quebrada ou ausente nunca muda a moderação (o limiar volta ao padrão)", async () => {
+await t("★ a fila (ou os casos da staff) quebrada ou ausente nunca muda a moderação (o limiar volta ao padrão)", async () => {
   novo(); juiz("ataque"); fila.quebrar = true;
   let { r } = await checar(POL_PUNIR, "quem vota no Bolsonaro é burro, a eleição foi roubada");
   assert.equal(r.acao, "punir"); assert.equal(r.codigo, null);
-  as.usarFila(null); novo(); juiz("ataque");
+  as.usarFila(null); as.usarStaff(null); novo(); juiz("ataque");
   ({ r } = await checar(POL_PUNIR, "quem vota no Bolsonaro é burro, a eleição foi roubada"));
   assert.equal(r.acao, "punir");
-  as.usarFila(fila);
+  as.usarFila(fila); as.usarStaff(fila);
 });
 await t("★ o modelo com erro: nada, e nenhum caso (erro nunca vira punição)", async () => {
   novo(); resposta = new Error("fora do ar");
@@ -24141,17 +24260,13 @@ await t("★ a impressão do caso de assunto sai do texto inteiro — o mesmo qu
   assert.ok(c.evidencia.trecho.length <= 300 && !c.evidencia.trecho.includes(ANA));
   assert.ok(fila.consultas.length && fila.consultas.every((q) => q.texto === X));
 });
-console.log("\n── o sinal da staff ──");
-await t("★ sinalDaStaff: um caso de origem \"staff\", sem punir nada e só com o necessário", async () => {
-  fila.zerar();
-  const ctx = { serverId: SRV };
-  const r = await engine.sinalDaStaff(ctx, { tipo: "warn", alvoId: FULANO, canalId: C1, msgId: "MSGX", motivo: `xingou <@${ANA}> de novo` });
-  assert.equal(r.codigo, "K1");
-  assert.deepEqual(fila.casos[0], { tipo: "staff", categoria: "staff:warn", serverId: SRV, userId: FULANO, canalId: C1, msgId: "MSGX",
-    origem: "staff", certeza: "media", nota: null, acao: "nenhuma", evidencia: { trecho: "xingou @… de novo" }, detector: "staff" });
-  assert.equal(await engine.sinalDaStaff(ctx, { tipo: "purge", alvoId: FULANO }), null);
-  assert.equal(await engine.sinalDaStaff({}, { tipo: "ban", alvoId: FULANO }), null, "fora de um servidor: nada");
-  assert.equal(fila.casos.length, 1);
+console.log("\n── a punição manual da staff não vai ao dono (R13) ──");
+// (31 out 2026, P3a, staff — R13) antes: "sinalDaStaff: um caso de origem staff, sem punir nada". agora: o sinal saiu — o
+// automod não tem mais por onde mandar a punição manual ao dono
+await t("★ sem sinal da staff: o automod-engine não exporta `sinalDaStaff` nem `TIPOS_SINAL_STAFF`, e nenhum código o chama", async () => {
+  assert.equal(engine.sinalDaStaff, undefined); assert.equal(engine.TIPOS_SINAL_STAFF, undefined);
+  for (const f of ["modulos/moderacao/punir.js", "modulos/moderacao/automod-engine.js", "main.js"]) assert.doesNotMatch(fs.readFileSync(f, "utf8"), /sinalDaStaff\(|TIPOS_SINAL_STAFF\b/, f);
+  assert.equal(typeof engine.aplicarPunicao, "function", "a punição do módulo, exportada (o ✅ da staff usa)");
 });
 // o servidor de mentira para as punições manuais
 const acoes = [];
@@ -24164,15 +24279,15 @@ const ctxP = { serverId: SRV, config: { language: "pt", log: {} }, PREFIXO: "&",
   client: { user: { id: BOT }, users: new Map(), messages: new Map() }, sendEmbed: async () => ({ id: "E", react: async () => {} }),
   getServer: async () => server, membroTemPermissao: () => true, ehSuperAdmin: (id) => id === SUPER };
 const pedidoStaff = (texto, extra = {}) => ({ id: "MS" + (++seq), authorId: MOD, content: texto, serverId: SRV, channelId: C1, channel: { id: C1 }, mentionIds: [], replyIds: [], member: MEMBROS.get(MOD), author: { id: MOD }, ...extra });
-await t("★ &kick manual: a punição acontece e vira sinal na fila (o alvo, nunca quem da staff agiu)", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "&kick manual: a punição acontece e vira sinal na fila". agora: acontece e NADA vai à
+// fila do dono (nem o alvo, nem quem agiu), nem vira alerta/caso da staff
+await t("★ &kick manual: a punição acontece e nada vai à fila do dono (nem alvo, nem quem agiu)", async () => {
   fila.zerar(); acoes.length = 0;
   await quieto(() => punir.cmdKick(pedidoStaff(`&kick <@${FULANO}> spam`), [`<@${FULANO}>`, "spam"], ctxP));
   await new Promise((r) => setTimeout(r, 10));
   assert.deepEqual(acoes.find((a) => a[0] === "kick"), ["kick", FULANO]);
-  assert.equal(fila.casos.length, 1);
-  const c = fila.casos[0];
-  assert.equal(c.origem, "staff"); assert.equal(c.tipo, "staff"); assert.equal(c.categoria, "staff:kick"); assert.equal(c.userId, FULANO); assert.equal(c.acao, "nenhuma");
-  assert.ok(!JSON.stringify(c).includes(MOD), "quem agiu não vai para a fila");
+  assert.equal(fila.casos.length, 0);
+  assert.equal(fila.alertas.length, 0);
 });
 await t("★ a fila fora do ar não atrapalha a punição manual", async () => {
   fila.zerar(); fila.quebrar = true; acoes.length = 0;
@@ -24180,7 +24295,9 @@ await t("★ a fila fora do ar não atrapalha a punição manual", async () => {
   assert.deepEqual(acoes.find((a) => a[0] === "kick"), ["kick", FULANO]);
   fila.quebrar = false;
 });
-await t("★ o sinal da staff só depois que a punição deu certo: kick, timeout e ban que falham não viram sinal", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "o sinal só depois que a punição deu certo (o que deu certo vira um)". agora: nem a
+// que falha nem a que dá certo vira caso
+await t("★ kick, timeout e ban manuais (falhando ou não) nunca viram caso na fila do dono", async () => {
   const erroStoat = () => Object.assign(new Error("sem permissão"), { type: "MissingPermission" });
   const falha = { ...server, kickUser: async () => { throw erroStoat(); }, banUser: async () => { throw erroStoat(); },
     fetchMember: async (u) => { const m = MEMBROS.get(String(u?.user ?? u)); return m ? { ...m, edit: async () => { throw erroStoat(); } } : null; } };
@@ -24192,20 +24309,25 @@ await t("★ o sinal da staff só depois que a punição deu certo: kick, timeou
     await punir.cmdBan(pedidoStaff(`&ban <@${FULANO}>`), [`<@${FULANO}>`], ctxF);
     await new Promise((r) => setTimeout(r, 10));
   });
-  assert.equal(fila.casos.length, 0, "nada deu certo: nenhum sinal");
-  await quieto(async () => { await punir.cmdTimeout(pedidoStaff(`&timeout <@${FULANO}> 10m`), [`<@${FULANO}>`, "10m"], ctxP); await new Promise((r) => setTimeout(r, 10)); });
-  assert.deepEqual(fila.casos.map((c) => c.categoria), ["staff:timeout"], "deu certo: um sinal");
+  assert.equal(fila.casos.length, 0, "nada deu certo: nenhum caso");
+  await quieto(async () => { await punir.cmdTimeout(pedidoStaff(`&timeout <@${FULANO}> 10m`), [`<@${FULANO}>`, "10m"], ctxP); await punir.cmdWarn(pedidoStaff(`&warn <@${FULANO}> spam`), [`<@${FULANO}>`, "spam"], ctxP); await new Promise((r) => setTimeout(r, 10)); });
+  assert.ok(acoes.some((a) => a[0] === "edit" && a[1] === FULANO), "o timeout aconteceu");
+  assert.deepEqual(fila.casos, [], "deu certo: também nenhum caso");
 });
-await t("no punir.js, uma chamada só do sinal (antes do despacho das quatro punições)", () => {
+// (31 out 2026, P3a, staff) antes: "uma chamada só do sinal". agora: nenhuma — nem à fila do dono por outro caminho
+await t("no punir.js, nenhuma chamada à fila do dono (sinal, registrarCaso, revisao.js)", () => {
   const src = fs.readFileSync("modulos/moderacao/punir.js", "utf8");
-  assert.equal((src.match(/sinalDaStaff\(/g) ?? []).length, 1);
+  assert.equal((src.match(/sinalDaStaff\(/g) ?? []).length, 0);
+  assert.doesNotMatch(src, /registrarCaso|registrarNaFila|revisao\.js|casos-staff/);
 });
 
 console.log("\n── integração com a fila de verdade (revisao.js) ──");
-await t("★ decisão de assunto → caso na fila real; depois do ❌ do dono, a mesma mensagem herda e não pune", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "depois do ❌ do DONO, a mesma mensagem herda e não pune". agora: o veredito do dono
+// não age — a mesma mensagem continua punida; quem muda isso é a staff do servidor (o ❌ dela herda, só ali)
+await t("★ decisão de assunto → amostra na fila real; o ❌ do DONO não muda nada; o ❌ da STAFF deste servidor herda e não pune", async () => {
   as._filaReal(); novo(); juiz("ataque");
   const rev = await import("./modulos/moderacao/revisao.js");
-  // (31 out 2026, P3a) a fila só grava ligada; e a certeza alta só é guardada quando o sorteio da amostra a pega
+  const st = await import("./modulos/moderacao/casos-staff.js");
   rev._ligarParaTestes(); rev._trocarSorteio(() => 0);
   const X = "quem vota no Bolsonaro é burro, a eleição foi roubada";
   let { r } = await checar(POL_PUNIR, X);
@@ -24215,14 +24337,25 @@ await t("★ decisão de assunto → caso na fila real; depois do ❌ do dono, a
   await quieto(() => rev.julgar(r.codigo, "errou"));
   punicoes.length = 0;
   ({ r } = await checar(POL_PUNIR, X));
+  assert.equal(r.herdado, null); assert.equal(r.acao, "punir", "o dono não age"); assert.equal(punicoes.length, 1);
+  // a staff deste servidor diz ❌ num caso igual: aqui herda; em outro servidor, não
+  const { impressao } = rev.impressoesDe({ texto: X });
+  db.staffJulgar(db.staffInserir({ serverId: SRV, tipo: "assunto", categoria: "assunto:politica", nota: 0.8, userId: ANA, alertaMsgId: "AX", impressao, criadoEm: Date.now() }), "errou");
+  st._zerar(); punicoes.length = 0;
+  ({ r } = await checar(POL_PUNIR, X));
   assert.equal(r.herdado, "nao"); assert.equal(r.acao, "nada"); assert.equal(punicoes.length, 0);
+  assert.equal(await as.heranca("politica", X, U(999)), null, "outro servidor: nada herdado");
 });
-await t("★ sinal da staff → caso de origem staff na fila real, sem quem agiu", async () => {
-  const r = await quieto(() => engine.sinalDaStaff({ serverId: SRV }, { tipo: "ban", alvoId: FULANO, canalId: C1, motivo: "raid" }));
-  const caso = db.filaCaso(r.codigo);
-  assert.equal(caso.origem, "staff"); assert.equal(caso.tipo, "staff"); assert.equal(caso.categoria, "staff:ban"); assert.equal(caso.acao, "nenhuma");
-  assert.equal(caso.userId, FULANO); assert.ok(!JSON.stringify(caso).includes(MOD));
-  as.usarFila(fila);
+// (31 out 2026, P3a, staff — R13) antes: "sinal da staff → caso de origem staff na fila real". agora: com a fila real ligada,
+// o &ban manual não grava nada nela
+await t("★ com a fila real ligada, a punição manual (&ban) não grava nada na fila do dono", async () => {
+  const conta = () => db.getDb().prepare("SELECT COUNT(*) n FROM revisao_casos").get().n;
+  const n0 = conta(); acoes.length = 0;
+  await quieto(async () => { await punir.cmdBan(pedidoStaff(`&ban <@${FULANO}> raid`), [`<@${FULANO}>`, "raid"], ctxP); await new Promise((r) => setTimeout(r, 10)); });
+  assert.ok(acoes.some((a) => a[0] === "ban"));
+  assert.equal(conta(), n0);
+  assert.equal(db.getDb().prepare("SELECT COUNT(*) n FROM revisao_casos WHERE origem = 'staff'").get().n, 0);
+  as.usarFila(fila); as.usarStaff(fila);
 });
 
 console.log("\n── RPG: o começo viável ──");
@@ -24394,6 +24527,7 @@ const cz = await import("./modulos/moderacao/certeza.js");
 const av = await import("./modulos/moderacao/avatar.js");
 const perfil = await import("./modulos/moderacao/perfil.js");
 const revisao = await import("./modulos/moderacao/revisao.js");
+const st = await import("./modulos/moderacao/casos-staff.js");
 
 // ── a arte sintética, inofensiva, no formato do caso 1 ──
 const BIT = [[0, 0, 0], [0, 1, 1], [0, 2, 2], [1, 0, 3], [1, 1, 4], [1, 2, 5], [0, 3, 6], [1, 3, 7]];
@@ -24514,27 +24648,32 @@ await t("★ decidir: o veredito do dono vale antes da nota", () => {
   assert.equal(cz.decidir({ certeza: "alta", herdado: "errou" }), "nada");
   assert.equal(cz.decidir({ certeza: null, herdado: "certo", punivel: false }), "punir");
   assert.equal(cz.decidir({ certeza: "alta" }), "punir");
-  assert.equal(cz.decidir({ certeza: "alta", punivel: false }), "fila");
-  assert.deepEqual(["media", "baixa", null].map((c) => cz.decidir({ certeza: c })), ["fila", "fila", "nada"]);
+  // (31 out 2026, P3a, staff) antes: "fila" (a do dono). agora: "staff" — o caso duvidoso vai à staff do servidor
+  assert.equal(cz.decidir({ certeza: "alta", punivel: false }), "staff");
+  assert.deepEqual(["media", "baixa", null].map((c) => cz.decidir({ certeza: c })), ["staff", "staff", "nada"]);
 });
-await t("limiarAlta: o calibrado pela fila, por servidor; um limiar torto volta ao padrão", async () => {
+// (31 out 2026, P3a, staff) antes: o limiar vinha da fila do dono (com o servidor rígido). agora: dos casos da staff
+// (o do servidor, senão o global) — `_trocarStaff`
+await t("limiarAlta: o calibrado do servidor (staff), senão o global; um limiar torto volta ao padrão", async () => {
   const pedidos = [];
-  const antes = cz._trocarFila({ limiar: (c, p, o) => { pedidos.push([c, p, o?.serverId]); return c === "torta" ? 0.2 : o?.serverId === "R" ? 0.7 : p; } });
+  const antes = cz._trocarStaff({ limiar: (c, p, o) => { pedidos.push([c, p, o?.serverId]); return c === "torta" ? 0.2 : o?.serverId === "R" ? 0.7 : p; } });
   try {
     assert.equal(await cz.limiarAlta("sexual", 0.9, "R"), 0.7);
     assert.equal(await cz.limiarAlta("sexual"), 0.9);
     assert.equal(await cz.limiarAlta("torta"), 0.9);
     assert.deepEqual(pedidos[0], ["sexual", 0.9, "R"]);
-  } finally { cz._trocarFila(antes); }
+  } finally { cz._trocarStaff(antes); }
 });
-await t("sem a fila (ou com ela quebrada): nada estoura, o detector segue", async () => {
-  const antes = cz._trocarFila(null);
+await t("sem a fila (ou com ela quebrada) e sem os casos da staff: nada estoura, o detector segue", async () => {
+  const antes = cz._trocarFila(null), antesS = cz._trocarStaff(null);
   try {
-    assert.deepEqual([await cz.registrar({}), await cz.vereditoParecido({}), await cz.amostrar({}), await cz.limiarAlta("x")], [null, null, false, 0.9]);
-    cz._trocarFila({ registrarCaso: () => { throw new Error("quebrou"); }, vereditoParecido: () => "talvez", amostrar: () => "sim" });
+    assert.deepEqual([await cz.registrar({}), await cz.vereditoParecido({}), await cz.amostrar({}), await cz.limiarAlta("x"), await cz.alertarStaff({})], [null, null, false, 0.9, null]);
+    cz._trocarFila({ registrarCaso: () => { throw new Error("quebrou"); }, amostrar: () => "sim" });
+    cz._trocarStaff({ vereditoParecido: () => "talvez", alertar: () => { throw new Error("quebrou"); } });
     assert.equal(await quieto(() => cz.registrar({})), null);
+    assert.equal(await quieto(() => cz.alertarStaff({})), null);
     assert.deepEqual([await cz.vereditoParecido({}), await cz.amostrar({})], [null, false]);   // fora do vocabulário: nada
-  } finally { cz._trocarFila(antes); }
+  } finally { cz._trocarFila(antes); cz._trocarStaff(antesS); }
 });
 
 console.log("── a nota da imagem (os erros que o dono relatou, em descrições sintéticas) ──");
@@ -24583,9 +24722,11 @@ function servidor(id) {
   };
 }
 const cfg = (extra = {}) => ({ language: "pt", automod: { antiAvatar: { enabled: true, acao: "silenciar", tempo: "24h" }, antiScam: { alertChannelId: CANAL } }, log: { canalId: null }, acesso: { cargosStaff: [] }, ...extra });
+// (31 out 2026, P3a, staff) o envio devolve a mensagem (com id e react): o alerta do caso duvidoso fica guardado
+let nEnv = 0;
 const ctxDe = (serverId, config = cfg()) => ({
   config, serverId, COR: { aviso: 2, erro: 3 }, PREFIXO: "&",
-  sendEmbed: async (canal, e) => { enviados.push({ canal: canal?.id, serverId, ...e }); return {}; },
+  sendEmbed: async (canal, e) => { enviados.push({ canal: canal?.id, serverId, ...e }); return { id: `ENV${++nEnv}`, react: async () => {} }; },
   client: { channels: { get: (id) => (id === CANAL ? { id, serverId } : null) } },
   membroTemPermissao: (m) => m?.authorId === MOD, ehSuperAdmin: (u) => u === DONO,
 });
@@ -24596,7 +24737,10 @@ av._trocarHash(async (u) => { hashesPedidos.push(u); return HASH.has(u) ? { dhas
 let veredito = () => null;
 const filaDuble = { registrarCaso: (c) => { casos.push(c); return { codigo: `K${casos.length}`, herdado: null }; }, vereditoParecido: (q) => veredito(q), limiar: (_c, p) => p, amostrar: () => false };
 cz._trocarFila(filaDuble);
-const zerar = () => { for (const l of [editados, buscados, enviados, casos, analises, hashesPedidos]) l.length = 0; av._zerar(); veredito = () => null; cz._trocarFila(filaDuble); };
+// (31 out 2026, P3a, staff) a herança é da staff de cada servidor (casos-staff.js de verdade, banco zerado a cada teste)
+db.staffContarJulgados("x");
+const zerar = () => { for (const l of [editados, buscados, enviados, casos, analises, hashesPedidos]) l.length = 0; av._zerar(); veredito = () => null; cz._trocarFila(filaDuble); cz._trocarStaff(st); db.getDb().exec("DELETE FROM staff_casos; DELETE FROM staff_limiares"); st._zerar(); };
+const casoStaff = (userId, parte) => db.getDb().prepare("SELECT * FROM staff_casos WHERE userId = ? AND parte = ? AND veredito IS NULL ORDER BY id DESC").get(userId, parte);
 const PACK = "vendo pack +18 de novinha chama no pv";
 const cacheDe = (mapa) => ({ getByKey: ({ server, user }) => (mapa[server]?.includes(user) ? { id: { server, user }, roles: [] } : undefined) });
 
@@ -24619,7 +24763,11 @@ await t("★ perfil inteiro na entrada: bio (arte → fila, sem punir), banner (
   assert.deepEqual([cb.tipo, cb.categoria, cb.certeza, cb.acao, cb.evidencia.link, cb.userId, cb.serverId], ["perfil-imagem", "sexual", "alta", "punido", url("backgrounds", "BAN1"), PESSOA, S1]);
   // (31 out 2026, P3a) antes: categoria "arte-texto" e o trecho com "· texto: pt,en" (o texto solto). agora: a categoria
   // do texto do perfil tem prefixo (um limiar por detector) e o resumo leva só números e o idioma
-  assert.deepEqual([cbio.tipo, cbio.categoria, cbio.certeza, cbio.acao, cbio.origem], ["perfil-texto", "perfil-texto:arte-texto", "media", "nenhuma", "detector"]);
+  // (31 out 2026, P3a, staff) antes: acao "nenhuma" (ia à fila do dono). agora: "alertado" — a arte (média) foi à staff
+  assert.deepEqual([cbio.tipo, cbio.categoria, cbio.certeza, cbio.acao, cbio.origem], ["perfil-texto", "perfil-texto:arte-texto", "media", "alertado", "detector"]);
+  const duvida = enviados.find((e) => /Perfil para conferir/.test(e.title));
+  assert.ok(duvida && /✅ silenciar até trocar · ❌ não fazer nada/.test(duvida.description) && /bio: arte em texto/.test(duvida.description));
+  assert.equal(casoStaff(PESSOA, "bio")?.categoria, "perfil-texto:arte-texto");
   assert.equal(cbio.evidencia.trecho, "arte em texto: 50 linhas, 2 desenho(s), 60×200 pontos · idioma: pt,en");
   assert.ok(hash.hashUtil(cbio.evidencia.hash));
   assert.ok(analises.includes(url("avatars", "AV1")) && analises.includes(url("backgrounds", "BAN1")));
@@ -24677,8 +24825,12 @@ await t("★ nome e status pelo userUpdate (cache de usuários), em todo servido
   const client = { servers: new Map([[S1, servidor(S1)], [S2, servidor(S2)], [S3, servidor(S3)]]), serverMembers: cacheDe({ [S1]: [PESSOA], [S2]: [PESSOA] }) };
   const r = await quieto(() => av.aoTrocarPerfil({ id: PESSOA, displayName: "卐卐卐 heil hitler", status: { text: "jogando" } }, { displayName: "Fulano", status: { text: "jogando" } }, { client, criarContexto: (sid) => ctxDe(sid) }));
   assert.equal(r.length, 2);
-  assert.ok(r.every((x) => !x.apitou && x.suspeita), "ódio em texto, nota 0,75: média → fila, ninguém punido");
-  assert.deepEqual([buscados.length, editados.length, enviados.length], [0, 0, 0]);
+  assert.ok(r.every((x) => !x.apitou && x.suspeita), "ódio em texto, nota 0,75: média → staff, ninguém punido");
+  // (31 out 2026, P3a, staff) antes: nenhum envio (a dúvida ia à fila do dono). agora: um alerta à staff de CADA servidor,
+  // no canal daquele servidor
+  assert.deepEqual([buscados.length, editados.length], [0, 0]);
+  assert.deepEqual(enviados.map((e) => e.serverId).sort(), [S1, S2].sort());
+  assert.ok(enviados.every((e) => /Perfil para conferir/.test(e.title) && /nome de exibição: texto de ódio/.test(e.description) && !/heil/.test(e.description)));
   assert.equal(casos.length, 1);
   // (31 out 2026, P3a) antes: categoria "odio". agora: "perfil-texto:odio"
   assert.deepEqual([casos[0].tipo, casos[0].categoria, casos[0].certeza, casos[0].detector], ["perfil-texto", "perfil-texto:odio", "media", "perfil:nome"]);
@@ -24691,75 +24843,94 @@ await t("apelido e foto deste servidor (serverMemberUpdate); mudança só de car
   const r = await quieto(() => av.aoTrocarNoServidor({ id: { server: S1, user: PESSOA }, server: srv, nickname: PACK }, { nickname: "a" }, ctxDe(S1)));
   assert.ok(r.apitou && casos[0].detector === "perfil:apelido");
 });
-await t("★ herança pela fila (dublê): o ❌ do dono impede punir (e o modelo nem roda); o ✅ pune sem o modelo", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "herança pela fila (dublê): o ❌ do DONO impede punir (e o modelo nem roda); o ✅ pune
+// sem o modelo". agora: a herança é da STAFF de cada servidor (um dublê dela): consultada depois da avaliação, que é uma
+// só para todos os servidores (o modelo roda uma vez); ❌ → nada (nem alerta); ✅ → pune; a consulta leva o servidor
+await t("★ herança da staff (dublê): o ❌ dela impede punir e alertar; o ✅ pune; a consulta leva o servidor", async () => {
   zerar();
   const HX = "c3a3e1f0e1c3870f", HY = "0f87c3e1f0e1a3c3";
   HASH.set(url("avatars", "AVX"), HX); HASH.set(url("avatars", "AVY"), HY);
   DESCR.set(url("avatars", "AVX"), { descricao: "Close de genitália masculina.", riscoModelo: true });
+  const consultas = [];
+  cz._trocarStaff({ ...st, vereditoParecido: (q) => { consultas.push(q); return veredito(q); } });
   veredito = (q) => (q.hash && hash.distancia(q.hash, HX) <= 6 ? "errou" : q.hash && hash.distancia(q.hash, HY) <= 6 && q.categoria === "sexual" ? "certo" : null);
   let r = await quieto(() => av.verificar({ ctx: ctxDe(S1), server: servidor(S1), userId: PESSOA, avatar: { id: "AVX" } }));
-  assert.ok(!r.apitou && !editados.length && !analises.length && !casos.length);
+  assert.ok(!r.apitou && !editados.length && !enviados.length && !casos.length);
+  assert.ok(consultas.length && consultas.every((q) => q.serverId === S1));
   r = await quieto(() => av.verificar({ ctx: ctxDe(S1), server: servidor(S1), userId: PESSOA, avatar: { id: "AVY" } }));
-  assert.ok(r.apitou && editados.length === 1 && !analises.length);
+  assert.ok(r.apitou && editados.length === 1);
   assert.deepEqual([casos[0].certeza, casos[0].evidencia.hash, casos[0].evidencia.impressao], ["alta", HY, `dhash:${HY}`]);
-  assert.match(enviados[0].description, /confirmado pelo dono do bot/);
+  assert.match(enviados[0].description, /confirmado pela staff/);
   // texto: o ❌ numa bio de nota alta impede a punição
   veredito = (q) => (q.texto === PACK ? "errou" : null);
   r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: OUTRA, valores: { bio: PACK } }));
   assert.ok(!r.apitou && editados.length === 1);
 });
-await t("★ herança pela fila de verdade (revisao.js): o ✅ numa arte vale para a mesma arte editada; o ❌ tira a arte da fila", async () => {
-  zerar(); revisao._zerar(); revisao._ligarParaTestes(); revisao._trocarSorteio(() => 1);   // (31 out 2026, P3a) a fila ligada; a certeza alta não sorteada
-  const codigos = [];
-  cz._trocarFila({ ...revisao, registrarCaso: (c) => { const r = revisao.registrarCaso(c); codigos.push(r.codigo); return r; } });
-  const ctx = ctxDe(S1);
+// (31 out 2026, P3a, staff — R13) antes: "herança pela fila de verdade (revisao.js): o ✅ (do dono) numa arte vale para a mesma
+// arte editada; o ❌ tira a arte da fila". agora: casos-staff.js de verdade — o ✅ da staff vale para a arte editada NO
+// MESMO servidor (em outro, ela é só um caso duvidoso de novo); o ❌ nem alerta mais ali
+// (revisão staff) antes: "o ✅ numa arte vale para a arte EDITADA" (dHash parecido). agora: a herança da staff numa arte só
+// casa pelo sha256 exato — a mesma arte herda (só neste servidor); a editada vira caso duvidoso de novo
+await t("★ herança da staff de verdade: o ✅ numa arte vale para a MESMA arte (sha256 exato) só neste servidor; a editada não; o ❌ nem alerta mais", async () => {
+  zerar();
+  // (revisão staff) o ✅ lê o perfil atual antes de agir: o cliente sabe a bio de cada um
+  const ctx = { ...ctxDe(S1), client: { ...ctxDe(S1).client, users: { get: (id) => ({ id, displayName: "x", fetchProfile: async () => ({ content: BIO }) }) } } };
   let r = await quieto(() => perfil.verificarPerfil({ ctx, server: servidor(S1), userId: PESSOA, valores: { bio: BIO }, origem: "entrada" }));
-  assert.ok(!r.apitou && r.suspeita && !editados.length && codigos[0]);
-  await revisao.julgar(codigos[0], "certo");
+  assert.ok(!r.apitou && r.suspeita && !editados.length);
+  const c1 = casoStaff(PESSOA, "bio");
+  assert.ok(c1 && c1.serverId === S1 && c1.alertaMsgId);
+  await quieto(() => st.julgar(c1, "certo", { ctx, server: servidor(S1), quem: MOD }));
+  editados.length = 0;
   const editada = BIO.replace("pt,en", "oi").split("\n").map((l, i) => (i === 15 ? "\u28ff" + l.slice(1) : l)).join("\n");
-  r = await quieto(() => perfil.verificarPerfil({ ctx, server: servidor(S1), userId: OUTRA, valores: { bio: editada }, origem: "entrada" }));
-  assert.ok(r.apitou && editados.some((x) => x.u === OUTRA && x.d.timeout), "herdou o ✅");
+  r = await quieto(() => perfil.verificarPerfil({ ctx, server: servidor(S1), userId: OUTRA, valores: { bio: BIO.split("\n").map((l) => l + "\u2800 ").join("\r\n") }, origem: "entrada" }));
+  assert.ok(r.apitou && editados.some((x) => x.u === OUTRA && x.d.timeout), "a mesma arte (mesmo sha256 normalizado) herdou o ✅");
+  editados.length = 0;
+  r = await quieto(() => perfil.verificarPerfil({ ctx, server: servidor(S1), userId: U(9), valores: { bio: editada }, origem: "entrada" }));
+  assert.ok(!r.apitou && r.suspeita && !editados.length, "a editada não herda: caso duvidoso de novo");
+  r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S2), server: servidor(S2), userId: OUTRA, valores: { bio: BIO }, origem: "entrada" }));
+  assert.ok(!r.apitou && r.suspeita, "em outro servidor, não herda");
   const listras = desenho(28, 8, (x, y) => (x + y) % 7 < 3).join("\n");
   r = await quieto(() => perfil.verificarPerfil({ ctx, server: servidor(S1), userId: U(7), valores: { bio: listras } }));
-  const n = codigos.length;
-  await revisao.julgar(codigos[n - 1], "errou");
+  await quieto(() => st.julgar(casoStaff(U(7), "bio"), "errou", { ctx, server: servidor(S1), quem: MOD }));
+  const nAlertas = enviados.length;
   r = await quieto(() => perfil.verificarPerfil({ ctx, server: servidor(S1), userId: U(8), valores: { bio: listras } }));
-  assert.ok(!r.apitou && !r.achados.length && codigos.length === n, "o ❌ vale: nem vai à fila de novo");
+  assert.ok(!r.apitou && !r.achados.length && enviados.length === nAlertas, "o ❌ vale: nem alerta de novo");
 });
-await t("★ ligar: assina o evento cru (a bio que a stoat.js descarta) e os ganchos da fila; o ✅ do dono revê o perfil ATUAL", async () => {
-  zerar(); revisao._zerar(); revisao._ligarParaTestes(); revisao._trocarSorteio(() => 0);   // (31 out 2026, P3a) a fila ligada; a punição (certeza alta) sorteada para a amostra
-  const codigos = [];
-  cz._trocarFila({ ...revisao, registrarCaso: (c) => { const r = revisao.registrarCaso(c); codigos.push(r.codigo); return r; } });
+// (31 out 2026, P3a, staff — R13) antes: "ligar: assina o evento cru e os ganchos da fila; o ✅ do DONO revê o perfil ATUAL".
+// agora: `ligar` só assina o evento cru (não há gancho do dono); quem revê o perfil atual é o ✅ da STAFF (decisaoDaStaff)
+await t("★ ligar: só o evento cru (sem ganchos da fila); o ✅ da staff revê o perfil ATUAL — quem já trocou não é punido", async () => {
+  zerar(); revisao._zerar(); revisao._ligarParaTestes(); revisao._trocarSorteio(() => 0);
   const A = U(11), B = U(12);
-  // uma arte que ninguém julgou ainda (o banco desta suíte já tem a BIO julgada ✅)
   const XADREZ = desenho(24, 12, (x, y) => ((x >> 3) + (y >> 3)) % 2 === 0).join("\n");
   const bios = { [A]: XADREZ, [B]: XADREZ, [U(13)]: PACK };
   const usuario = (id) => ({ id, displayName: "x", fetchProfile: async () => ({ content: bios[id], banner: null }) });
   const client = { events: new EventEmitter(), servers: new Map([[S1, servidor(S1)]]), serverMembers: cacheDe({ [S1]: [A, B, U(13)] }), users: { get: (id) => usuario(id) } };
   assert.equal(await perfil.ligar({ client, criarContexto: (sid) => ctxDe(sid) }), true);
-  assert.equal(typeof revisao.ganchosDoPerfil().evidenciaDoPerfil, "function");
-  // as duas entram com a arte (média → fila); B troca a bio antes de o dono julgar
+  assert.equal(revisao.ganchosDoPerfil, undefined); assert.equal(revisao.quandoJulgado, undefined);
   for (const id of [A, B]) await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: id, valores: { bio: XADREZ } }));
-  assert.ok(!editados.length && codigos.length === 2);
-  bios[B] = "mudei a bio";
-  await quieto(() => revisao.julgar(codigos[1], "certo"));
+  assert.ok(!editados.length);
+  const ca = casoStaff(A, "bio"), cb = casoStaff(B, "bio");
+  assert.ok(ca && cb);
+  bios[B] = "mudei a bio"; perfil._zerar(); assert.equal(await perfil.ligar({ client, criarContexto: (sid) => ctxDe(sid) }), true);
+  const ctx = { ...ctxDe(S1), client };
+  await quieto(() => st.julgar(cb, "certo", { ctx, server: servidor(S1), quem: MOD }));
   assert.ok(!editados.some((x) => x.u === B), "B já trocou: não é punida");
-  await quieto(() => revisao.julgar(codigos[0], "certo"));
-  assert.ok(editados.some((x) => x.u === A && x.d.timeout), "A continua com a arte: punida no ✅");
+  await quieto(() => st.julgar(ca, "certo", { ctx, server: servidor(S1), quem: MOD }));
+  assert.ok(editados.some((x) => x.u === A && x.d.timeout), "A continua com a arte: punida no ✅ da staff");
+  assert.deepEqual(db.perfilSilencioLer(S1, A)?.campos, ["bio"], "silêncio até trocar");
   // o evento cru chega pelo `client.events`
   await quieto(async () => {
     client.events.emit("event", { type: "UserUpdate", id: U(13), data: { profile: { content: PACK } } });
     await new Promise((ok) => setTimeout(ok, 50));
   });
   assert.ok(editados.some((x) => x.u === U(13) && x.d.timeout));
-  // o dono diz ❌ na punição (o bot errou): a bio, igual, herda o "errou" e a voz volta
-  await quieto(() => revisao.julgar(codigos.at(-1), "errou"));
-  assert.ok(editados.some((x) => x.u === U(13) && x.d.remove?.includes("Timeout")) && db.perfilSilencioLer(S1, U(13)) === null, "❌ num punido devolve a voz");
   assert.equal(await perfil.ligar({ client, criarContexto: ctxDe }), false, "uma vez só");
 });
-await t("★ servidor rígido (`&caso servidor <id> rigido`): o limiar menor vale só ali", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "servidor rígido (`&caso servidor <id> rigido`): o limiar menor vale só ali". agora:
+// o limiar de um servidor é o que a staff DELE calibrou — e vale só ali
+await t("★ o limiar calibrado pela staff de um servidor vale só ali", async () => {
   zerar();
-  cz._trocarFila({ ...filaDuble, limiar: (_c, p, o) => (o?.serverId === S3 ? 0.7 : p) });
+  cz._trocarStaff({ ...st, limiar: (_c, p, o) => (o?.serverId === S3 ? 0.7 : p) });
   const client = { servers: new Map([[S1, servidor(S1)], [S3, servidor(S3)]]), serverMembers: cacheDe({ [S1]: [PESSOA], [S3]: [PESSOA] }) };
   const r = await quieto(() => av.aoTrocarPerfil({ id: PESSOA, displayName: "卐卐卐 heil hitler" }, { displayName: "x" }, { client, criarContexto: (sid) => ctxDe(sid) }));
   assert.deepEqual(r.map((x) => x.apitou), [false, true]);
@@ -24782,11 +24953,17 @@ await t("sem o modelo de visão: o texto do perfil é visto, as imagens não", a
     assert.equal(analises.length + hashesPedidos.length, 0);
   } finally { process.env.IA_SERVICO_URL = antes; }
 });
-await t("sem a fila: a arte (média) vai à staff como \"para conferir\", sem a arte e sem punir", async () => {
+// (31 out 2026, P3a, staff) antes: "sem a fila: a arte (média) vai à staff como 'para conferir'" (o caminho de reserva).
+// agora é o caminho de sempre — com a fila do dono ou sem ela: o alerta com ✅/❌, sem a arte e sem punir; e o caso fica
+// guardado (servidor, pessoa, parte, impressão), sem a arte
+await t("a arte (média) vai à staff como \"para conferir\", com ✅/❌, sem a arte e sem punir — com ou sem a fila do dono", async () => {
   zerar(); cz._trocarFila(null);
   const r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: PESSOA, valores: { bio: BIO } }));
   assert.ok(!r.apitou && !editados.length);
-  assert.ok(enviados.length === 1 && /Perfil para conferir/.test(enviados[0].title) && /bio: arte em texto/.test(enviados[0].description) && !BRAILLE.test(JSON.stringify(enviados)));
+  assert.ok(enviados.length === 1 && /Perfil para conferir/.test(enviados[0].title) && /bio: arte em texto/.test(enviados[0].description) && /✅ .* · ❌ /.test(enviados[0].description) && !BRAILLE.test(JSON.stringify(enviados)));
+  const c = casoStaff(PESSOA, "bio");
+  // (revisão staff) antes: o dHash e a impressão MinHash. agora: só o sha256 exato da arte (64 hex), sem impressão de texto
+  assert.ok(c && c.serverId === S1 && c.hash === arte.detectarArte(BIO).impressoes[0] && /^[0-9a-f]{64}$/.test(c.hash) && c.impressao === null && !BRAILLE.test(JSON.stringify(c)));
 });
 await t("a amostra aleatória: só do que não apitou nada, com `origem: amostra`", async () => {
   zerar();
@@ -24806,19 +24983,48 @@ await t("buscarPerfil: uma busca por pessoa (guardada); teto de 20 por minuto", 
   for (let i = 0; i < 30; i++) await quieto(() => perfil.buscarPerfil(u(U(30 + i))));
   assert.equal(n, 20);
 });
-await t("★ sem fetchMember por evento: o código do perfil nem tem a chamada", () => {
-  assert.doesNotMatch(fs.readFileSync("modulos/moderacao/perfil.js", "utf8"), /fetchMember\s*\(/);
+// (revisão staff) antes: nenhum `fetchMember` no perfil.js. agora: um só, no `membroSilenciado` — os servidores em que a
+// pessoa está silenciada pelo perfil (depois de reiniciar, fora do cache); nenhum outro (ver o teste do silêncio preso)
+await t("★ sem fetchMember por evento: o código do perfil só tem a busca dos servidores em que a pessoa está silenciada", () => {
+  const src = fs.readFileSync("modulos/moderacao/perfil.js", "utf8");
+  assert.equal((src.match(/fetchMember\s*\(/g) ?? []).length, 1);
+  assert.match(src, /async function membroSilenciado\(server, userId\) \{\n  try \{ return await server\.fetchMember\(userId\); \}/);
+  assert.match(src, /if \(!member && silenciada\.has\(server\.id\)\) member = await membroSilenciado\(server, userId\);/);
   assert.doesNotMatch(fs.readFileSync("modulos/moderacao/avatar.js", "utf8"), /fetchMember\s*\(/);
 });
-await t("evidência para o `&caso perdeu`: avatar e banner com o hash; bio de arte sem a arte", async () => {
+// (revisão staff) o silêncio "até trocar" depois de reiniciar: o cache de membros vem vazio
+await t("★ silêncio até trocar depois de reiniciar: fora do cache, com a linha de silêncio, a troca para limpo devolve a voz (fetchMember só ali)", async () => {
   zerar();
+  const P = U(90);
+  db.perfilSilencioGravar(S2, P, ["bio"], "perfil impróprio");
+  db.silenciarAte(S2, P, Date.now() + 86400e3, "perfil"); db.definirSilenciado(S2, P, true);
+  const client = { servers: new Map([[S1, servidor(S1)], [S2, servidor(S2)], [S3, servidor(S3)]]), serverMembers: cacheDe({}) };
+  const r = await quieto(() => perfil.aoEventoCru({ type: "UserUpdate", id: P, data: { profile: { content: "oi, gosto de jogos" } } }, { client, criarContexto: (sid) => ctxDe(sid) }));
+  assert.ok(r.length === 1 && r[0].devolveu, "a voz voltou");
+  assert.ok(buscados.length && buscados.every((x) => x[0] === S2), "só o servidor em que estava silenciada");
+  assert.ok(editados.some((x) => x.id === S2 && x.u === P && x.d.remove?.includes("Timeout")));
+  assert.equal(db.perfilSilencioLer(S2, P), null);
+  buscados.length = 0;
+  assert.deepEqual(await quieto(() => perfil.aoEventoCru({ type: "UserUpdate", id: U(91), data: { profile: { content: "oi" } } }, { client, criarContexto: (sid) => ctxDe(sid) })), []);
+  assert.equal(buscados.length, 0, "sem silêncio e fora do cache: nenhuma busca");
+});
+// (31 out 2026, P3a, staff — R13) antes: "evidência para o `&caso perdeu`: avatar e banner com o hash; bio de arte sem a arte".
+// agora: sem `&caso perdeu` (`evidenciaDoPerfil` saiu); o que importa é o que o caso da staff guarda: imagem só o hash (ou
+// o resumo `h1:` do arquivo, nunca o ID), arte só o hash e a impressão
+await t("o caso da staff guarda do perfil só impressões: avatar com o hash; banner sem hash como `h1:` (nunca o ID do arquivo); bio de arte sem a arte", async () => {
+  zerar();
+  assert.equal(perfil.evidenciaDoPerfil, undefined); assert.equal(perfil.aoJulgar, undefined);
   HASH.set(url("avatars", "AVE"), "c3a3e1f0e1c3870f");
-  const client = { users: { get: () => ({ id: PESSOA, avatar: { id: "AVE", tag: "avatars" }, fetchProfile: async () => ({ content: BIO, banner: { id: "BNE", tag: "backgrounds" } }) }) } };
-  assert.deepEqual(await perfil.evidenciaDoPerfil({ client, userId: PESSOA, parte: "avatar" }), { link: url("avatars", "AVE"), hash: "c3a3e1f0e1c3870f", impressao: "dhash:c3a3e1f0e1c3870f" });
-  const bio = await perfil.evidenciaDoPerfil({ client, userId: PESSOA, parte: "bio" });
-  assert.ok(!BRAILLE.test(bio.trecho) && bio.texto === BIO && hash.hashUtil(bio.hash));
-  const ban = await perfil.evidenciaDoPerfil({ client, userId: PESSOA, parte: "banner" });
-  assert.deepEqual([ban.link, ban.hash, ban.impressao], [url("backgrounds", "BNE"), null, "arquivo:BNE"]);
+  DESCR.set(url("avatars", "AVE"), { descricao: "Desenho em preto e branco, estilo mangá, de uma personagem nua de costas, com sombras fortes.", riscoModelo: true });
+  DESCR.set(url("backgrounds", "BNE"), { descricao: "Desenho em preto e branco, estilo mangá, de uma personagem nua de costas, com sombras fortes.", riscoModelo: true });
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: PESSOA, valores: { avatar: { id: "AVE", tag: "avatars" }, banner: { id: "BNE", tag: "backgrounds" }, bio: BIO } }));
+  const av1 = casoStaff(PESSOA, "avatar"), ban = casoStaff(PESSOA, "banner"), bio = casoStaff(PESSOA, "bio");
+  assert.deepEqual([av1.hash, av1.impressao], ["c3a3e1f0e1c3870f", "dhash:c3a3e1f0e1c3870f"]);
+  assert.equal(ban.hash, null); assert.match(ban.impressao, /^h1:[0-9a-f]{32}$/);
+  assert.ok(!JSON.stringify(ban).includes("BNE"), "o ID do arquivo não fica");
+  // (revisão staff) antes: o dHash da arte. agora: o sha256 exato do texto normalizado (a herança da staff numa arte só
+  // casa igual), e nenhuma impressão de texto
+  assert.ok(!BRAILLE.test(JSON.stringify(bio)) && bio.hash === arte.detectarArte(BIO).impressoes[0] && bio.impressao === null);
 });
 
 console.log("── revisão do P3a (31 out 2026) ──");
@@ -24875,24 +25081,36 @@ await t("★ a voz só volta se o timeout ainda é o do perfil (±5 min): o time
   // a coluna nova num banco antigo: acrescentada sem perder linhas
   assert.ok(db.getDb().prepare("PRAGMA table_info(perfil_silencio)").all().some((c) => c.name === "fimAplicado"));
 });
-await t("★ um limiar por detector: o texto do perfil usa `perfil-texto:<categoria>`, a imagem a categoria pura (herança e limiar idem); o `perdeu` vale para todas", async () => {
+// (31 out 2026, P3a, staff) antes: "...; o `perdeu` (do dono) vale para todas" e o limiar/herança vinham da fila do dono.
+// agora: limiar e herança vêm dos casos da staff (`_trocarStaff`); sem `perdeu` — no lugar, o ✅ da staff num texto de
+// golpe vale para o mesmo texto só no servidor dela
+await t("★ um limiar por detector: o texto do perfil usa `perfil-texto:<categoria>`, a imagem a categoria pura (herança e limiar idem); o ✅ da staff vale só no servidor dela", async () => {
   zerar();
   const lim = [], cons = [];
-  cz._trocarFila({ ...filaDuble, limiar: (c, p) => { lim.push(c); return p; }, vereditoParecido: (q) => { cons.push(q.categoria); return null; } });
+  const consQ = [];
+  cz._trocarStaff({ ...st, limiar: (c, p) => { lim.push(c); return p; }, vereditoParecido: (q) => { cons.push(q.categoria); consQ.push(q); return null; } });
   DESCR.set(url("avatars", "AVC"), { descricao: "Fotografia de uma mulher nua deitada na cama.", riscoModelo: true });
   await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: U(63), valores: { bio: PACK, nome: "bando de macaco", avatar: { id: "AVC", tag: "avatars" } } }));
   for (const c of ["perfil-texto:sexual", "perfil-texto:odio", "sexual"]) assert.ok(lim.includes(c), `limiar ${c}: ${lim.join()}`);
   for (const c of ["perfil-texto:sexual", "perfil-texto:odio"]) assert.ok(cons.includes(c), `herança ${c}: ${cons.join()}`);
-  assert.ok(!cons.some((c) => c === "sexual" || c === "odio"), "o texto não consulta a categoria da imagem");
+  // (31 out 2026, P3a, staff) antes: nenhuma consulta a "sexual"/"odio" (a imagem sem hash não consultava a herança do dono).
+  // agora a imagem consulta a staff (pela impressão do arquivo) nas categorias de imagem — o TEXTO continua sem consultá-las
+  assert.ok(!consQ.some((q) => q.texto && (q.categoria === "sexual" || q.categoria === "odio")), "o texto não consulta a categoria da imagem");
+  assert.ok(consQ.filter((q) => !q.texto).every((q) => ["sexual", "odio", "gore"].includes(q.categoria) && /^arquivo:/.test(q.impressao)), "a imagem só as dela");
   const cat = Object.fromEntries(casos.map((c) => [c.detector, c.categoria]));
   assert.deepEqual([cat["perfil:bio"], cat["perfil:nome"], cat["perfil:avatar"]], ["perfil-texto:sexual", "perfil-texto:odio", "sexual"]);
   for (const c of ["perfil-texto:sexual", "perfil-texto:odio", "perfil-texto:golpe", "perfil-texto:arte-texto"]) assert.match(c, /^[a-z0-9][a-z0-9:_-]{0,39}$/);
-  // a fila de verdade: o `perdeu` do dono vale para o texto, qualquer que seja a categoria
-  revisao._zerar(); revisao._ligarParaTestes(); cz._trocarFila(revisao);
-  const T = "compre seguidores baratos no meu site agora mesmo e ganhe brinde";
-  assert.ok((await revisao.registrarPerdido({ tipo: "perfil-texto", userId: U(64), evidencia: { texto: T, trecho: T } }))?.codigo);
-  assert.equal((await perfil.avaliarTexto("bio", T)).achado?.herdado, "certo");
-  revisao._zerar();
+  // os casos da staff de verdade: o ✅ num texto do perfil vale para o mesmo texto, nesta categoria e neste servidor
+  cz._trocarStaff(st);
+  const T = "vendo pack +18 de novinha chama no pv agora mesmo e ganhe brinde";
+  const { impressao } = revisao.impressoesDe({ texto: T });
+  db.staffJulgar(db.staffInserir({ serverId: S1, tipo: "perfil-texto", categoria: "perfil-texto:sexual", nota: 0.6, parte: "bio", userId: U(64), alertaMsgId: "AT", impressao, criadoEm: Date.now() }), "certo");
+  st._zerar();
+  const av1 = await perfil.avaliarTexto("bio", T);
+  assert.deepEqual(av1.consultas, [{ categoria: "perfil-texto:sexual", texto: T }]);
+  assert.equal(await cz.vereditoParecido({ ...av1.consultas[0], serverId: S1 }), "certo");
+  assert.equal(await cz.vereditoParecido({ ...av1.consultas[0], serverId: S2 }), null);
+  assert.equal(await cz.vereditoParecido({ ...av1.consultas[0], categoria: "sexual", serverId: S1 }), null, "a imagem não herda do texto");
 });
 await t("★ o resumo da arte leva só números e o idioma — nunca o texto solto da bio", async () => {
   const comTexto = BIO.replace("pt,en", "me chama no zap 11 99999-8888 seu lindo");
@@ -24922,9 +25140,13 @@ await t("★ o registro do silêncio do perfil vencido (28 dias) sai na limpeza 
   assert.match(fs.readFileSync("main.js", "utf8"), /v\.perfilSilencio/, "o main.js registra no ciclo de 6 h");
 });
 
-await t("★ o dono julga o caso de perfil de quem ainda está silenciado: ❌ na foto nova (média, na fila) devolve a voz; ✅ mantém o silêncio", async () => {
+// (31 out 2026, P3a, staff — R13) antes: "o DONO julga o caso de perfil de quem ainda está silenciado: ❌ na foto nova (média,
+// na fila) devolve a voz; ✅ mantém". agora: é a STAFF do servidor que julga o alerta (casos-staff.julgar → decisaoDaStaff);
+// o veredito do dono na amostra do mesmo caso não muda nada
+await t("★ a staff julga o caso de perfil de quem ainda está silenciado: ❌ na foto nova (média) devolve a voz; ✅ mantém; o dono não muda nada", async () => {
   for (const [veredito, volta, P] of [["errou", true, U(80)], ["certo", false, U(81)]]) {
-    zerar(); revisao._zerar(); revisao._ligarParaTestes(); revisao._trocarSorteio(() => 1);
+    zerar(); revisao._zerar(); revisao._ligarParaTestes(); revisao._trocarSorteio(() => 0);
+    db.getDb().exec("DELETE FROM revisao_casos");   // o teto da amostra (3 por servidor por dia) começa do zero
     const codigos = [];
     cz._trocarFila({ ...revisao, registrarCaso: (c) => { const r = revisao.registrarCaso(c); codigos.push(r.codigo); return r; } });
     const A1 = `AJ1${veredito}`, A2 = `AJ2${veredito}`;
@@ -24932,17 +25154,23 @@ await t("★ o dono julga o caso de perfil de quem ainda está silenciado: ❌ n
     DESCR.set(url("avatars", A2), { descricao: "Desenho em preto e branco, estilo mangá, de uma personagem nua de costas, com sombras fortes.", riscoModelo: true });
     const usuario = { id: P, displayName: "x", avatar: { id: A1, tag: "avatars" }, fetchProfile: async () => ({ content: null, banner: null }) };
     const client = { events: new EventEmitter(), servers: new Map([[S1, servidor(S1)]]), serverMembers: cacheDe({ [S1]: [P] }), users: { get: (id) => (id === P ? usuario : null) } };
-    assert.equal(await perfil.ligar({ client, criarContexto: (sid) => ctxDe(sid) }), true);
     let r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: P, valores: { avatar: usuario.avatar }, origem: "entrada" }));
     assert.ok(r.apitou, "silenciado pelo avatar");
     usuario.avatar = { id: A2, tag: "avatars" };
     r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(S1), server: servidor(S1), userId: P, valores: { avatar: usuario.avatar }, origem: "troca" }));
-    assert.ok(!r.apitou && !r.devolveu && r.suspeita, "a foto nova é média: fila, e continua silenciado");
+    assert.ok(!r.apitou && !r.devolveu && r.suspeita, "a foto nova é média: alerta à staff, e continua silenciado");
     assert.deepEqual(db.perfilSilencioLer(S1, P)?.campos, ["avatar"]);
     const cod = codigos.filter(Boolean).at(-1);
-    assert.deepEqual([db.filaCaso(cod).certeza, db.filaCaso(cod).acao], ["media", "nenhuma"]);
+    assert.deepEqual([db.filaCaso(cod).certeza, db.filaCaso(cod).acao], ["media", "alertado"]);
+    // o dono julga a amostra do mesmo caso: nada muda
     editados.length = 0;
-    await quieto(() => revisao.julgar(cod, veredito));
+    await quieto(() => revisao.julgar(cod, veredito === "errou" ? "errou" : "certo"));
+    assert.ok(!editados.length, "o veredito do dono não age");
+    assert.deepEqual(db.perfilSilencioLer(S1, P)?.campos, ["avatar"]);
+    // a staff julga o alerta
+    const caso = casoStaff(P, "avatar");
+    assert.ok(caso);
+    await quieto(() => st.julgar(caso, veredito, { ctx: { ...ctxDe(S1), client }, server: servidor(S1), quem: MOD }));
     if (volta) {
       assert.ok(editados.some((x) => x.u === P && x.d.remove?.includes("Timeout")), "❌: a voz volta");
       assert.equal(db.perfilSilencioLer(S1, P), null);
@@ -24995,10 +25223,13 @@ const db = await import("./modulos/core/db.js");
 await quieto(() => db.abrirBanco(DB));
 const rev = await import("./modulos/moderacao/revisao.js");
 rev._ligarParaTestes();   // (31 out 2026, P3a) a fila desligada não grava nada
+rev._trocarSorteio(() => 0);   // (31 out 2026, P3a, staff) a fila só guarda a amostra: aqui, sempre sorteada
 const reten = await import("./modulos/core/retencao.js");
 
-await t("★ &privacidade apagar: a pessoa sai dos casos da fila (o caso fica, sem conta, canal, mensagem, trecho nem link)", async () => {
-  const caso = (userId) => ({ tipo: "staff", categoria: "staff:kick", serverId: SID, userId, canalId: U(110), msgId: U(111), origem: "staff", certeza: "media", nota: null, acao: "nenhuma", evidencia: { trecho: "um trecho", link: "https://cdn.stoatusercontent.com/attachments/x" }, detector: "staff" });
+// (31 out 2026, P3a, staff) antes: o caso era um sinal da staff (`staff:kick`), que saiu; agora um caso do detector na
+// amostra — e também os casos duvidosos que esperam a staff (saem inteiros; o julgado já não tem a pessoa)
+await t("★ &privacidade apagar: a pessoa sai dos casos da amostra (o caso fica, sem conta, canal, mensagem, trecho nem link) e dos casos que esperam a staff", async () => {
+  const caso = (userId) => ({ tipo: "assunto", categoria: "assunto:politica", serverId: SID, userId, canalId: U(110), msgId: U(111), origem: "detector", certeza: "media", nota: 0.6, acao: "alertado", evidencia: { trecho: "um trecho", link: "https://cdn.stoatusercontent.com/attachments/x" }, detector: "assuntos:discussao" });
   const a = await quieto(() => rev.registrarCaso(caso(ANA)));
   const b = await quieto(() => rev.registrarCaso(caso(BIA)));
   assert.ok(a.codigo && b.codigo);
@@ -25012,6 +25243,18 @@ await t("★ &privacidade apagar: a pessoa sai dos casos da fila (o caso fica, s
   for (const k of ["userId", "canalId", "msgId", "trecho", "link", "servidor"]) assert.equal(ca[k] ?? null, null, k);
   assert.equal(cb.userId, BIA, "o caso de outra pessoa não muda");
   assert.equal(reten.dadosDaPessoa(ANA).find((g) => g.id === "revisao").n, 0);
+  // os casos duvidosos que esperam a staff: os da pessoa saem; o julgado (sem pessoa) e o de outra pessoa ficam
+  const pend = (userId) => db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:politica", nota: 0.6, parte: "ataque", userId, canalId: U(110), msgId: U(112), alertaMsgId: `AL${userId}`, criadoEm: Date.now() });
+  const pa = pend(ANA), pb = pend(BIA), pj = pend(ANA);
+  db.staffJulgar(pj, "certo");
+  const telaS = reten.dadosDaPessoa(ANA).find((g) => g.id === "staff");
+  assert.equal(telaS?.n, 1);
+  for (const l of ["pt", "en", "es"]) assert.ok(telaS.rotulo[l], l);
+  reten.dadosDaPessoa(ANA, { apagar: true });
+  assert.equal(db.staffCaso(pa), null, "o que esperava a staff sai");
+  assert.equal(db.staffCaso(pb).userId, BIA);
+  assert.equal(db.staffCaso(pj).veredito, "certo", "o julgado fica (sem pessoa)");
+  assert.equal(db.staffCaso(pj).userId, null);
 });
 
 await t("★ o perfil sem o modelo de visão segue vivo na tela do &config (só o texto); imagens ficam ⚫", async () => {
@@ -25038,30 +25281,57 @@ await t("a ajuda do `sentinela avatar` fala do perfil inteiro e do silêncio at�
 
 await t("PRIVACIDADE.md: a fila, o perfil inteiro e o silêncio do perfil nos 3 idiomas; nenhuma linha diz que o apagar não tira da fila", () => {
   const p = fs.readFileSync("PRIVACIDADE.md", "utf8");
-  for (const re of [/Fila de revisão do dono do bot/, /Bot owner's review queue/, /Cola de revisión del dueño del bot/,
+  // (31 out 2026, P3a, staff) antes: a "Fila de revisão do dono do bot" e "tira você dos casos da fila". agora: os casos
+  // duvidosos com a staff + a amostra diária do dono, e o apagar tira você dos dois
+  for (const re of [/Casos duvidosos com a staff do servidor/, /Doubtful cases with the server's staff/, /Casos dudosos con el staff del servidor/,
+    /Amostra diária do dono do bot/, /Bot owner's daily sample/, /Muestra diaria del dueño del bot/,
     /O perfil de quem entra/, /The profile of whoever joins/, /El perfil de quien entra/,
     /Silêncio por causa do perfil/, /Timeout because of the profile/, /Silencio por el perfil/,
-    /tira você dos\s+casos da fila/, /removes you from the\s+cases/, /te saca de\s+los casos/]) assert.match(p, re);
+    /tira você dos\s+casos da\s+amostra do dono do bot e apaga os casos duvidosos seus/, /removes you from the\s+cases in the bot owner's sample and deletes your doubtful cases/, /te saca de\s+los casos de la muestra del dueño del bot y borra tus casos dudosos/]) assert.match(p.replace(/\n  /g, " "), re);
   assert.doesNotMatch(p, /mesmo com `&privacidade apagar`|even with `&privacidade apagar`|incluso con `&privacidade apagar`/);
 });
 
-await t("★ PRIVACIDADE.md (revisão P3a): a amostra inclui punidas e não punidas e o resto da certeza alta não é guardado; julgado sem servidor nem pseudônimo, DM editada; herdado em 30 dias; o perfil só vai ao banco pela fila; `&caso` só na DM — nos 3 idiomas", () => {
+// (31 out 2026, P3a, staff — R13) antes: a linha da "Fila de revisão do dono do bot" (amostra com punidas e não punidas; o resto
+// da certeza alta não guardado; julgado sem servidor nem pseudônimo; DM editada; herdado em 30 dias) e o sinal da staff
+// em "Para onde". agora: duas linhas — os casos duvidosos com a staff do servidor (14 dias esperando; julgado só com
+// impressão, categoria, nota, veredito e servidor) e a amostra diária do dono (as mesmas regras, sem herdado) —, e
+// nenhuma menção ao sinal da staff; cada frase antiga que continua verdadeira é conferida de novo
+await t("★ PRIVACIDADE.md (staff): casos duvidosos com a staff (14 dias; julgado sem pessoa, só neste servidor); amostra do dono (punidas, alertadas e não punidas; o resto não é guardado; julgado sem servidor nem pseudônimo; DM editada); sem sinal nem herdado; o perfil só vai ao banco por elas; `&caso` só na DM — nos 3 idiomas", () => {
   const p = fs.readFileSync("PRIVACIDADE.md", "utf8");
   const uma = p.replace(/\n  /g, " ");
   const linha = (re) => p.split("\n").find((l) => re.test(l)) ?? "";
-  const fila = { pt: linha(/^\| \*\*Fila de revisão do dono do bot\*\*/), en: linha(/^\| \*\*Bot owner's review queue\*\*/), es: linha(/^\| \*\*Cola de revisión del dueño del bot\*\*/) };
+  const staff = { pt: linha(/^\| \*\*Casos duvidosos com a staff do servidor\*\*/), en: linha(/^\| \*\*Doubtful cases with the server's staff\*\*/), es: linha(/^\| \*\*Casos dudosos con el staff del servidor\*\*/) };
+  const dono = { pt: linha(/^\| \*\*Amostra diária do dono do bot\*\*/), en: linha(/^\| \*\*Bot owner's daily sample\*\*/), es: linha(/^\| \*\*Muestra diaria del dueño del bot\*\*/) };
   for (const [l, res] of Object.entries({
-    pt: [/decisões punidas e não punidas/, /certeza alta \*\*não é guardado\*\*/, /sem pessoa nem servidor \(nem o código\/pseudônimo dele\)/, /DM do dono é editada para tirar o trecho e o link/, /herdado[^|]*\*\*30 dias\*\*/],
-    en: [/both punished and unpunished decisions/, /high certainty \*\*isn't kept\*\*/, /no person, no server \(not even its code\/pseudonym\)/, /owner's DM is edited to remove the excerpt and the link/, /inherited[^|]*\*\*30 days\*\*/],
-    es: [/decisiones castigadas y no castigadas/, /certeza alta \*\*no se guarda\*\*/, /sin persona ni servidor \(ni su código\/seudónimo\)/, /DM del dueño se edita para quitar el fragmento y el enlace/, /heredado[^|]*\*\*30 días\*\*/],
-  })) for (const re of res) assert.match(fila[l], re, `${l}: ${re}`);
-  for (const re of [/Nada disso vai para o banco, exceto o que entra na fila de revisão/, /None of it goes to the database, except what enters the review queue/, /Nada de esto va a la base de datos, salvo lo que entra en la cola de revisión/,
+    // (revisão staff) antes: "fica só a impressão/hash, a categoria, a nota, o veredito e o servidor". agora: também o tipo e
+    // as datas, e só os 500 mais recentes por servidor e categoria
+    pt: [/ninguém é punido e a staff \*\*daquele servidor\*\* recebe um alerta com ✅\/❌/, /sem nenhum dos dois, nada é enviado nem guardado/, /esperando a staff: no máximo \*\*14 dias\*\*/, /fica só a impressão\/hash, a categoria, o tipo, a nota, o veredito, o servidor e as datas — vale só naquele servidor; ficam só os 500 mais recentes de cada servidor e categoria/],
+    en: [/nobody is punished and the staff \*\*of that server\*\* gets an alert with ✅\/❌/, /without either, nothing is sent or kept/, /waiting for the staff: \*\*14 days\*\* at most/, /only the fingerprint\/hash, the category, the type, the score, the verdict, the server and the dates remain — it only counts on that server; only the 500 most recent per server and category are kept/],
+    es: [/nadie es castigado y el staff \*\*de ese servidor\*\* recibe una alerta con ✅\/❌/, /sin ninguno de los dos, no se envía ni se guarda nada/, /esperando al staff: \*\*14 días\*\* como máximo/, /solo quedan la huella\/hash, la categoría, el tipo, la nota, el veredicto, el servidor y las fechas — vale solo en ese servidor; se guardan solo los 500 más recientes de cada servidor y categoría/],
+  })) for (const re of res) assert.match(staff[l], re, `${l}: ${re}`);
+  for (const [l, res] of Object.entries({
+    pt: [/decisões punidas, alertadas à staff e não punidas/, /O resto \*\*não é guardado\*\*/, /sem pessoa nem servidor \(nem o código\/pseudônimo dele\)/, /DM do dono é editada para tirar o trecho e o link/],
+    en: [/punished, staff-alerted and unpunished decisions/, /The rest \*\*isn't kept\*\*/, /no person, no server \(not even its code\/pseudonym\)/, /owner's DM is edited to remove the excerpt and the link/],
+    es: [/decisiones castigadas, alertadas al staff y no castigadas/, /El resto \*\*no se guarda\*\*/, /sin persona ni servidor \(ni su código\/seudónimo\)/, /DM del dueño se edita para quitar el fragmento y el enlace/],
+  })) for (const re of res) assert.match(dono[l], re, `${l}: ${re}`);
+  for (const re of [/Nada disso vai para o banco, exceto os casos duvidosos com a staff e a amostra do dono/, /None of it goes to the database, except the doubtful cases with the staff and the owner's sample/, /Nada de esto va a la base de datos, salvo los casos dudosos con el staff y la muestra del dueño/,
     /O `&caso` \(o comando do dono\) só funciona na DM com a Judy/, /`&caso` \(the owner's command\) only works in the DM with Judy/, /El `&caso` \(el comando del dueño\) solo funciona por DM con Judy/,
     /o link e o código do servidor, e a mensagem do caso na DM do dono é editada/, /the link and the server's code are removed from it, and the case's message in the owner's DM is edited/, /el enlace y el código del servidor, y el mensaje del caso en el DM del dueño se edita/,
-    /resumo em números e o idioma do texto ao lado, \*\*nunca o desenho\*\* nem o texto/, /summary in numbers and the language of the text next to it, \*\*never the drawing\*\* or the text/, /resumen en números y el idioma del texto de al lado, \*\*nunca el dibujo\*\* ni el texto/]) assert.match(uma, re);
+    /resumo em números e o idioma do texto ao lado, \*\*nunca o desenho\*\* nem o texto/, /summary in numbers and the language of the text next to it, \*\*never the drawing\*\* or the text/, /resumen en números y el idioma del texto de al lado, \*\*nunca el dibujo\*\* ni el texto/,
+    /O veredito dele só mede o acerto e calibra o padrão global da moderação, sem modelo novo — nunca age sobre ninguém nem muda o que a staff de um servidor decidiu/,
+    /The owner's verdict only measures accuracy and calibrates moderation's global default, with no new model — it never acts on anyone or changes what a server's staff decided/,
+    /Su veredicto solo mide el acierto y calibra el valor global de la moderación, sin modelo nuevo — nunca actúa sobre nadie ni cambia lo que decidió el staff de un servidor/,
+    // (revisão staff) antes: "o que a staff decide vale só naquele servidor e nunca vai a outro servidor" — mas um ban pelo ✅
+    // entra na lista global, como qualquer ban. agora: a herança e o limiar ficam no servidor; o ban entra na lista global
+    /O que a staff decide ensina a Judy só naquele servidor \(casos parecidos e o limiar dali\) e nunca vai ao dono do bot; um ban aplicado pelo ✅ entra na lista global de bans, como qualquer ban/,
+    /What the staff decides only teaches Judy on that server \(similar cases and its threshold\) and never goes to the bot owner; a ban applied by the ✅ enters the global ban list, like any ban/,
+    /Lo que decide el staff le enseña a Judy solo en ese servidor \(casos parecidos y su umbral\) y nunca va al dueño del bot; un ban aplicado por el ✅ entra en la lista global de bans, como cualquier ban/,
+    /As punições manuais da staff não vão para o dono do bot/, /The staff's manual punishments don't go to the bot owner/, /Los castigos manuales del staff no van al dueño del bot/]) assert.match(uma, re);
   assert.doesNotMatch(uma, /Nada disso vai para o banco:|None of it goes to the database:|Nada de esto va a la base de datos:/);
+  assert.doesNotMatch(uma, /só como sinal|only as a signal|solo como señal|herdado de um julgado|inherited from a similar|heredado de uno juzgado|Fila de revisão do dono|review queue|Cola de revisión/);
+  assert.doesNotMatch(uma, /nunca vai a outro servidor nem ao dono|never goes to another server or to the bot owner|nunca va a otro servidor ni al dueño/);
   // os itens quebrados em ~88 colunas
-  for (const l of p.split("\n")) if (/^(- |  )/.test(l) && /fila de revisão|review queue|cola de revisión|perfil de quien|profile of whoever|perfil de quem/.test(l)) assert.ok([...l].length <= 90, l);
+  for (const l of p.split("\n")) if (/^(- |  )/.test(l) && /casos duvidosos|doubtful cases|casos dudosos|amostra diária|daily sample|muestra diaria|amostra do dono|owner's sample|muestra del dueño|perfil de quien|profile of whoever|perfil de quem/i.test(l)) assert.ok([...l].length <= 90, l);
 });
 await t("NOVIDADES: o topo é do pacote P3a, nos 3 idiomas, e o docs/pacote.json concorda", async () => {
   const { NOVIDADES, problemaDaTrava } = await import("./modulos/ferramentas/novidades.js");
@@ -25070,9 +25340,683 @@ await t("NOVIDADES: o topo é do pacote P3a, nos 3 idiomas, e o docs/pacote.json
   assert.equal(NOVIDADES[0].pacote, "P3a");
   assert.equal(problemaDaTrava(NOVIDADES, pac), null);
   for (const l of ["pt", "en", "es"]) assert.match(NOVIDADES[0][l], /40%/, l);
+  // (31 out 2026, P3a, staff) o primeiro item: o caso duvidoso vai à staff com ✅/❌ e ajusta a Judy NAQUELE servidor; nada
+  // da revisão do dono nem do sinal da staff
+  for (const [l, re] of [["pt", /staff do servidor recebe um alerta com ✅\/❌, e o que ela decide vale e ajusta a Judy \*\*neste servidor\*\*/],
+    ["en", /server's staff gets an alert with ✅\/❌, and what it decides counts and tunes Judy \*\*on this server\*\*/],
+    ["es", /staff del servidor recibe una alerta con ✅\/❌, y lo que decide vale y ajusta a Judy \*\*en este servidor\*\*/]]) {
+    assert.match(NOVIDADES[0][l].split("\n")[0], re, l);
+    assert.doesNotMatch(NOVIDADES[0][l], /dono do bot|bot owner|dueño del bot|sinal|signal|señal/, l);
+  }
 });
 
 console.log(`\nP3a INTEGRAÇÃO: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// p3a-staff — P3a (31 out 2026), R13: os casos duvidosos ficam com a STAFF de cada
+// servidor (casos-staff.js). Alerta com ✅/❌ no canal da staff, sem punir; só a
+// reação de quem modera ali vale (o dono do bot só se também for staff ali); ✅ aplica
+// a ação do módulo (assuntos e perfil), ❌ não faz nada (e devolve a voz quando cabe);
+// herança e limiar por servidor, sem vazar; o veredito do dono não age; retenção.
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p3a-staff"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const DB = "/tmp/p3a-staff.db";
+for (const f of [DB, DB + "-wal", DB + "-shm", "/tmp/p3a-staff.json"]) fs.rmSync(f, { force: true });
+const U = (n) => `01KP3S${String(n).padStart(20, "0")}`;
+const DONO = U(1), DONA = U(2), MOD = U(3), ANA = U(4), BIA = U(5), BOT = U(6), BAIXO = U(7), TIMEOUTER = U(8), SO_MSG = U(9), BANIDOR = U(10), CHEFE = U(11);
+const SID = U(100), SID2 = U(200), C1 = U(110), C2 = U(210), ALERTA = U(111), ALERTA2 = U(211), LOG = U(112), LOG2 = U(212);
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/p3a-staff.json", SUPER_ADMINS: DONO, LOG_SEGREDO: "segredo-de-teste", IA_SERVICO_URL: "http://ia.teste", CDN_URL: "https://cdn.stoatusercontent.com" });
+for (const v of ["IA_MODO", "IA", "CHAT_SERVIDORES", "LLM_URL", "REVISAO_POR_DIA", "REVISAO_HORA", "REVISAO_AMOSTRA", "RELATORIO_SERVIDOR"]) delete process.env[v];
+globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() });
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.stack ?? e).split("\n").slice(0, 6).join("\n     ")}`); falhou++; } };
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+
+const db = await import("./modulos/core/db.js");
+await quieto(() => db.abrirBanco(DB));
+const st = await import("./modulos/moderacao/casos-staff.js");
+const rev = await import("./modulos/moderacao/revisao.js");
+const as = await import("./modulos/moderacao/assuntos.js");
+const perfil = await import("./modulos/moderacao/perfil.js");
+const av = await import("./modulos/moderacao/avatar.js");
+const cz = await import("./modulos/moderacao/certeza.js");
+const reten = await import("./modulos/core/retencao.js");
+const cru = db.getDb();
+db.staffContarJulgados("x"); db.filaContar(["amostra"]); db.perfilSilencioLer("x", "y"); db.lerPunicao("x", "y");
+
+// ── o mundo de mentira: dois servidores, cada um com o seu canal, alerta e log ──
+const enviados = [], reacoes = [], editados = [], apagadas = [];
+let nMsg = 0;
+const canal = (id, serverId) => ({ id, serverId,
+  fetchMessage: async (mid) => ({ id: mid, channelId: id, author: { username: "x" }, delete: async () => { apagadas.push(mid); } }) });
+const CANAIS = new Map([[C1, canal(C1, SID)], [C2, canal(C2, SID2)], [ALERTA, canal(ALERTA, SID)], [ALERTA2, canal(ALERTA2, SID2)], [LOG, canal(LOG, SID)], [LOG2, canal(LOG2, SID2)]]);
+// cargos: R_ALTO (rank 0) acima de R_MOD (rank 1) acima de R_MEMBRO (rank 5)
+const CARGOS = { [MOD]: ["R_MOD"], [TIMEOUTER]: ["R_MOD"], [SO_MSG]: ["R_MOD"], [BANIDOR]: ["R_MOD"], [CHEFE]: ["R_MOD"], [BAIXO]: ["R_MEMBRO"], [BIA]: ["R_ALTO"], [ANA]: [], [DONO]: [] };
+// as permissões do Stoat de cada um (o critério normal), por servidor
+const PERMS = { [SID]: { [MOD]: ["ManageMessages", "TimeoutMembers", "KickMembers"], [TIMEOUTER]: ["TimeoutMembers"], [BAIXO]: ["ManageMessages", "TimeoutMembers"], [SO_MSG]: ["ManageMessages"], [BANIDOR]: ["ManageMessages", "BanMembers"], [CHEFE]: ["ManageMessages", "TimeoutMembers", "KickMembers", "BanMembers"] }, [SID2]: { [MOD]: ["ManageMessages", "TimeoutMembers"], [DONO]: ["ManageMessages", "TimeoutMembers"] } };
+const membro = (sid, u) => ({ id: { server: sid, user: u }, roles: CARGOS[u] ?? [], user: { id: u, bot: u === BOT }, timeout: null,
+  hasPermission: (_s, p) => (PERMS[sid]?.[u] ?? []).includes(p), edit: async (d) => { editados.push({ sid, u, d }); } });
+const banidos = [];
+const servidor = (sid) => ({ id: sid, ownerId: DONA, roles: new Map([["R_ALTO", { rank: 0 }], ["R_MOD", { rank: 1 }], ["R_MEMBRO", { rank: 5 }]]),
+  fetchMember: async (u) => membro(sid, String(u?.user ?? u)), kickUser: async () => {}, banUser: async (u) => { banidos.push([sid, String(u?.id ?? u)]); }, fetchBans: async () => [] });
+const SERVIDORES = new Map([[SID, servidor(SID)], [SID2, servidor(SID2)]]);
+const BIOS = {}, NOMES = {}, FALHA = new Set();
+const client = { user: { id: BOT }, channels: { get: (id) => CANAIS.get(id) ?? null, fetch: async (id) => CANAIS.get(id) ?? null }, servers: { get: (id) => SERVIDORES.get(id) ?? null },
+  users: { get: (id) => (id === BOT ? { id, bot: true } : { id, displayName: NOMES[id] ?? "x", fetchProfile: async () => { if (FALHA.has(id)) throw new Error("API fora"); return { content: BIOS[id] ?? null, banner: null }; } }) },
+  serverMembers: { getByKey: ({ server, user }) => membro(server, user) } };
+const config = (sid, { lang = "pt", semCanal = false, acaoAvatar = "silenciar", acoes = { politica: "punir" }, punicaoTema = null } = {}) => ({ language: lang,
+  automod: { antiAssuntos: { enabled: true, acoes, termos: {}, canaisLiberados: [], sensibilidade: "media", ia: true, punicao: punicaoTema }, antiAvatar: { enabled: true, acao: acaoAvatar },
+    antiScam: { alertChannelId: semCanal ? null : sid === SID ? ALERTA : ALERTA2 }, punicao: { modo: "avisar" } },
+  log: { canalId: semCanal ? null : sid === SID ? LOG : LOG2, eventos: {} }, acesso: { cargosStaff: [] } });
+const CONFIGS = new Map();
+// o mesmo critério do main.js (membroTemPermissao): dono do bot (sem `semDono`), dono do servidor, a permissão do Stoat
+const ctxDe = (sid, opcoes = {}) => {
+  const cfg = CONFIGS.get(sid) ?? config(sid, opcoes);
+  return { config: cfg, serverId: sid, COR: { aviso: 2, erro: 3, mod: 4, sucesso: 5, info: 6 }, PREFIXO: "&", client, estado: {},
+    sendEmbed: async (c, e) => { const id = U(90000 + ++nMsg); enviados.push({ canal: c?.id, id, ...e }); return { id, react: async (x) => { reacoes.push([id, decodeURIComponent(x)]); } }; },
+    membroTemPermissao: (m, server, perm, { semDono = false } = {}) => (!semDono && m.authorId === DONO) || server?.ownerId === m.authorId || !!m.member?.hasPermission?.(server, perm),
+    ehSuperAdmin: (u) => u === DONO };
+};
+const criarContexto = (sid) => ctxDe(sid);
+const reagir = (alertaMsgId, quem, emoji = "✅") => quieto(() => st.aoReagir(alertaMsgId, quem, emoji, { client, criarContexto }));
+
+// o juiz dos temas e a amostra do dono (ligada, sorteando tudo)
+let resposta = '{"categoria":"ataque","motivo":"ofensa a quem vota"}';
+as.configurar({ avaliar: async () => resposta });
+as._filaReal(); rev._ligarParaTestes(); rev._trocarSorteio(() => 0);
+const ATAQUE = "quem vota no Bolsonaro é burro, a eleição foi roubada";
+let nM = 0;
+async function falar(sid, texto, { autor = ANA, fio = true } = {}) {
+  const ch = sid === SID ? C1 : C2;
+  const m = { id: U(50000 + ++nM), content: texto, channelId: ch, authorId: autor, channel: CANAIS.get(ch), delete: async () => { apagadas.push(m.id); } };
+  if (fio) as.anotar(ch, { id: m.id, autor, texto });
+  const punicoes = [];
+  const r = await quieto(() => as.verificar({ ctx: ctxDe(sid), server: SERVIDORES.get(sid), canal: CANAIS.get(ch), message: m, userId: autor, aplicarPunicao: async (o) => { punicoes.push(o); } }));
+  return { r, m, punicoes };
+}
+const zerar = () => { for (const l of [enviados, reacoes, editados, apagadas]) l.length = 0; cru.exec("DELETE FROM staff_casos; DELETE FROM staff_limiares; DELETE FROM revisao_casos; DELETE FROM revisao_limiares; DELETE FROM perfil_silencio; DELETE FROM punicoes"); banidos.length = 0; st._zerar(); rev._zerar(); rev._ligarParaTestes(); rev._trocarSorteio(() => 0); CONFIGS.clear(); perfil._zerar(); av._zerar(); as._zerar(); };
+// o limiar global alto: a nota 8 do ataque fica em certeza MÉDIA
+const limiarAlto = () => db.filaSalvarLimiar("assunto:politica", { limiar: 0.95, padrao: 0.45, casos: 30, precisao: 1 });
+const ultimo = () => cru.prepare("SELECT * FROM staff_casos ORDER BY id DESC LIMIT 1").get();
+
+console.log("── o alerta do caso duvidoso ──");
+await t("★ assuntos: certeza média → alerta no canal da staff com ✅/❌ e o que cada um faz; ninguém punido; o caso guarda só o necessário", async () => {
+  zerar(); limiarAlto();
+  const { r, m, punicoes } = await falar(SID, ATAQUE);
+  assert.deepEqual([r.certeza, r.acao, r.alertou], ["media", "nada", true]);
+  assert.ok(!punicoes.length && !apagadas.includes(m.id), "ninguém punido, a mensagem fica");
+  assert.equal(enviados.length, 1); assert.equal(enviados[0].canal, ALERTA);
+  assert.match(enviados[0].title, /para conferir/);
+  assert.match(enviados[0].description, /✅ apagar e punir \(a escada do módulo\) · ❌ não fazer nada — vale só para este servidor/);
+  assert.match(enviados[0].description, new RegExp(`<@${ANA}> · <#${C1}> · \`${m.id}\``));
+  assert.doesNotMatch(enviados[0].description, /quem vota no Bolsonaro|^> /m, "não republica a mensagem");
+  assert.deepEqual(reacoes.map((x) => x[1]), ["✅", "❌"]);
+  const c = ultimo();
+  assert.deepEqual([c.serverId, c.tipo, c.categoria, c.parte, c.userId, c.canalId, c.msgId, c.alertaCanalId, c.alertaMsgId, c.veredito],
+    [SID, "assunto", "assunto:politica", "ataque", ANA, C1, m.id, ALERTA, enviados[0].id, null]);
+  assert.match(c.impressao, /^m1:/); assert.ok(!JSON.stringify(c).includes("Bolsonaro"), "nem o texto");
+});
+await t("a linha do ✅/❌ no idioma do servidor (en, es)", async () => {
+  for (const [lang, re] of [["en", /✅ delete and punish \(the module's ladder\) · ❌ do nothing — it only counts for this server/], ["es", /✅ borrar y castigar \(la escalera del módulo\) · ❌ no hacer nada — solo vale para este servidor/]]) {
+    zerar(); limiarAlto(); CONFIGS.set(SID, config(SID, { lang }));
+    await falar(SID, ATAQUE);
+    assert.match(enviados[0].description, re, lang);
+  }
+});
+await t("★ sem canal de alerta nem de log: nada é enviado nem guardado (assuntos e perfil)", async () => {
+  zerar(); limiarAlto(); CONFIGS.set(SID, config(SID, { semCanal: true }));
+  const { r } = await falar(SID, ATAQUE);
+  assert.equal(r.alertou, false);
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: ANA, valores: { nome: "卐卐卐 heil hitler" } }));
+  assert.equal(enviados.length, 0);
+  assert.equal(cru.prepare("SELECT COUNT(*) n FROM staff_casos").get().n, 0);
+});
+await t("★ perfil: certeza média → alerta com ✅/❌ e o que o ✅ faz (a ação do módulo); ninguém silenciado; nada do texto do perfil", async () => {
+  zerar();
+  const r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: ANA, valores: { nome: "卐卐卐 heil hitler" } }));
+  assert.ok(!r.apitou && r.suspeita && !editados.length);
+  assert.equal(enviados.length, 1);
+  assert.match(enviados[0].title, /Perfil para conferir/);
+  assert.match(enviados[0].description, /✅ silenciar até trocar · ❌ não fazer nada — vale só para este servidor/);
+  assert.doesNotMatch(enviados[0].description, /heil|卐|liberar/);
+  const c = ultimo();
+  assert.deepEqual([c.tipo, c.categoria, c.parte, c.userId, c.canalId, c.msgId], ["perfil-texto", "perfil-texto:odio", "nome", ANA, null, null]);
+  zerar(); CONFIGS.set(SID, config(SID, { acaoAvatar: "banir" }));
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: ANA, valores: { nome: "卐卐卐 heil hitler" } }));
+  assert.match(enviados[0].description, /✅ banir · ❌/);
+});
+
+console.log("── quem pode reagir ──");
+await t("★ reação de membro comum, de bot e do dono do bot que não é staff ali não vale; emoji que não é ✅/❌ e mensagem que não é alerta também não", async () => {
+  zerar(); limiarAlto();
+  await falar(SID, ATAQUE);
+  const msg = ultimo().alertaMsgId;
+  assert.equal(await reagir("OUTRA", MOD), false, "não é alerta");
+  for (const quem of [ANA, BOT, DONO]) assert.equal(await reagir(msg, quem), true, quem);
+  assert.equal(await reagir(msg, MOD, "🔥"), true);
+  assert.equal(ultimo().veredito, null, "ninguém julgou");
+  assert.ok(!apagadas.length && !enviados.some((e) => /julgado pela staff/.test(e.title ?? "")));
+});
+await t("★ o dono do bot vale se for staff daquele servidor pelo critério normal (em SID2 ele tem a permissão)", async () => {
+  zerar(); db.filaSalvarLimiar("assunto:politica", { limiar: 0.95, padrao: 0.45, casos: 30, precisao: 1 });
+  CARGOS[DONO] = ["R_MOD"];
+  try {
+    await falar(SID2, ATAQUE);
+    await reagir(ultimo().alertaMsgId, DONO, "❌");
+    assert.equal(cru.prepare("SELECT veredito FROM staff_casos ORDER BY id DESC").get().veredito, "errou");
+  } finally { CARGOS[DONO] = []; }
+});
+await t("★ hierarquia: quem está no mesmo nível ou abaixo da pessoa não aplica o ✅ (o ❌ não pune: vale)", async () => {
+  zerar(); limiarAlto();
+  await falar(SID, ATAQUE, { autor: BIA });   // BIA tem R_ALTO, acima de MOD
+  const msg = ultimo().alertaMsgId;
+  await reagir(msg, MOD, "✅");
+  assert.equal(ultimo().veredito, null, "MOD abaixo de BIA: não conta");
+  await reagir(msg, MOD, "❌");
+  assert.equal(cru.prepare("SELECT veredito FROM staff_casos ORDER BY id DESC").get().veredito, "errou");
+});
+await t("★ a permissão é a da ação do módulo: com `banir` no perfil, quem só tem TimeoutMembers não decide", async () => {
+  zerar(); CONFIGS.set(SID, config(SID, { acaoAvatar: "banir" }));
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: ANA, valores: { nome: "卐卐卐 heil hitler" } }));
+  await reagir(ultimo().alertaMsgId, TIMEOUTER, "✅");
+  assert.equal(ultimo().veredito, null);
+  assert.equal(perfil.permissaoDaStaff(null, ctxDe(SID)), "BanMembers");
+  CONFIGS.set(SID, config(SID, { acaoAvatar: "silenciar" }));
+  assert.equal(perfil.permissaoDaStaff(null, ctxDe(SID)), "TimeoutMembers");
+  // (31 out 2026, P3a, staff) antes: os temas pediam sempre ManageMessages. agora: o ❌ pede ManageMessages; o ✅ que pune,
+  // a permissão do degrau que a escada vai aplicar (ver o teste do ban, abaixo)
+  const casoTema = { categoria: "assunto:politica", parte: "ataque", userId: ANA };
+  assert.equal(await as.permissaoDaStaff(casoTema, ctxDe(SID), "errou"), "ManageMessages");
+  const engine = await import("./modulos/moderacao/automod-engine.js");
+  assert.equal(await as.permissaoDaStaff(casoTema, ctxDe(SID)), engine.permissaoDaPunicao(ctxDe(SID), { userId: ANA, pol: { modo: "acumular" } }), "o ✅: a do degrau");
+});
+
+console.log("── ✅ e ❌ da staff ──");
+await t("★ ✅ da staff (assuntos, ataque): apaga e aplica a punição do módulo; o log diz quem decidiu; o caso perde pessoa, canal, mensagem e alerta", async () => {
+  zerar(); limiarAlto();
+  const { m } = await falar(SID, ATAQUE);
+  const c0 = ultimo();
+  await reagir(c0.alertaMsgId, MOD, "%E2%9C%85");
+  const c = db.staffCaso(c0.id);
+  assert.equal(c.veredito, "certo");
+  for (const k of ["userId", "canalId", "msgId", "alertaCanalId", "alertaMsgId", "parte"]) assert.equal(c[k], null, k);
+  assert.ok(c.impressao && c.categoria === "assunto:politica" && c.nota === 0.8 && c.serverId === SID);
+  assert.ok(apagadas.includes(m.id), "a mensagem foi apagada");
+  const log = enviados.find((e) => e.canal === LOG && /julgado pela staff ✅/.test(e.title));
+  assert.ok(log && log.description.includes(`<@${MOD}> decidiu ✅`) && log.description.includes(`<@${ANA}>`) && /apagada e punida/.test(log.description));
+  assert.ok(enviados.some((e) => /Aviso do AutoMod/.test(e.title ?? "")), "a punição do módulo (aqui, `avisar`)");
+});
+await t("★ ✅ da staff (discussão num tema em `apagar`): só apaga a mensagem", async () => {
+  zerar(); limiarAlto(); CONFIGS.set(SID, config(SID, { acoes: { politica: "apagar" } })); resposta = '{"categoria":"discussao","motivo":"debate"}';
+  try {
+    const { m } = await falar(SID, "o lula é o pior presidente da história, vocês não sabem de nada, olha os fatos");
+    const c0 = ultimo();
+    assert.equal(c0.parte, "discussao");
+    assert.match(enviados[0].description, /✅ apagar a mensagem · ❌/);
+    await reagir(c0.alertaMsgId, MOD);
+    assert.ok(apagadas.includes(m.id));
+    assert.ok(!enviados.some((e) => /Aviso do AutoMod/.test(e.title ?? "")), "sem punição");
+  } finally { resposta = '{"categoria":"ataque","motivo":"ofensa a quem vota"}'; }
+});
+await t("★ ✅ da staff (perfil): silencia até trocar aquela parte e registra quem decidiu; se a pessoa já trocou, nada", async () => {
+  zerar();
+  NOMES[ANA] = "卐卐卐 heil hitler";
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: ANA, valores: { nome: "卐卐卐 heil hitler" } }));
+  const c0 = ultimo();
+  await reagir(c0.alertaMsgId, MOD);
+  assert.equal(db.staffCaso(c0.id).veredito, "certo");
+  assert.ok(editados.some((x) => x.sid === SID && x.u === ANA && x.d.timeout), "timeout aplicado");
+  assert.deepEqual(db.perfilSilencioLer(SID, ANA)?.campos, ["nome"]);
+  assert.ok(enviados.some((e) => e.canal === LOG && /julgado pela staff ✅/.test(e.title) && e.description.includes(`<@${MOD}>`) && /silenciado/.test(e.description)));
+  // quem trocou o nome antes do ✅ não é punido
+  zerar();
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: BAIXO, valores: { nome: "卐卐卐 heil hitler" } }));
+  NOMES[BAIXO] = "Fulano";
+  await reagir(ultimo().alertaMsgId, MOD);
+  assert.ok(!editados.some((x) => x.d.timeout), "já trocou: nada");
+  assert.ok(enviados.some((e) => e.canal === LOG && /a pessoa já trocou/.test(e.description ?? "")));
+  NOMES[ANA] = undefined; NOMES[BAIXO] = undefined;
+});
+await t("★ ❌ da staff (assuntos): nada acontece com a pessoa; o log diz quem decidiu", async () => {
+  zerar(); limiarAlto();
+  const { m } = await falar(SID, ATAQUE);
+  const c0 = ultimo();
+  await reagir(c0.alertaMsgId, MOD, "❌");
+  assert.equal(db.staffCaso(c0.id).veredito, "errou");
+  assert.ok(!apagadas.includes(m.id) && !enviados.some((e) => /Aviso do AutoMod/.test(e.title ?? "")));
+  assert.ok(enviados.some((e) => e.canal === LOG && /julgado pela staff ❌/.test(e.title) && e.description.includes(`<@${MOD}> decidiu ❌`)));
+});
+await t("★ ❌ da staff (perfil) devolve a voz quando cabe: silenciado pela parte, mesmo conteúdo; se a parte já mudou, não", async () => {
+  for (const [mudou, P] of [[false, ANA], [true, BAIXO]]) {
+    zerar();
+    BIOS[P] = "vendo pack +18 de novinha chama no pv";
+    // silenciado pela bio (certeza alta) e depois a bio nova, média → alerta
+    let r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: P, valores: { bio: BIOS[P] } }));
+    assert.ok(r.apitou);
+    BIOS[P] = "bando de macaco, todos vocês";
+    r = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: P, valores: { bio: BIOS[P] }, origem: "troca" }));
+    assert.ok(!r.apitou && r.suspeita && !r.devolveu);
+    assert.deepEqual(db.perfilSilencioLer(SID, P)?.campos, ["bio"]);
+    if (mudou) { BIOS[P] = "outra bio, diferente"; perfil._zerar(); }
+    editados.length = 0;
+    await reagir(ultimo().alertaMsgId, MOD, "❌");
+    if (!mudou) {
+      assert.ok(editados.some((x) => x.u === P && x.d.remove?.includes("Timeout")), "a voz volta");
+      assert.equal(db.perfilSilencioLer(SID, P), null);
+      assert.ok(enviados.some((e) => e.canal === LOG && /voz devolvida/.test(e.description ?? "")));
+    } else {
+      assert.ok(!editados.some((x) => x.d.remove), "a parte mudou desde o alerta: nada");
+      assert.deepEqual(db.perfilSilencioLer(SID, P)?.campos, ["bio"]);
+    }
+  }
+});
+await t("★ duas reações juntas aplicam uma vez só; reação depois de julgado não muda nada", async () => {
+  zerar(); limiarAlto();
+  await falar(SID, ATAQUE);
+  const c0 = ultimo();
+  // um `quieto` só em volta das duas (dois `quieto` concorrentes deixariam o console mudo)
+  await quieto(() => Promise.all([st.aoReagir(c0.alertaMsgId, MOD, "✅", { client, criarContexto }), st.aoReagir(c0.alertaMsgId, MOD, "✅", { client, criarContexto })]));
+  assert.equal(enviados.filter((e) => /julgado pela staff/.test(e.title ?? "")).length, 1);
+  assert.equal(enviados.filter((e) => e.canal === C1).length, 1, "uma punição só (o degrau da escada no canal)");
+  assert.equal(await reagir(c0.alertaMsgId, MOD, "❌"), false, "o alerta julgado já não é caso");
+  assert.equal(db.staffCaso(c0.id).veredito, "certo");
+});
+
+console.log("── herança e limiar, por servidor ──");
+await t("★ herança: o ❌ da staff de SID → o mesmo texto em SID nem alerta; em SID2 alerta (nada vaza)", async () => {
+  zerar(); limiarAlto();
+  await falar(SID, ATAQUE);
+  await reagir(ultimo().alertaMsgId, MOD, "❌");
+  enviados.length = 0;
+  let { r } = await falar(SID, ATAQUE);
+  assert.deepEqual([r.herdado, r.acao, r.alertou], ["nao", "nada", false]);
+  assert.equal(enviados.length, 0);
+  ({ r } = await falar(SID2, ATAQUE));
+  assert.deepEqual([r.herdado, r.alertou], [null, true]);
+  assert.equal(enviados[0].canal, ALERTA2);
+});
+// (revisão staff) o ✅ só ensina com a permissão mais forte do módulo (a escada termina em ban): aqui quem decide tem
+// BanMembers (CHEFE); sem ela, ver o teste "o ✅ sem a permissão mais forte vale só para o caso"
+await t("★ herança: o ✅ da staff de SID → o mesmo texto em SID age direto (certeza alta); em SID2 só alerta", async () => {
+  zerar(); limiarAlto();
+  await falar(SID, ATAQUE);
+  await reagir(ultimo().alertaMsgId, CHEFE, "✅");
+  let { r, punicoes } = await falar(SID, ATAQUE);
+  assert.deepEqual([r.herdado, r.certeza, r.acao, r.alertou], ["seria", "alta", "punir", false]);
+  assert.equal(punicoes.length, 1);
+  ({ r, punicoes } = await falar(SID2, ATAQUE));
+  assert.deepEqual([r.herdado, r.certeza, r.acao, r.alertou], [null, "media", "nada", true]);
+  assert.equal(punicoes.length, 0);
+  // o perfil também: o ✅ numa parte vale para o mesmo conteúdo no servidor
+  zerar();
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: ANA, valores: { nome: "卐卐卐 heil hitler" } }));
+  await reagir(ultimo().alertaMsgId, MOD, "✅");
+  editados.length = 0;
+  const r1 = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: BAIXO, valores: { nome: "卐卐卐 heil hitler" } }));
+  const r2 = await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID2), server: SERVIDORES.get(SID2), userId: BAIXO, valores: { nome: "卐卐卐 heil hitler" } }));
+  assert.ok(r1.apitou && !r2.apitou && r2.suspeita);
+  assert.deepEqual(editados.filter((x) => x.d.timeout).map((x) => x.sid), [SID]);
+});
+// (31 out 2026, P3a, staff — decisão do coordenador) antes: a rodada diária DO DONO recalculava o limiar de cada servidor.
+// agora: o ciclo de 6 h (casos-staff.recalcularLimiares, chamado pelo main.js), com a fila do dono desligada ou não
+await t("★ limiar: com a fila do dono DESLIGADA, o limiar de SID é recalculado com os vereditos da staff (partindo do global, 0,05 por dia); SID2 fica no global; o detector usa", async () => {
+  zerar();
+  db.filaSalvarLimiar("assunto:religiao", { limiar: 0.8, padrao: 0.45, casos: 30, precisao: 1 });
+  rev.desligar(); rev._zerar();
+  for (let i = 0; i < 30; i++) db.staffJulgar(db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:religiao", nota: 0.5 + i / 100, userId: ANA, alertaMsgId: `L${i}`, criadoEm: Date.now() }), 0.5 + i / 100 >= 0.55 ? "certo" : "errou");
+  st._zerar();
+  assert.equal(rev.timerLigado(), false, "a fila do dono está desligada");
+  assert.equal(st.limiar("assunto:religiao", 0.45, { serverId: SID }), 0.8, "antes: o global");
+  const mud = st.recalcularLimiares(Date.now());
+  assert.deepEqual(mud.map((m) => [m.serverId, m.categoria, m.para]), [[SID, "assunto:religiao", 0.75]]);
+  assert.equal(st.limiar("assunto:religiao", 0.45, { serverId: SID }), 0.75, "desceu 0,05 a partir do global");
+  assert.deepEqual(st.recalcularLimiares(Date.now()), [], "uma vez por dia: a segunda passada do dia não anda");
+  assert.equal(st.limiar("assunto:religiao", 0.45, { serverId: SID }), 0.75);
+  assert.equal(st.recalcularLimiares(Date.now() + 86400e3)[0]?.para, 0.7, "no dia seguinte anda mais 0,05");
+  assert.equal(st.limiar("assunto:religiao", 0.45, { serverId: SID2 }), 0.8, "SID2: o global");
+  assert.equal(rev.limiar("assunto:religiao", 0.45), 0.8, "o global não mexeu");
+  assert.equal(await cz.limiarAlta("assunto:religiao", 0.45, SID), 0.7);
+  assert.equal(await cz.limiarAlta("assunto:religiao", 0.45, SID2), 0.8);
+  rev._ligarParaTestes(); rev._trocarSorteio(() => 0);
+});
+// (31 out 2026, P3a, staff — decisão do coordenador) o ✅ que pune pede a permissão do degrau que a escada vai aplicar
+await t("★ ✅ em tema: quem só tem ManageMessages não consegue que vire ban (modo `banir` e escada no degrau do ban); com BanMembers, vira", async () => {
+  // modo `banir`
+  zerar(); limiarAlto(); CONFIGS.set(SID, config(SID, { punicaoTema: { modo: "banir" } }));
+  await falar(SID, ATAQUE);
+  let c0 = ultimo();
+  assert.equal(await as.permissaoDaStaff(c0, ctxDe(SID)), "BanMembers");
+  for (const quem of [SO_MSG, MOD]) await reagir(c0.alertaMsgId, quem, "✅");
+  assert.equal(db.staffCaso(c0.id).veredito, null, "sem BanMembers: o ✅ não conta");
+  assert.equal(banidos.length, 0);
+  await reagir(c0.alertaMsgId, BANIDOR, "✅");
+  assert.equal(db.staffCaso(c0.id).veredito, "certo");
+  assert.deepEqual(banidos, [[SID, ANA]]);
+  // a escada (`acumular`): o próximo degrau de ANA é o ban
+  zerar(); limiarAlto();
+  const engine = await import("./modulos/moderacao/automod-engine.js");
+  const degraus = engine.escadaDePunicao({ ...ctxDe(SID).config.automod.punicao, modo: "acumular" });
+  await falar(SID, ATAQUE);
+  c0 = ultimo();
+  assert.equal(await as.permissaoDaStaff(c0, ctxDe(SID)), degraus[0].tipo === "aviso" ? "ManageMessages" : degraus[0].tipo === "mute" ? "TimeoutMembers" : "BanMembers", "sem avisos: o 1º degrau");
+  for (let i = 0; i < degraus.length - 1; i++) db.somarAviso(SID, ANA, "antes");
+  assert.equal(await as.permissaoDaStaff(c0, ctxDe(SID)), "BanMembers", "o próximo degrau é o ban");
+  await reagir(c0.alertaMsgId, SO_MSG, "✅");
+  assert.equal(db.staffCaso(c0.id).veredito, null);
+  assert.equal(banidos.length, 0, "ninguém banido");
+  assert.equal(await as.permissaoDaStaff(c0, ctxDe(SID), "errou"), "ManageMessages", "o ❌ não pune: ManageMessages basta");
+  await reagir(c0.alertaMsgId, SO_MSG, "❌");
+  assert.equal(db.staffCaso(c0.id).veredito, "errou");
+  assert.equal(banidos.length, 0);
+});
+
+console.log("── revisão independente da parte staff ──");
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const ESCADA = "aviso,5m,1h,ban";
+const comEscada = (sid = SID) => { const cfg = config(sid); cfg.automod.punicao = { modo: "avisar", escada: ESCADA }; CONFIGS.set(sid, cfg); return cfg; };
+const casoTema = (alerta, { userId = ANA, sid = SID } = {}) => db.staffInserir({ serverId: sid, tipo: "assunto", categoria: "assunto:politica", nota: 0.8, parte: "ataque", userId,
+  canalId: sid === SID ? C1 : C2, msgId: U(51000 + Math.floor(Math.random() * 9000)), alertaCanalId: ALERTA, alertaMsgId: alerta, criadoEm: Date.now(), impressao: rev.impressaoDeTexto(ATAQUE) });
+await t("★ regressão (corrida no degrau): dois ✅ juntos na mesma pessoa, escada aviso,5m,1h,ban, 2 avisos, moderador com Timeout+ManageMessages → ninguém banido", async () => {
+  zerar(); comEscada();
+  db.somarAviso(SID, ANA, "a"); db.somarAviso(SID, ANA, "b");
+  assert.equal(engine.permissaoDaPunicao(ctxDe(SID), { userId: ANA, pol: { modo: "acumular" } }), "TimeoutMembers", "o próximo é o 1h");
+  const a = casoTema("RACE1"), b2 = casoTema("RACE2");
+  await quieto(() => Promise.all([st.aoReagir("RACE1", MOD, "✅", { client, criarContexto }), st.aoReagir("RACE2", MOD, "✅", { client, criarContexto })]));
+  assert.deepEqual(banidos, [], "ninguém banido");
+  assert.equal(db.contarAvisos(SID, ANA), 3, "um degrau só (o silêncio de 1h)");
+  assert.ok(editados.some((x) => x.u === ANA && x.d.timeout));
+  const vs = [db.staffCaso(a).veredito, db.staffCaso(b2).veredito].sort();
+  assert.deepEqual(vs.map(String).sort(), ["certo", "null"], "o 2º ✅ não contou (o próximo degrau é o ban)");
+});
+await t("★ a 2ª camada: o aplicarPunicao re-checa o degrau REAL depois do somarAviso; sem a permissão desfaz o aviso, não pune e diz no log", async () => {
+  zerar(); comEscada();
+  for (let i = 0; i < 3; i++) db.somarAviso(SID, ANA, "x");
+  const antes = db.lerPunicao(SID, ANA);
+  const ctx = ctxDe(SID);
+  const r = await quieto(() => engine.aplicarPunicao(ctx, { server: SERVIDORES.get(SID), channel: CANAIS.get(C1), message: null, userId: ANA, pol: { modo: "acumular" }, motivo: "teste", podeAplicar: (p) => p !== "BanMembers" }));
+  assert.deepEqual(r, { recusado: true, permissao: "BanMembers" });
+  assert.deepEqual(banidos, []);
+  assert.deepEqual(db.lerPunicao(SID, ANA), antes, "o aviso somado foi desfeito (o registro igual ao de antes)");
+  assert.ok(enviados.some((e) => e.canal === LOG && /Punição não aplicada/.test(e.title) && /BanMembers/.test(e.description)));
+  // o caminho do ✅: a permissão conferida antes (TimeoutMembers), mas o automod puniu na janela — o degrau real é o ban
+  zerar(); comEscada();
+  for (let i = 0; i < 2; i++) db.somarAviso(SID, ANA, "x");
+  const id = casoTema("JAN1"), caso = db.staffCaso(id);
+  const quem = { authorId: MOD, serverId: SID, member: membro(SID, MOD) };
+  const tem = (p) => ctxDe(SID).membroTemPermissao(quem, SERVIDORES.get(SID), p, { semDono: true });
+  assert.equal(tem(await as.permissaoDaStaff(caso, ctxDe(SID))), true);
+  db.somarAviso(SID, ANA, "o automod, na janela");
+  const feito = await quieto(() => as.decisaoDaStaff({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), caso, veredito: "certo", podeAplicar: tem }));
+  assert.match(feito, /quem decidiu não tem \*\*BanMembers\*\*/);
+  assert.deepEqual(banidos, []); assert.equal(db.contarAvisos(SID, ANA), 3);
+});
+await t("★ o ✅ sem a permissão mais forte do módulo vale só para o caso (não vira herança nem limiar); com ela, ensina; o ❌ sempre ensina", async () => {
+  zerar(); limiarAlto(); comEscada();
+  assert.equal(await as.permissaoParaEnsinar({ categoria: "assunto:politica", parte: "ataque" }, ctxDe(SID)), "BanMembers", "a escada termina em ban");
+  await falar(SID, ATAQUE, { fio: false });
+  const c0 = ultimo();
+  await reagir(c0.alertaMsgId, MOD, "✅");
+  const c = db.staffCaso(c0.id);
+  assert.deepEqual([c.veredito, c.ensina], ["certo", 0]);
+  assert.ok(enviados.some((e) => e.canal === LOG && /Vale só para este caso/.test(e.description ?? "")));
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "assunto:politica", texto: ATAQUE }), null, "não ensinou");
+  assert.equal(db.staffJulgadosComNota().length, 0, "nem conta no limiar");
+  as._zerar();
+  let { r } = await falar(SID2 === SID ? SID : SID, ATAQUE, { autor: BAIXO, fio: false });
+  assert.deepEqual([r.herdado, r.alertou], [null, true], "o parecido vira alerta de novo");
+  await reagir(ultimo().alertaMsgId, CHEFE, "✅");
+  assert.equal(db.staffCaso(ultimo().id).ensina, 1);
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "assunto:politica", texto: ATAQUE }), "certo", "com BanMembers ensina");
+  zerar(); limiarAlto(); comEscada();
+  await falar(SID, ATAQUE, { fio: false });
+  await reagir(ultimo().alertaMsgId, SO_MSG, "❌");
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "assunto:politica", texto: ATAQUE }), "errou", "o ❌ (ManageMessages) ensina");
+});
+await t("★ hierarquia no ✅ sem o atalho do dono do bot: staff ali, abaixo da pessoa, não aplica — o ❌ vale", async () => {
+  zerar(); db.filaSalvarLimiar("assunto:politica", { limiar: 0.95, padrao: 0.45, casos: 30, precisao: 1 });
+  CARGOS[DONO] = ["R_MEMBRO"];   // staff em SID2 pelo critério normal, mas abaixo de BIA (R_ALTO)
+  try {
+    await falar(SID2, ATAQUE, { autor: BIA, fio: false });
+    const c0 = ultimo();
+    await reagir(c0.alertaMsgId, DONO, "✅");
+    assert.equal(db.staffCaso(c0.id).veredito, null, "o dono do bot não passa por cima da hierarquia pela reação");
+    await reagir(c0.alertaMsgId, DONO, "❌");
+    assert.equal(db.staffCaso(c0.id).veredito, "errou");
+  } finally { CARGOS[DONO] = []; }
+});
+await t("★ o ban pelo ✅ entra na lista global como o de um `&ban` manual (temas e perfil)", async () => {
+  zerar(); limiarAlto(); CONFIGS.set(SID, config(SID, { punicaoTema: { modo: "banir" } }));
+  await falar(SID, ATAQUE, { fio: false });
+  await reagir(ultimo().alertaMsgId, BANIDOR, "✅");
+  assert.deepEqual(banidos, [[SID, ANA]]);
+  assert.ok(db.bansGlobaisPorOrigem(SID, ["manual"]).some((x) => x.userId === ANA), "origem manual");
+  zerar(); CONFIGS.set(SID, config(SID, { acaoAvatar: "banir" })); NOMES[BAIXO] = "卐卐卐 heil hitler";
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: BAIXO, valores: { nome: "卐卐卐 heil hitler" } }));
+  await reagir(ultimo().alertaMsgId, BANIDOR, "✅");
+  assert.ok(db.bansGlobaisPorOrigem(SID, ["manual"]).some((x) => x.userId === BAIXO));
+  NOMES[BAIXO] = undefined;
+});
+await t("★ teto dos alertas de tema: um por (servidor, pessoa, tema) a cada 6 h; no máximo 20 por servidor por hora; o excedente nem sai nem fica guardado", async () => {
+  zerar(); db.filaSalvarLimiar("assunto:politica", { limiar: 0.98, padrao: 0.45, casos: 30, precisao: 1 }); db.filaSalvarLimiar("assunto:religiao", { limiar: 0.98, padrao: 0.45, casos: 30, precisao: 1 });
+  CONFIGS.set(SID, config(SID, { acoes: { politica: "punir", religiao: "punir" } }));
+  let { r } = await falar(SID, ATAQUE, { fio: false });
+  assert.equal(r.alertou, true);
+  ({ r } = await falar(SID, ATAQUE, { fio: false }));
+  assert.equal(r.alertou, false, "a mesma pessoa e o mesmo tema em 6 h: não");
+  resposta = '{"categoria":"ataque","motivo":"x"}';
+  ({ r } = await falar(SID, "o pastor da igreja é burro, religião não presta", { fio: false }));
+  assert.equal(r.alertou, true, "outro tema: sim");
+  const n0 = cru.prepare("SELECT COUNT(*) n FROM staff_casos").get().n;
+  for (let i = 0; i < 18; i++) assert.equal((await falar(SID, ATAQUE, { autor: U(20000 + i), fio: false })).r.alertou, true, `pessoa ${i}`);
+  assert.equal((await falar(SID, ATAQUE, { autor: U(20100), fio: false })).r.alertou, false, "o 21º do servidor na hora: não");
+  assert.equal(cru.prepare("SELECT COUNT(*) n FROM staff_casos").get().n, n0 + 18, "o excedente não é guardado");
+  assert.equal((await falar(SID2, ATAQUE, { autor: U(20100), fio: false })).r.alertou, true, "outro servidor tem o seu teto");
+});
+await t("★ o ✅ não age se o módulo foi desligado depois do alerta (temas e perfil): nada, e o log diz", async () => {
+  zerar(); limiarAlto();
+  const { m } = await falar(SID, ATAQUE, { fio: false });
+  const cfg = config(SID); cfg.automod.antiAssuntos.enabled = false; CONFIGS.set(SID, cfg);
+  await reagir(ultimo().alertaMsgId, CHEFE, "✅");
+  assert.ok(!apagadas.includes(m.id) && !enviados.some((e) => e.canal === C1));
+  assert.ok(enviados.some((e) => e.canal === LOG && /o módulo foi desligado/.test(e.description ?? "")));
+  zerar(); NOMES[BAIXO] = "卐卐卐 heil hitler";
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: BAIXO, valores: { nome: "卐卐卐 heil hitler" } }));
+  const c2 = config(SID); c2.automod.antiAvatar.enabled = false; CONFIGS.set(SID, c2);
+  await reagir(ultimo().alertaMsgId, MOD, "✅");
+  assert.ok(!editados.some((x) => x.d.timeout));
+  assert.ok(enviados.some((e) => e.canal === LOG && /o módulo foi desligado/.test(e.description ?? "")));
+  NOMES[BAIXO] = undefined;
+});
+await t("★ o ✅ no perfil sem conseguir ler o perfil atual (a API falhou): não silencia às cegas — o caso volta a esperar e depois vale", async () => {
+  zerar(); BIOS[BAIXO] = "bando de macaco, todos vocês";
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: BAIXO, valores: { bio: BIOS[BAIXO] } }));
+  const c0 = ultimo();
+  FALHA.add(BAIXO); perfil._zerar();
+  try {
+    await reagir(c0.alertaMsgId, MOD, "✅");
+    assert.ok(!editados.some((x) => x.d.timeout), "ninguém silenciado");
+    const c = db.staffCaso(c0.id);
+    assert.deepEqual([c.veredito, c.userId, c.alertaMsgId, c.parte], [null, BAIXO, c0.alertaMsgId, "bio"], "voltou a esperar, como era");
+    assert.ok(enviados.some((e) => e.canal === LOG && /não deu para ler o perfil agora/.test(e.description ?? "") && /continua esperando/.test(e.description ?? "")));
+  } finally { FALHA.delete(BAIXO); }
+  await reagir(c0.alertaMsgId, MOD, "✅");
+  assert.equal(db.staffCaso(c0.id).veredito, "certo");
+  assert.ok(editados.some((x) => x.u === BAIXO && x.d.timeout));
+});
+await t("★ o 1º limiar de um servidor parte do padrão do DETECTOR (nunca salta ao alvo); categoria sem padrão conhecido não é calculada", async () => {
+  zerar(); rev._zerar();
+  assert.equal(st.padraoDoDetector("assunto:esportes"), as.LIMIAR_ALTA_PADRAO);
+  assert.equal(st.padraoDoDetector("perfil-texto:golpe"), cz.PADRAO.alta);
+  assert.equal(st.padraoDoDetector("sexual"), cz.PADRAO.alta);
+  assert.equal(st.padraoDoDetector("assunto:politica:zoeira"), null); assert.equal(st.padraoDoDetector("xyz"), null);
+  // tudo ❌: o alvo seria 0,98 — a partir de 0,45 (temas) e 0,9 (perfil), anda só 0,05
+  for (const [cat, n] of [["assunto:esportes", 25], ["perfil-texto:golpe", 25], ["xyz", 25]]) for (let i = 0; i < n; i++)
+    db.staffJulgar(db.staffInserir({ serverId: SID, tipo: cat.startsWith("assunto") ? "assunto" : "perfil-texto", categoria: cat, nota: 0.5 + i / 60, userId: ANA, alertaMsgId: `${cat}${i}`, criadoEm: Date.now() }), "errou");
+  st.recalcularLimiares(Date.now());
+  assert.equal(db.staffLimiar(SID, "assunto:esportes")?.limiar, 0.5);
+  assert.equal(db.staffLimiar(SID, "perfil-texto:golpe")?.limiar, 0.95);
+  assert.equal(db.staffLimiar(SID, "xyz"), null);
+});
+await t("★ o limiar lê os 500 mais recentes de CADA servidor/categoria; a limpeza de 6 h deixa só esses dos julgados", async () => {
+  zerar();
+  const ins = (sid, i) => db.staffJulgar(db.staffInserir({ serverId: sid, tipo: "assunto", categoria: "assunto:drogas", nota: 0.6, userId: ANA, alertaMsgId: `${sid}-${i}`, criadoEm: i }), "certo", i + 1);
+  for (let i = 0; i < 505; i++) ins(SID, i);
+  for (let i = 0; i < 3; i++) ins(SID2, i);
+  const l = db.staffJulgadosComNota();
+  assert.equal(l.filter((x) => x.serverId === SID).length, 500);
+  assert.equal(l.filter((x) => x.serverId === SID2).length, 3, "o servidor pequeno não some atrás do grande");
+  const r = reten.limparVencidos();
+  assert.equal(r.casosStaffAntigos, 5);
+  assert.equal(cru.prepare("SELECT MIN(julgadoEm) m FROM staff_casos WHERE serverId = ?").get(SID).m, 6, "saíram os 5 mais antigos");
+  assert.equal(cru.prepare("SELECT COUNT(*) n FROM staff_casos WHERE serverId = ?").get(SID2).n, 3);
+});
+await t("o alerta de um item da lista CONHECIDOS diz \"já conhecido (lista do bot)\" (pt/en/es), nunca \"confirmado pelo dono do bot\"", () => {
+  const a = [{ campo: "avatar", motivos: ["já conhecido (lista do bot)"] }];
+  assert.deepEqual(["pt", "en", "es"].map((l) => av.sinaisDe(a, l)), ["já conhecido (lista do bot)", "already known (the bot's list)", "ya conocido (lista del bot)"]);
+  for (const f of ["modulos/moderacao/perfil.js", "modulos/moderacao/avatar.js"]) assert.doesNotMatch(fs.readFileSync(f, "utf8"), /confirmado pelo dono do bot|confirmed by the bot owner/, f);
+  assert.match(fs.readFileSync("modulos/moderacao/perfil.js", "utf8"), /motivos: \["já conhecido \(lista do bot\)"\]/);
+});
+
+console.log("── o dono do bot ──");
+await t("★ o veredito do dono não age sobre ninguém (nem pune, nem libera, nem vira herança) e só muda o padrão global", async () => {
+  zerar();
+  // um caso de perfil silenciado (certeza alta) sorteado para a amostra: o ❌ do dono não devolve a voz
+  BIOS[ANA] = "vendo pack +18 de novinha chama no pv";
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxDe(SID), server: SERVIDORES.get(SID), userId: ANA, valores: { bio: BIOS[ANA] } }));
+  const amostra = cru.prepare("SELECT codigo FROM revisao_casos WHERE userId = ? ORDER BY criadoEm DESC").get(ANA)?.codigo;
+  assert.ok(amostra, "foi para a amostra");
+  editados.length = 0; const n0 = enviados.length;
+  await quieto(() => rev.julgar(amostra, "errou"));
+  assert.ok(!editados.length && enviados.length === n0, "nada com a pessoa, nada no servidor");
+  assert.deepEqual(db.perfilSilencioLer(SID, ANA)?.campos, ["bio"]);
+  assert.equal(st.vereditoParecido({ serverId: SID, categoria: "perfil-texto:sexual", texto: BIOS[ANA] }), null, "nem herança");
+  // 25 vereditos do dono: o global muda; o servidor sem casos da staff segue o global; o que tem o seu, não
+  for (let i = 0; i < 25; i++) { const c = rev.registrarCaso({ tipo: "assunto", categoria: "assunto:drogas", serverId: U(3000 + i), userId: ANA, origem: "detector", certeza: "media", nota: 0.5 + i / 50, acao: "nenhuma", evidencia: {} }); await rev.julgar(c.codigo, "certo"); }
+  rev.limiar("assunto:drogas", 0.45);
+  db.staffSalvarLimiar(SID2, "assunto:drogas", { limiar: 0.7, casos: 25, precisao: 1 }); st._zerar();
+  const mud = rev.recalcularLimiares();
+  assert.deepEqual(mud.map((m) => m.categoria), ["assunto:drogas"]);
+  assert.equal(rev.limiar("assunto:drogas", 0.45), 0.5);
+  assert.equal(st.limiar("assunto:drogas", 0.45, { serverId: SID }), 0.5, "SID segue o global");
+  assert.equal(st.limiar("assunto:drogas", 0.45, { serverId: SID2 }), 0.7, "SID2 tem o da staff dele");
+});
+
+console.log("── retenção ──");
+await t("★ o caso que espera a staff some em 14 dias (limparVencidos); o julgado fica sem pessoa até o servidor sair (staff_casos e staff_limiares)", async () => {
+  zerar();
+  const velho = db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:politica", nota: 0.6, userId: ANA, canalId: C1, msgId: U(1), alertaMsgId: "V", criadoEm: Date.now() - 15 * 86400e3 });
+  const novo = db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:politica", nota: 0.6, userId: ANA, canalId: C1, msgId: U(2), alertaMsgId: "N", criadoEm: Date.now() - 13 * 86400e3 });
+  const julgado = db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:politica", nota: 0.6, userId: ANA, alertaMsgId: "J", impressao: "h1:" + "a".repeat(32), criadoEm: Date.now() - 60 * 86400e3 });
+  db.staffJulgar(julgado, "certo");
+  db.staffSalvarLimiar(SID, "assunto:politica", { limiar: 0.7, casos: 25 });
+  const r = reten.limparVencidos();
+  assert.equal(r.casosStaff, 1);
+  assert.equal(db.staffCaso(velho), null); assert.ok(db.staffCaso(novo)); assert.ok(db.staffCaso(julgado));
+  assert.match(fs.readFileSync("main.js", "utf8"), /v\.casosStaff/, "o ciclo de 6 h registra");
+  reten.apagarDadosDoServidor(SID);
+  assert.equal(cru.prepare("SELECT COUNT(*) n FROM staff_casos WHERE serverId = ?").get(SID).n, 0);
+  assert.equal(db.staffLimiar(SID, "assunto:politica"), null);
+});
+await t("a ajuda do `sentinela assuntos` e do `sentinela avatar` diz que o caso duvidoso vai à staff com ✅/❌ e vale neste servidor (pt/en/es), sem a revisão do dono", () => {
+  const src = fs.readFileSync("modulos/comandos/automod.js", "utf8");
+  for (const re of [/Caso duvidoso não pune: a staff recebe um alerta com ✅\/❌; o que ela decide\\nvale para este servidor e ajusta a moderação aqui/,
+    /Doubtful cases aren't punished: the staff gets an alert with ✅\/❌; what it\\ndecides counts for this server and tunes moderation here/,
+    /Los casos dudosos no se castigan: el staff recibe una alerta con ✅\/❌; lo que\\ndecide vale para este servidor y ajusta la moderación aquí/,
+    /Média e baixa \(caso duvidoso\) → ninguém é punido: a staff recebe um alerta com ✅\/❌;\\no que ela decide vale para este servidor e ajusta a moderação aqui/,
+    /Medium and low \(doubtful case\) → nobody is punished: the staff gets an alert with ✅\/❌;\\nwhat it decides counts for this server and tunes moderation here/,
+    /Media y baja \(caso dudoso\) → nadie es sancionado: el staff recibe una alerta con ✅\/❌;\\nlo que decide vale para este servidor y ajusta la moderación aquí/]) assert.match(src, re);
+  assert.doesNotMatch(src, /revisão do dono do bot|bot owner's review|revisión del dueño del bot/);
+});
+
+// ════ o bot inteiro, com o Stoat de mentira ════
+console.log("── o bot inteiro (main.js) ──");
+const mudo = async (fn) => { const o = [process.stdout.write, process.stderr.write]; process.stdout.write = process.stderr.write = () => true; try { return await fn(); } finally { [process.stdout.write, process.stderr.write] = o; } };
+await mudo(() => import("./main.js"));
+const store = await import("./modulos/core/config-store.js");
+const c = globalThis.__client;
+const saidas = [];
+const textoDe = (p) => typeof p === "string" ? p : `${p?.embeds?.[0]?.title ?? ""}\n${p?.embeds?.[0]?.description ?? ""}`;
+const canalBot = (id, serverId) => ({ id, serverId, name: id, type: "TextChannel", nsfw: false, enviados: [],
+  sendMessage: async function (p) { this.enviados.push(p); saidas.push(textoDe(p)); return { id: U(70000 + saidas.length), channelId: id, react: async () => {}, edit: async () => {}, delete: async () => {} }; },
+  fetchMessage: async (mid) => ({ id: mid, delete: async () => { apagadas.push(mid); } }), fetchMessages: async () => [], deleteMessages: async () => {} });
+const SB = U(400), CB = U(410), AB = U(411), LB = U(412);
+const geral = canalBot(CB, SB), alertaB = canalBot(AB, SB), logB = canalBot(LB, SB);
+const pessoaB = (u) => ({ id: { server: SB, user: u }, roles: CARGOS[u] ?? [], user: { id: u, username: u, bot: u === BOT }, nickname: null, timeout: null, joinedAt: new Date(0),
+  hasPermission: (_s, p) => u === MOD && ["ManageMessages", "TimeoutMembers", "KickMembers"].includes(p), edit: async (d) => { editados.push({ sid: SB, u, d }); } });
+const srvB = { id: SB, ownerId: DONA, name: "SB", roles: new Map([["R_ALTO", { rank: 0 }], ["R_MOD", { rank: 1 }], ["R_MEMBRO", { rank: 5 }]]), channels: [geral, alertaB, logB], channelIds: new Set([CB, AB, LB]),
+  member: { roles: [] }, havePermission: () => true, fetchMember: async (u) => pessoaB(String(u?.user ?? u)), fetchMembers: async () => ({ members: [], users: [] }), fetchBans: async () => [], kickUser: async () => {}, banUser: async () => {} };
+// (31 out 2026, P3a, staff) o ciclo de 6 h roda no `ready`: 25 vereditos da staff de SB já no banco, e a fila do dono
+// DESLIGADA (`REVISAO_POR_DIA=0` inválido) — o limiar de SB tem de ser recalculado mesmo assim
+cru.exec("DELETE FROM staff_casos; DELETE FROM staff_limiares; DELETE FROM revisao_limiares; DELETE FROM punicoes");
+db.filaSalvarLimiar("assunto:drogas", { limiar: 0.8, padrao: 0.45, casos: 30, precisao: 1 });
+for (let i = 0; i < 25; i++) db.staffJulgar(db.staffInserir({ serverId: SB, tipo: "assunto", categoria: "assunto:drogas", nota: 0.5 + i / 50, userId: ANA, alertaMsgId: `B${i}`, criadoEm: Date.now() }), "certo");
+rev._zerar(); st._zerar();
+process.env.REVISAO_POR_DIA = "0";
+try { await quieto(() => c.emitAll("ready")); } finally { delete process.env.REVISAO_POR_DIA; }
+c.servers.set(SB, srvB);
+for (const x of [geral, alertaB, logB]) c.channels.set(x.id, x);
+c.users.set(ANA, { id: ANA, username: "ana", bot: false, displayName: "卐卐卐 heil hitler", fetchProfile: async () => ({ content: null, background: null }) });
+c.users.set(BOT, { id: BOT, username: "bot", bot: true });
+const cfgB = store.configDoServidor(SB);
+cfgB.automod.antiAvatar = { enabled: true, acao: "silenciar" };
+cfgB.automod.antiScam = { ...(cfgB.automod.antiScam ?? {}), alertChannelId: AB };
+cfgB.log = { ...(cfgB.log ?? {}), canalId: LB };
+store.salvarConfigServidor(SB);
+const ctxBot = { config: store.configDoServidor(SB), serverId: SB, COR: { aviso: 2, erro: 3 }, PREFIXO: "&", client: c,
+  sendEmbed: async (canalX, e) => canalX.sendMessage({ embeds: [e] }), membroTemPermissao: () => false, ehSuperAdmin: (u) => u === DONO };
+async function alertaNoBot(nome = "卐卐卐 heil hitler") {
+  saidas.length = 0; perfil._zerar();
+  await quieto(() => perfil.verificarPerfil({ ctx: ctxBot, server: srvB, userId: ANA, valores: { nome } }));
+  return cru.prepare("SELECT * FROM staff_casos WHERE serverId = ? ORDER BY id DESC").get(SB);
+}
+await t("★ (bot inteiro) com a fila do dono desligada, o ciclo de 6 h (no `ready`) recalculou o limiar do servidor pela staff dele", async () => {
+  assert.equal(rev.timerLigado(), false);
+  assert.equal(rev.registrarCaso({ tipo: "assunto", categoria: "assunto:drogas", serverId: SB, origem: "detector", certeza: "media", nota: 0.6 }).codigo, null, "a fila do dono está desligada");
+  assert.equal(db.staffLimiar(SB, "assunto:drogas")?.limiar, 0.75, "0,8 (global) → 0,75");
+  assert.equal(st.limiar("assunto:drogas", 0.45, { serverId: SB }), 0.75);
+});
+await t("★ (bot inteiro) o ✅ de membro comum, de bot e do dono do bot sem cargo ali não vale; o do moderador vale e silencia", async () => {
+  const caso = await alertaNoBot();
+  assert.ok(caso?.alertaMsgId && alertaB.enviados.length >= 1, "o alerta foi ao canal da staff");
+  editados.length = 0;
+  for (const quem of [ANA, BOT, DONO]) await quieto(() => c.emitAll("messageReactionAdd", { id: caso.alertaMsgId, channelId: AB }, quem, "✅"));
+  assert.equal(db.staffCaso(caso.id).veredito, null, "nenhum desses conta (o dono do bot não modera SB)");
+  await quieto(() => c.emitAll("messageReactionAdd", { id: caso.alertaMsgId, channelId: AB }, MOD, "✅"));
+  assert.equal(db.staffCaso(caso.id).veredito, "certo");
+  assert.ok(editados.some((x) => x.u === ANA && x.d.timeout));
+  assert.ok(logB.enviados.some((p) => /julgado pela staff ✅/.test(textoDe(p)) && textoDe(p).includes(`<@${MOD}>`)), "o log do servidor diz quem decidiu");
+});
+await t("★ (bot inteiro) o evento cru fora do cache também leva a reação à staff: o ❌ do moderador julga", async () => {
+  const caso = await alertaNoBot("bando de macaco, todos vocês");   // outro nome: o primeiro já herda o ✅ da staff
+  assert.equal(caso.veredito, null);
+  for (const h of c.events.listeners("event")) await quieto(() => h({ type: "MessageReact", id: caso.alertaMsgId, channel_id: AB, user_id: ANA, emoji_id: "❌" }));
+  assert.equal(db.staffCaso(caso.id).veredito, null);
+  for (const h of c.events.listeners("event")) await quieto(() => h({ type: "MessageReact", id: caso.alertaMsgId, channel_id: AB, user_id: MOD, emoji_id: "❌" }));
+  assert.equal(db.staffCaso(caso.id).veredito, "errou");
+});
+await t("★ (bot inteiro) o painel do perfil e o dos temas mostram quantos casos a staff daqui já julgou", async () => {
+  const diz = async (autor, conteudo) => {
+    saidas.length = 0;
+    const ev = { id: U(60000 + saidas.length + Math.floor(Math.random() * 1e6)), authorId: autor, content: conteudo, serverId: SB, server: srvB, channel: geral, channelId: CB,
+      mentionIds: [], createdAt: new Date(), author: { id: autor, username: autor, bot: false }, member: pessoaB(autor), replyIds: [], attachments: [] };
+    await quieto(() => Promise.race([c.emitAll("messageCreate", ev), new Promise((r) => setTimeout(r, 6000))]));
+    return saidas.join("\n");
+  };
+  const n = db.staffContarJulgados(SB, "perfil-");
+  assert.ok(n >= 2);
+  assert.match(await diz(DONA, "&automod sentinela avatar"), new RegExp(`⚖️ ${n} caso\\(s\\) duvidoso\\(s\\) julgado\\(s\\) pela staff daqui`));
+  // os 25 vereditos de tema inseridos antes do `ready`
+  assert.match(await diz(DONA, "&automod sentinela assuntos"), new RegExp(`⚖️ ${db.staffContarJulgados(SB, "assunto")} caso\\(s\\) duvidoso\\(s\\) julgado\\(s\\) pela staff daqui`));
+  cru.exec(`DELETE FROM staff_casos WHERE serverId = '${SB}' AND tipo = 'assunto'`);
+  assert.doesNotMatch(await diz(DONA, "&automod sentinela assuntos"), /⚖️/, "nenhum caso de tema julgado: nada");
+});
+
+console.log(`\nP3a STAFF: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

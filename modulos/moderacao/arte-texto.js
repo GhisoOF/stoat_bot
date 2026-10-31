@@ -4,7 +4,7 @@
 // O caso real (30 out, _notas/casos-perfil.md): uma bio com dois desenhos NSFW
 // em braille, 50 linhas. Texto nenhum do sentinela pega isso — não há palavra.
 // A regra de forma: ≥ 4 linhas com ≥ 70% de braille/bloco/símbolo é "arte em
-// texto" → vai para a fila do dono (não pune sozinha). A impressão: o braille
+// texto" → certeza média: alerta à staff do servidor com ✅/❌ (não pune sozinha). A impressão: o braille
 // vira bitmap (cada caractere são 2×4 pontos) e passa pelo MESMO dHash das
 // imagens (hash.js), por desenho e do conjunto — pega a mesma arte com pequenas
 // edições. O sha256 do texto normalizado pega a arte idêntica.

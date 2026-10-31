@@ -27,17 +27,19 @@
 //     qualquer um dos 4 temas, desde que o módulo esteja ligado no servidor.
 // A nota continua na frente (determinístico primeiro, R11): só passa ao modelo
 // o que passou do portão (a sensibilidade); tema que a staff NÃO ligou só vai
-// ao modelo com sinal de ataque. Cada decisão vai para a fila do dono
-// (`revisao.js`, área fila): certeza ALTA age; MÉDIA e BAIXA vão para a fila
-// sem punir. A faixa alta é do dono (limiar calibrado pelos casos julgados),
-// nunca da staff; um caso parecido já julgado pelo dono (`herdado`) decide.
+// ao modelo com sinal de ataque. Certeza ALTA age. (31 out 2026, P3a, staff — R13)
+// MÉDIA e BAIXA não punem: a STAFF do servidor recebe um alerta com ✅/❌
+// (casos-staff.js) — antes iam para a fila do dono. O que a staff decide vale só
+// neste servidor: caso parecido herda (`herdado`) e o limiar da faixa alta é o do
+// servidor (calibrado pelos vereditos dela), senão o global. Nada disso é
+// configurável à mão. A amostra do dono (revisao.js) só mede o acerto.
 
 import * as log from "../core/log.js";
 import { registrarErro } from "../core/erros.js";
 import { citar, citarInterno } from "../core/aliases.js";
 import { textoDoIdioma, idiomaDe, tr } from "../core/i18n.js";
 import { normalizarParaAnalise } from "./scorecard.js";
-import { canalDaStaff } from "./pertence.js";
+import { canalDaStaff, canalDeOutroServidor } from "./pertence.js";
 
 export const ACOES = ["off", "alertar", "apagar", "punir"];
 const ACAO_EN = { alert: "alertar", delete: "apagar", punish: "punir", desligar: "off", desligado: "off", nada: "off", remover: "apagar", excluir: "apagar" };
@@ -405,12 +407,14 @@ export function lerVeredito(raw) {
   return { categoria, discussao: categoria === "discussao" || categoria === "ataque", motivo: String(o.motivo ?? o.reason ?? "").slice(0, 200) };
 }
 
-// ── A fila do dono (área fila: revisao.js) ──────────────────────────────────
-// Carregada sob demanda, na primeira decisão (R11). Sem a fila (ainda não
-// instalada, ou quebrada): o limiar é o padrão, nada é herdado e nenhum caso é
-// registrado — a moderação segue igual. `usarFila(dublê)` é para os testes.
-let fila = null, filaPronta = false;
+// ── A amostra do dono (revisao.js) e os casos da staff (casos-staff.js) ─────
+// Carregados sob demanda, na primeira decisão (R11). Sem eles (ou quebrados): o
+// limiar é o padrão, nada é herdado, nenhum caso é registrado e nenhum alerta de
+// dúvida sai — a moderação de certeza alta segue igual. `usarFila(dublê)` e
+// `usarStaff(dublê)` são para os testes.
+let fila = null, filaPronta = false, staff = null, staffPronta = false;
 export function usarFila(f) { fila = f ?? null; filaPronta = true; }
+export function usarStaff(f) { staff = f ?? null; staffPronta = true; }
 export async function filaDeRevisao() {
   if (filaPronta) return fila;
   filaPronta = true;
@@ -418,37 +422,40 @@ export async function filaDeRevisao() {
   catch (e) { fila = null; registrarErro("ASSUNTOS:fila", e); }
   return fila;
 }
-// Cada chamada à fila é protegida: erro dela nunca muda nem trava a moderação.
-export const registrarNaFila = (caso) => naFila("registrarCaso", null, caso);
-async function naFila(nome, padrao, ...args) {
-  const F = await filaDeRevisao();
+async function casosDaStaff() {
+  if (staffPronta) return staff;
+  staffPronta = true;
+  try { staff = await import("./casos-staff.js"); }
+  catch (e) { staff = null; registrarErro("ASSUNTOS:staff", e); }
+  return staff;
+}
+// Cada chamada é protegida: erro nunca muda nem trava a moderação.
+const naFila = (nome, padrao, ...args) => chamar(filaDeRevisao, "fila", nome, padrao, ...args);
+const naStaff = (nome, padrao, ...args) => chamar(casosDaStaff, "staff", nome, padrao, ...args);
+async function chamar(carregar, onde, nome, padrao, ...args) {
+  const F = await carregar();
   if (typeof F?.[nome] !== "function") return padrao;
   try { return (await F[nome](...args)) ?? padrao; }
-  catch (e) { registrarErro(`ASSUNTOS:fila:${nome}`, e); return padrao; }
+  catch (e) { registrarErro(`ASSUNTOS:${onde}:${nome}`, e); return padrao; }
 }
 
-// A faixa "certeza alta" é GLOBAL e do dono (decisão de 31 out: nada depende da
-// staff): o padrão é o limiar da sensibilidade média, e não o que a staff
-// escolheu; a sensibilidade da staff só decide o que vai ao modelo (o portão).
+// A faixa "certeza alta" não é configurável à mão: o padrão é o limiar da
+// sensibilidade média (não o que a staff escolheu — a sensibilidade só decide o
+// que vai ao modelo, o portão); calibrado, é o do servidor (vereditos da staff
+// dele) ou o global (amostra do dono).
 export const LIMIAR_ALTA_PADRAO = LIMIAR_ASSUNTO.media / 10;   // nota de 0 a 1
 // Sem o modelo (`ia off`) é um detector só: a certeza alta pede 2 pontos a mais
 export const MARGEM_SEM_IA = 2;
-// Os casos julgados se dividem pelo que o bot AFIRMOU: "assunto:<tema>" = era
-// sério (discussão/ataque); "assunto:<tema>:zoeira" = não era. Assim o ✅/❌ do
-// dono num caso parecido tem um sentido só.
+// Os casos da amostra do dono se dividem pelo que o bot AFIRMOU: "assunto:<tema>" =
+// era sério (discussão/ataque); "assunto:<tema>:zoeira" = não era. Assim o ✅/❌
+// do dono tem um sentido só em cada uma. O caso da staff é sempre "assunto:<tema>"
+// (a hipótese de violação: ✅ = era, ❌ = não era).
 export const categoriaDoCaso = (tema, seria) => `assunto:${tema}${seria ? "" : ":zoeira"}`;
-// O que o dono já disse de um caso muito parecido → "seria" | "nao" | null.
-// Na fila, "certo" = o que o bot alegou naquela categoria se confirmou: em
-// "assunto:<tema>" é sério; em "assunto:<tema>:zoeira" é zoeira.
-export async function heranca(tema, texto) {
-  const q = (seria) => naFila("vereditoParecido", null, { tipo: "assunto", categoria: categoriaDoCaso(tema, seria), texto });
-  const s = await q(true);
-  if (s === "certo") return "seria";
-  if (s === "errou") return "nao";
-  const z = await q(false);
-  if (z === "certo") return "nao";
-  if (z === "errou") return "seria";
-  return null;
+// O que a staff DESTE servidor já disse de um caso muito parecido → "seria" | "nao" | null.
+// (31 out 2026, P3a, staff) antes: o que o dono disse, valendo para todos os servidores.
+export async function heranca(tema, texto, serverId = null) {
+  const v = await naStaff("vereditoParecido", null, { tipo: "assunto", categoria: categoriaDoCaso(tema, true), texto, serverId });
+  return v === "certo" ? "seria" : v === "errou" ? "nao" : null;
 }
 
 // Sinais de que o próprio texto (ou o canal) está brincando
@@ -459,14 +466,14 @@ export const temAtaque = (sinais) => (sinais ?? []).some((s) => /^ataque:/.test(
 // A certeza de uma decisão (pura — os testes a exercitam direto).
 //   categoria: a do juiz · nota: 0–10 · limiarAlta: 0–1 (o da fila) ·
 //   semIA: a nota decidiu sozinha · zoeira: o texto/canal está rindo ·
-//   herdado: "seria" | "nao" | null
+//   herdado: "seria" | "nao" | null (o que a staff deste servidor disse de um parecido)
 // → { certeza: "alta"|"media"|"baixa", origem: "detector"|"discordancia" }
 export function certezaDe({ categoria, nota, limiarAlta = LIMIAR_ALTA_PADRAO, semIA = false, zoeira = false, herdado = null }) {
   const seria = categoria === "discussao" || categoria === "ataque";
   const corte = 10 * limiarAlta + (semIA ? MARGEM_SEM_IA : 0);
   if (herdado === "seria" && seria) return { certeza: "alta", origem: "detector" };
   if (herdado === "nao" && !seria) return { certeza: "alta", origem: "detector" };
-  if (herdado) return { certeza: "baixa", origem: "discordancia" };   // o dono já disse o contrário de um parecido
+  if (herdado) return { certeza: "baixa", origem: "discordancia" };   // a staff já disse o contrário de um parecido
   if (!seria) {
     // o juiz disse que não é sério; a nota alta diz que é: os detectores discordam
     return nota >= corte + MARGEM_SEM_IA && !zoeira ? { certeza: "baixa", origem: "discordancia" } : { certeza: "alta", origem: "detector" };
@@ -475,7 +482,7 @@ export function certezaDe({ categoria, nota, limiarAlta = LIMIAR_ALTA_PADRAO, se
   return { certeza: nota >= corte ? "alta" : "media", origem: "detector" };
 }
 
-// O trecho que vai para a fila do dono: sem menção a ninguém (R9), até 300 car.
+// O trecho que vai para a amostra do dono: sem menção a ninguém (R9), até 300 car.
 export const trechoDoCaso = (texto) => String(texto ?? "").replace(/<[@%#]!?[0-9A-Za-z]{1,40}>/g, "@…").replace(/\s+/g, " ").trim().slice(0, 300);
 
 // O veredito vale por MENSAGEM (31 out 2026, R9): antes valia por canal e tema
@@ -512,6 +519,23 @@ async function julgar({ tema, canalId, messageId, autor = null, texto, lang, ser
   return r;
 }
 
+// (revisão staff) Teto dos alertas de caso duvidoso: um por (servidor, pessoa, tema) a cada 6 h e no
+// máximo 20 por servidor por hora; o excedente não é enviado nem guardado (só a memória do processo).
+export const ALERTA_PESSOA_MS = 6 * 3600_000, ALERTAS_POR_HORA = 20;
+const alertasPessoa = new Map();   // `${servidor} ${pessoa} ${tema}` → quando
+const alertasServidor = new Map(); // servidor → [quando…] na última hora
+function cabeAlerta(serverId, userId, tema, agora = Date.now()) {
+  for (const [k, t] of alertasPessoa) if (agora - t > ALERTA_PESSOA_MS) alertasPessoa.delete(k);
+  const k = `${serverId} ${userId} ${tema}`;
+  if (alertasPessoa.has(k)) return false;
+  const hora = (alertasServidor.get(serverId) ?? []).filter((t) => agora - t < 3600_000);
+  if (hora.length >= ALERTAS_POR_HORA) { alertasServidor.set(serverId, hora); return false; }
+  hora.push(agora); alertasServidor.set(serverId, hora); alertasPessoa.set(k, agora);
+  if (alertasServidor.size > 5000) alertasServidor.delete(alertasServidor.keys().next().value);
+  if (alertasPessoa.size > 20000) alertasPessoa.delete(alertasPessoa.keys().next().value);
+  return true;
+}
+
 // Aviso no canal ao apagar: um por canal e tema a cada 2 min (numa discussão
 // apagada mensagem a mensagem, o canal não vira um mural de avisos).
 const AVISO_MS = 2 * 60_000;
@@ -519,6 +543,12 @@ const avisados = new Map();
 
 const PESO_ACAO = { alertar: 1, apagar: 2, punir: 3 };
 const ACAO_DO_CASO = { alertar: "alertado", apagar: "punido", punir: "punido" };
+// O que o ✅ da staff faz num caso duvidoso (a linha do alerta)
+const O_QUE_FAZ = {
+  punir: ["apagar e punir (a escada do módulo)", "delete and punish (the module's ladder)", "borrar y castigar (la escalera del módulo)"],
+  apagar: ["apagar a mensagem", "delete the message", "borrar el mensaje"],
+  alertar: ["registrar que é violação", "record it as a violation", "registrar que es una infracción"],
+};
 const ROTULO_CATEGORIA = {
   fora: ["fora do tema", "off-topic", "fuera de tema"], zoeira: ["zoeira", "joke", "broma"],
   discussao: ["discussão", "discussion", "discusión"], ataque: ["ataque", "attack", "ataque"],
@@ -562,18 +592,34 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
   const categoria = v.categoria ?? (v.discussao ? "discussao" : "zoeira");
   const seria = categoria === "ataque" || (categoria === "discussao" && ligado);
 
-  // a fila do dono: o limiar calibrado (no lugar do fixo) e o que ele já julgou
-  const limiarAlta = Number(await naFila("limiar", LIMIAR_ALTA_PADRAO, categoriaDoCaso(tema, true), LIMIAR_ALTA_PADRAO));
-  const herdado = await heranca(tema, texto);
+  // o limiar calibrado deste servidor (senão o global, senão o fixo) e o que a staff daqui já julgou
+  const sid = ctx?.serverId ?? null;
+  const limiarAlta = Number(await naStaff("limiar", LIMIAR_ALTA_PADRAO, categoriaDoCaso(tema, true), LIMIAR_ALTA_PADRAO, { serverId: sid }));
+  const herdado = await heranca(tema, texto, sid);
   const { certeza, origem } = certezaDe({ categoria: seria ? categoria : (categoria === "discussao" ? "fora" : categoria),
     nota, limiarAlta: Number.isFinite(limiarAlta) ? limiarAlta : LIMIAR_ALTA_PADRAO, semIA, zoeira: temZoeira(sinais), herdado });
   // zoeira nunca pune; fora do tema não faz nada; discussão de tema desligado não
-  // faz nada; o que o dono já disse que é engano não pune; média/baixa → só a fila
+  // faz nada; o que a staff daqui já disse que não é não pune; média/baixa → alerta à staff
   const acao = seria && herdado !== "nao" && certeza === "alta" ? (categoria === "ataque" ? "punir" : acaoDoTema(cfg, tema)) : "nada";
+  // o caso duvidoso: o que o ✅ da staff faria (ataque → punir; senão a ação do tema, se ligado)
+  const seConfirmado = categoria === "ataque" ? "punir" : ligado ? acaoDoTema(cfg, tema) : "off";
+  const duvida = acao === "nada" && herdado !== "nao" && (certeza === "media" || certeza === "baixa") && seConfirmado !== "off";
 
   console.log(`[ASSUNTOS] ${tema} nota ${nota}/${limiar} [${sinais.join(", ")}] em ${message.channelId} por ${userId} → ${categoria.toUpperCase()}${ligado ? "" : " (tema desligado)"} · certeza ${certeza}${herdado ? ` · herdado: ${herdado}` : ""} → ${acao}${v.cache ? " (veredito recente)" : ""}${v.semIA ? " (sem IA: só a nota)" : ""}${v.motivo ? ` — ${v.motivo}` : ""}`);
 
-  // discussão de um tema que a staff não ligou não é decisão nenhuma (não vai à fila)
+  // o caso duvidoso vai à staff deste servidor, com ✅/❌ (ninguém é punido) — com teto (revisão staff)
+  let alertou = false;
+  if (duvida && cabeAlerta(sid, userId, tema)) {
+    const r = await naStaff("alertar", null, {
+      ctx, server, oQueFaz: O_QUE_FAZ[seConfirmado],
+      embed: embedDoAlerta(ctx, { userId, canalId: message.channelId, messageId: message.id, tema, texto, motivoIA: v.motivo, nota, sinais, lang, categoria, duvida: true }),
+      caso: { tipo: "assunto", categoria: categoriaDoCaso(tema, true), userId, canalId: message.channelId, msgId: message.id ?? null,
+        nota: Math.round(nota * 10) / 100, parte: categoria === "ataque" ? "ataque" : "discussao", evidencia: { texto } },
+    });
+    alertou = !!r?.id;
+  }
+  // a amostra do dono (a fila sorteia): só mede. Discussão de um tema que a staff não ligou não
+  // é decisão nenhuma (não vira caso).
   let codigo = null;
   if (seria || categoria === "zoeira" || categoria === "fora") {
     const caso = await naFila("registrarCaso", null, {
@@ -581,18 +627,16 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
       canalId: message.channelId, msgId: message.id ?? null, origem, certeza, nota: Math.round(nota * 10) / 100,
       // (31 out 2026, P3a, revisão) o texto inteiro vai só para a impressão (não é guardado):
       // a gravação e a consulta da herança (`heranca(tema, texto)`) usam o MESMO texto
-      acao: ACAO_DO_CASO[acao] ?? "nenhuma", evidencia: { trecho: trechoDoCaso(texto), texto },
+      acao: ACAO_DO_CASO[acao] ?? (alertou ? "alertado" : "nenhuma"), evidencia: { trecho: trechoDoCaso(texto), texto },
       detector: `assuntos:${categoria}${semIA ? ":sem-ia" : ""}`,
     });
     codigo = caso?.codigo ?? null;
   }
-  const res = { tema, nota, acao, veredito: v, categoria, certeza, origem, herdado, codigo };
+  const res = { tema, nota, acao, veredito: v, categoria, certeza, origem, herdado, codigo, alertou };
   if (acao === "nada") return res;
 
   const rotulo = es ? T.es : lang === "en" ? T.en : T.pt;
-  const motivo = categoria === "ataque"
-    ? (es ? `atacar a alguien por ${rotulo} (regla del servidor)` : lang === "en" ? `attacking someone over ${rotulo} (server rule)` : `atacar alguém por causa de ${rotulo} (regra do servidor)`)
-    : (es ? `${rotulo} no es tema de este servidor (regla del servidor)` : lang === "en" ? `${rotulo} isn't a topic for this server (server rule)` : `${rotulo} não é assunto deste servidor (regra do servidor)`);
+  const motivo = motivoDo(tema, categoria, ctx);
 
   if (acao === "alertar") {
     await alertarStaff(ctx, { userId, canalId: message.channelId, messageId: message.id, tema, texto, motivoIA: v.motivo, nota, sinais, lang, categoria });
@@ -626,51 +670,121 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
     return res;
   }
   // punir: apaga e aplica a punição do módulo (padrão: a escada do `acumular`)
-  const pol = cfg.punicao?.modo ? cfg.punicao : { modo: "acumular" };
+  const pol = politicaDoTema(cfg);
   await aplicarPunicao?.({ server, channel: canal ?? message.channel, message, userId, pol, motivo, nota });
   return res;
 }
 
-async function alertarStaff(ctx, { userId, canalId, messageId, tema, texto, motivoIA, nota, sinais, lang, categoria = "discussao" }) {
-  const T = TEMAS[tema];
-  const en = lang === "en";
+// O motivo da punição, no idioma do servidor
+function motivoDo(tema, categoria, ctx) {
+  const T = TEMAS[tema], lang = textoDoIdioma(ctx.config?.language), es = idiomaDe(ctx) === "es";
+  const rotulo = es ? T.es : lang === "en" ? T.en : T.pt;
+  return categoria === "ataque"
+    ? (es ? `atacar a alguien por ${rotulo} (regla del servidor)` : lang === "en" ? `attacking someone over ${rotulo} (server rule)` : `atacar alguém por causa de ${rotulo} (regra do servidor)`)
+    : (es ? `${rotulo} no es tema de este servidor (regla del servidor)` : lang === "en" ? `${rotulo} isn't a topic for this server (server rule)` : `${rotulo} não é assunto deste servidor (regra do servidor)`);
+}
+
+async function alertarStaff(ctx, dados) {
   const destino = await canalDaStaff(ctx);   // só canal da staff DESTE servidor
   if (!destino) { console.warn(`[ASSUNTOS] alerta NÃO entregue: servidor ${ctx.serverId} sem canal de alerta do sentinela nem de log`); return; }
+  await ctx.sendEmbed(destino, embedDoAlerta(ctx, dados));
+}
+// O alerta à staff: a ação `alertar` (com o trecho, como sempre) ou (`duvida`) o caso duvidoso
+// que ela julga com ✅/❌ — esse sem o texto: a staff abre a mensagem pelo canal e o ID.
+function embedDoAlerta(ctx, { userId, canalId, messageId, tema, texto, motivoIA, nota, sinais, lang, categoria = "discussao", duvida = false }) {
+  const T = TEMAS[tema];
+  const en = lang === "en";
   const staff = (ctx.config?.acesso?.cargosStaff ?? []).map((id) => `<%${id}>`).join(" ");
   const cabeca = [
     staff || null,
     `<@${userId}> · <#${canalId}>${messageId ? ` · \`${messageId}\`` : ""}`,
   ];
-  const trecho = `> ${String(texto).replace(/\n+/g, " ").slice(0, 400)}`;
+  const trecho = duvida ? null : `> ${String(texto).replace(/\n+/g, " ").slice(0, 400)}`;
   const alerta = {   // pt ou en (pelo `lang`, como antes)
-    title: `${T.emoji} ${en ? "Forbidden topic" : "Assunto proibido"}: ${en ? T.en : T.pt}`,
+    title: `${T.emoji} ${en ? "Forbidden topic" : "Assunto proibido"}${duvida ? (en ? " — to check" : " — para conferir") : ""}: ${en ? T.en : T.pt}`,
     description: [
       ...cabeca,
       `**${en ? "Score" : "Nota"}:** ${nota}/10 · ${rotuloCategoria(categoria, en ? 1 : 0)} · **${en ? "Signals" : "Sinais"}:** ${(sinais ?? []).join(", ") || "—"}`,
       `**${en ? "Why" : "Por quê"}:** ${motivoIA || "—"}`,
       trecho,
-      "",
-      en ? "_Alert only: the message stayed. Change it with `" + citarInterno("automod.sentinela.assuntos") + "`._"
-         : "_Só alerta: a mensagem ficou. Mude com `" + citarInterno("automod.sentinela.assuntos") + "`._",
+      duvida ? null : "",
+      duvida ? null : en ? "_Alert only: the message stayed. Change it with `" + citarInterno("automod.sentinela.assuntos") + "`._"
+        : "_Só alerta: a mensagem ficou. Mude com `" + citarInterno("automod.sentinela.assuntos") + "`._",
     ].filter((x) => x !== null).join("\n"),
   };
-  await ctx.sendEmbed(destino, {
+  return {
     ...tr(ctx, alerta, alerta, {
-      title: `${T.emoji} Tema prohibido: ${T.es}`,
+      title: `${T.emoji} Tema prohibido${duvida ? " — para revisar" : ""}: ${T.es}`,
       description: [
         ...cabeca,
         `**Nota:** ${nota}/10 · ${rotuloCategoria(categoria, 2)} · **Señales:** ${(sinais ?? []).join(", ") || "—"}`,
         `**Por qué:** ${motivoIA || "—"}`,
         trecho,
-        "",
-        "_Solo es una alerta: el mensaje se quedó. Cámbialo con `" + citar("automod.sentinela.assuntos", "es", ctx.PREFIXO ?? "&") + "`._",
+        duvida ? null : "",
+        duvida ? null : "_Solo es una alerta: el mensaje se quedó. Cámbialo con `" + citar("automod.sentinela.assuntos", "es", ctx.PREFIXO ?? "&") + "`._",
       ].filter((x) => x !== null).join("\n"),
     }),
     colour: ctx.COR?.aviso,
-  });
+  };
+}
+
+// A política de punição do módulo de temas (padrão: a escada do `acumular`)
+const politicaDoTema = (cfg) => (cfg?.punicao?.modo ? cfg.punicao : { modo: "acumular" });
+
+// ── O ✅/❌ da staff num caso duvidoso de tema (casos-staff.js) ─────────────
+// A permissão que a reação pede (31 out 2026, P3a, staff — decisão do coordenador): no ✅ que pune,
+// a do degrau que a escada vai aplicar àquela pessoa AGORA (como o `&warn`: ban → BanMembers,
+// silêncio → TimeoutMembers); no ✅ que só apaga/registra e no ❌ (nada acontece), ManageMessages.
+export async function permissaoDaStaff(caso, ctx, veredito = "certo") {
+  const tema = temaValido(String(caso?.categoria ?? "").split(":")[1]);
+  const cfg = ctx?.config?.automod?.antiAssuntos ?? {};
+  const acao = caso?.parte === "ataque" ? "punir" : tema ? acaoDoTema(cfg, tema) : "off";
+  if (veredito !== "certo" || acao !== "punir") return "ManageMessages";
+  const { permissaoDaPunicao } = await import("./automod-engine.js");
+  return permissaoDaPunicao(ctx, { userId: caso.userId, pol: politicaDoTema(cfg) });
+}
+// (revisão staff) Para o ✅ ensinar (herança e limiar do servidor): a permissão mais forte que a ação
+// pode aplicar — a escada termina em ban, então BanMembers; só apagar/registrar: ManageMessages.
+export async function permissaoParaEnsinar(caso, ctx) {
+  const tema = temaValido(String(caso?.categoria ?? "").split(":")[1]);
+  const cfg = ctx?.config?.automod?.antiAssuntos ?? {};
+  const acao = caso?.parte === "ataque" ? "punir" : tema ? acaoDoTema(cfg, tema) : "off";
+  if (acao !== "punir") return "ManageMessages";
+  const { permissaoMaximaDaPunicao } = await import("./automod-engine.js");
+  return permissaoMaximaDaPunicao(ctx, { pol: politicaDoTema(cfg) });
+}
+// ✅ → a ação do tema agora (ataque → punir); ❌ → nada. Devolve o que fez (idioma do servidor).
+export async function decisaoDaStaff({ ctx, server, caso, veredito, podeAplicar = null }) {
+  if (veredito !== "certo" || !caso?.userId || !server) return null;
+  const tema = temaValido(String(caso.categoria ?? "").split(":")[1]);
+  if (!tema) return null;
+  const L = idiomaDe(ctx), lang = textoDoIdioma(ctx.config?.language);
+  const t3 = (pt, en, es) => (L === "es" ? es : lang === "en" ? en : pt);
+  const cfg = ctx.config?.automod?.antiAssuntos ?? {};
+  // (revisão staff) o módulo ou o tema desligado depois do alerta: o ✅ não age
+  if (cfg.enabled === false || !temasAtivos(cfg).length) return t3("nada — o módulo foi desligado", "nothing — the module was turned off", "nada — el módulo se desactivó");
+  const acao = caso.parte === "ataque" ? "punir" : acaoDoTema(cfg, tema);
+  if (acao === "off") return t3("nada — o tema foi desligado", "nothing — the topic was turned off", "nada — el tema se desactivó");
+  if (acao === "alertar") return t3("registrado", "recorded", "registrado");
+  let canal = null;
+  try { canal = caso.canalId ? ctx.client?.channels?.get?.(caso.canalId) ?? await ctx.client?.channels?.fetch?.(caso.canalId) : null; } catch { canal = null; }
+  if (!canal || canalDeOutroServidor(canal, server.id)) return t3("nada — o canal não existe mais", "nothing — the channel is gone", "nada — el canal ya no existe");
+  const message = caso.msgId ? await canal.fetchMessage?.(caso.msgId)?.catch?.(() => null) ?? null : null;
+  const motivo = motivoDo(tema, caso.parte === "ataque" ? "ataque" : "discussao", ctx);
+  if (acao === "apagar") {
+    if (!message) return t3("nada — a mensagem já não existe", "nothing — the message is gone", "nada — el mensaje ya no existe");
+    try { await message.delete(); } catch (e) { registrarErro("ASSUNTOS:apagar-staff", e); return t3("não consegui apagar", "couldn't delete", "no pude borrar"); }
+    return t3("mensagem apagada", "message deleted", "mensaje borrado");
+  }
+  const { aplicarPunicao } = await import("./automod-engine.js");
+  // a checagem do degrau REAL fica dentro do aplicarPunicao (sem await entre escolher e checar); o ban
+  // entra na lista global como o de um `&ban` manual (decisão humana)
+  const r = await aplicarPunicao(ctx, { server, channel: canal, message, userId: caso.userId, pol: politicaDoTema(cfg), motivo, apagar: !!message, podeAplicar, origemBan: "manual" });
+  if (r?.recusado) return t3(`nada — quem decidiu não tem **${r.permissao}**`, `nothing — whoever decided lacks **${r.permissao}**`, `nada — quien decidió no tiene **${r.permissao}**`);
+  return t3("apagada e punida (a escada do módulo)", "deleted and punished (the module's ladder)", "borrado y castigado (la escalera del módulo)");
 }
 
 // Só para testes
-export function _zerar() { fios.clear(); vereditos.clear(); avisados.clear(); }
-// Só para testes: volta a carregar a fila de verdade (revisao.js) na próxima decisão
-export function _filaReal() { fila = null; filaPronta = false; }
+export function _zerar() { fios.clear(); vereditos.clear(); avisados.clear(); alertasPessoa.clear(); alertasServidor.clear(); }
+// Só para testes: volta a carregar a fila (revisao.js) e os casos da staff (casos-staff.js) de verdade
+export function _filaReal() { fila = null; filaPronta = false; staff = null; staffPronta = false; }

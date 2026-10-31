@@ -90,7 +90,8 @@ import * as relatorioHora from "./modulos/ferramentas/relatorio.js";
 import { descreverErro } from "./modulos/core/erros.js";
 import { problemasDoEnv, avisosDoEnv, numero } from "./modulos/core/env.js";
 import * as confianca from "./modulos/moderacao/confianca.js";
-import * as revisao from "./modulos/moderacao/revisao.js";   // (31 out 2026, P3a) a fila de revisão do dono do bot
+import * as revisao from "./modulos/moderacao/revisao.js";   // (31 out 2026, P3a) a amostra diária do dono do bot
+import * as casosStaff from "./modulos/moderacao/casos-staff.js";   // (31 out 2026, P3a) os casos duvidosos com a staff de cada servidor
 import { semPingEmMassa } from "./modulos/core/seguranca.js";
 
 const PREFIXO     = "&";
@@ -279,10 +280,12 @@ function ehSuperAdmin(userId) {
   return !!userId && SUPER_ADMINS.has(userId);
 }
 
-function membroTemPermissao(message, server, permName) {
+// `semDono`: sem o atalho do dono do bot (31 out 2026, P3a, R13) — o ✅/❌ num caso duvidoso
+// é da staff do servidor; o dono do bot só conta se também for staff ali pelo critério normal.
+function membroTemPermissao(message, server, permName, { semDono = false } = {}) {
   try {
     const userId = message.authorId;
-    if (ehSuperAdmin(userId)) return true;              // dono do bot: controle total
+    if (!semDono && ehSuperAdmin(userId)) return true;  // dono do bot: controle total
     if (server?.ownerId && server.ownerId === userId) return true;
 
     // (31 out 2026, R9) o cargo de staff vale para moderar, mas não para mexer em
@@ -425,21 +428,29 @@ client.on("ready", async () => {
       const v = retencao.limparVencidos(Date.now());
       if (v.palavras) console.info(`[PRIVACIDADE] ${v.palavras} palavra(s) tentada(s) com mais de 30 dias apagada(s)`);
       if (v.perfilSilencio) console.info(`[PRIVACIDADE] ${v.perfilSilencio} registro(s) de silêncio do perfil com mais de 28 dias apagado(s)`);
+      if (v.casosStaff) console.info(`[PRIVACIDADE] ${v.casosStaff} caso(s) duvidoso(s) sem reação da staff há 14 dias apagado(s)`);
+      if (v.casosStaffAntigos) console.info(`[PRIVACIDADE] ${v.casosStaffAntigos} caso(s) julgado(s) pela staff além dos 500 mais recentes por servidor e categoria apagado(s)`);
     } catch (e) { console.error("[PRIVACIDADE] vencidos:", e?.message); }
+    // (31 out 2026, P3a, staff) o limiar de cada servidor com os vereditos da staff dele (uma vez por
+    // dia UTC; não depende da fila do dono nem de `REVISAO_*`)
+    try {
+      const mud = casosStaff.recalcularLimiares(Date.now());
+      if (mud.length) console.info(`[STAFF] limiar recalculado em ${mud.length} servidor/categoria(s)`);
+    } catch (e) { console.error("[STAFF] limiar por servidor:", e?.message); }
   };
   limparSaidas();
   setInterval(limparSaidas, 6 * 3600_000).unref?.();
 
   definirStatus().catch((e) => console.error("[STATUS]", e?.message ?? e));
 
-  // (31 out 2026, P3a) a fila de revisão: casos por DM ao dono do bot. Aplica a retenção
-  // e liga o timer da rodada diária só se houver caso esperando (revisao.js). `REVISAO_*`
+  // (31 out 2026, P3a) a amostra diária: casos por DM ao dono do bot. Aplica a retenção
+  // e liga o timer da rodada diária só se houver o que fazer (revisao.js). `REVISAO_*`
   // inválido: a fila fica DESLIGADA (nenhum caso novo é gravado), mas a retenção do que já
   // está no banco — e a edição das DMs que perderam o trecho — roda do mesmo jeito.
   try { revisao.configurar({ client, enviar: (canal, emb) => sendEmbed(canal, emb) }); }
   catch (e) { console.error("[REVISAO] configurar (fila desligada; a retenção do boot rodou):", e?.message ?? e); }
   // (31 out 2026, P3a) o perfil inteiro: a bio e o banner só chegam no evento cru (a stoat.js
-  // descarta o `profile` do UserUpdate); e o ✅/❌ do dono num caso de perfil revê o perfil atual
+  // descarta o `profile` do UserUpdate)
   perfilMod.ligar({ client, criarContexto }).catch((e) => console.error("[PERFIL] ligar:", descreverErro(e)));
 
   reactionRoles.precarregarMensagens(client).catch((e) => console.error("[REACTIONROLE][boot]", e?.message));
@@ -946,6 +957,8 @@ client.on("messageReactionAdd", async (...a) => {
     if (await servidoresPainel.aoReagirAviso(msgId, userId, emoji, { client, criarContexto })) return;
     // (P3a) ✅/❌ do dono do bot num caso da fila de revisão (só na DM em que o caso foi)
     if (await revisao.aoReagir(msgId, userId, emoji, { canalId: a0?.channelId ?? a0?.channel?.id ?? null })) return;
+    // (P3a) ✅/❌ da staff num alerta de caso duvidoso (só quem modera aquele servidor)
+    if (await casosStaff.aoReagir(msgId, userId, emoji, { client, criarContexto })) return;
 
     const msgObj = (a0 && typeof a0 === "object") ? a0 : { id: msgId };
     // Tickets: painel (🎫 abre), controle (🔒 fecha), fechado (🗑️ apaga).
@@ -972,6 +985,7 @@ client.events.on("event", async (ev) => {
     if (ev.type === "MessageReact" && await tickets.aoReagir({ id: ev.id }, ev.user_id, ev.emoji_id, { client, criarContexto })) return;
     if (ev.type === "MessageReact" && await rpg.aoReagir(ev.id, ev.user_id, ev.emoji_id)) return;
     if (ev.type === "MessageReact" && await revisao.aoReagir(ev.id, ev.user_id, ev.emoji_id, { canalId: ev.channel_id ?? null })) return;   // (P3a)
+    if (ev.type === "MessageReact" && await casosStaff.aoReagir(ev.id, ev.user_id, ev.emoji_id, { client, criarContexto })) return;   // (P3a)
     await paginas.aoReagir(ev.id, ev.user_id, ev.emoji_id, editor);
   } catch (err) {
     console.error("[REAÇÃO][fora do cache]", err?.message ?? err);

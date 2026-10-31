@@ -302,21 +302,73 @@ async function darToque(ctx, { server, channel, message, userId, motivo }) {
     es: { titulo: "🙂 Toque de atención del AutoMod (sin aviso)", descricao: `<@${userId}> — ${motivo}` } });
 }
 
-async function aplicarPunicao(ctx, opts) {
+// Política: a do MÓDULO (`polModulo`) tem prioridade; senão, a global do servidor.
+function politicaDa(config, polModuloBruta) {
+  const polGlobal = config?.automod?.punicao ?? { modo: "avisar", warnsParaBan: 3, silenceRoleId: null };
+  const polModulo = polModuloBruta && polModuloBruta.modo ? polModuloBruta : null;
+  return { polGlobal, pol: { ...polGlobal, ...(polModulo ?? {}), silenceRoleId: polGlobal.silenceRoleId } };   // o cargo de silêncio é sempre o do servidor
+}
+// (31 out 2026, P3a, staff) A permissão do Stoat que a punição do módulo vai usar AGORA com essa
+// pessoa — o degrau da escada que ela receberia (o mesmo critério do `&warn`): ban → BanMembers,
+// silêncio (degrau ou `confirmar`) → TimeoutMembers, aviso/apagar → ManageMessages. O ✅ da staff
+// num caso duvidoso de tema pede essa permissão a quem reagiu (assuntos.permissaoDaStaff).
+const MODO_SEM_ESCADA = { banir: "BanMembers", confirmar: "TimeoutMembers", avisar: "ManageMessages", apagar: "ManageMessages" };
+const permissaoDoDegrau = (degrau) => (degrau?.tipo === "ban" ? "BanMembers" : degrau?.tipo === "mute" ? "TimeoutMembers" : "ManageMessages");
+const ORDEM_PERMISSAO = ["ManageMessages", "TimeoutMembers", "BanMembers"];
+export function permissaoDaPunicao(ctx, { userId, pol: polModulo = null }) {
+  const { polGlobal, pol } = politicaDa(ctx?.config, polModulo);
+  if (MODO_SEM_ESCADA[pol.modo]) return MODO_SEM_ESCADA[pol.modo];
+  const degraus = escadaDePunicao(pol);
+  const proximo = db.contarAvisos(ctx?.serverId, userId, { validadeMs: validadeDosAvisos(polGlobal) }) + 1;
+  return permissaoDoDegrau(degraus[Math.min(proximo, degraus.length) - 1]);
+}
+// (revisão staff) A permissão mais forte que a punição do módulo PODE aplicar (a escada sempre
+// termina em ban): o ✅ de um caso duvidoso só ensina (herança e limiar do servidor) se quem
+// decidiu a tem.
+export function permissaoMaximaDaPunicao(ctx, { pol: polModulo = null } = {}) {
+  const { pol } = politicaDa(ctx?.config, polModulo);
+  if (MODO_SEM_ESCADA[pol.modo]) return MODO_SEM_ESCADA[pol.modo];
+  return escadaDePunicao(pol).map(permissaoDoDegrau).sort((a, b) => ORDEM_PERMISSAO.indexOf(b) - ORDEM_PERMISSAO.indexOf(a))[0];
+}
+// (31 out 2026, P3a, staff) exportada: o ✅ da staff num caso duvidoso de tema proibido
+// (assuntos.decisaoDaStaff) aplica a punição do módulo pelo mesmo caminho.
+// (revisão staff) `podeAplicar(permissao)` (síncrona, opcional): quem decidiu tem essa permissão?
+// O degrau REAL é escolhido (o `somarAviso`) e checado sem nenhum await no meio — dois ✅ juntos (ou o
+// automod na mesma janela) não levam a um ban por quem só tem TimeoutMembers. Faltando: o aviso
+// somado é desfeito, nada é punido, e o log do servidor diz. Devolve { recusado, permissao } então.
+// `origemBan`: como o ban entra na lista global ("automod"; o da staff entra como "manual").
+export async function aplicarPunicao(ctx, opts) {
   const { server, channel, message, userId, motivo } = opts;
   const apagar = opts.apagar !== false;
   const nota = opts.nota ?? null;
   const grave = opts.grave ?? false;
+  const podeAplicar = typeof opts.podeAplicar === "function" ? opts.podeAplicar : null;
+  const origemBan = opts.origemBan ?? "automod";
   const { config, estado, sendEmbed, COR, PREFIXO } = ctx;
   const lang = lingua(ctx);   // idioma dos avisos vistos pelos membros
-  // Política: a do MÓDULO (opts.pol) tem prioridade; senão, a global do servidor.
-  const polGlobal = config.automod.punicao ?? { modo: "avisar", warnsParaBan: 3, silenceRoleId: null };
-  const polModulo = opts.pol && opts.pol.modo ? opts.pol : null;
-  const pol = {
-    ...polGlobal,
-    ...(polModulo ?? {}),
-    silenceRoleId: polGlobal.silenceRoleId,   // o cargo de silêncio é sempre o do servidor
-  };
+  const { polGlobal, pol } = politicaDa(config, opts.pol);
+  const sidP = ctx.serverId ?? server?.id;
+  // a escolha do degrau e a checagem de quem decidiu, juntas (sem await)
+  let escolhido = null;
+  if (podeAplicar) {
+    let permissao = MODO_SEM_ESCADA[pol.modo] ?? null, antes = null;
+    if (!permissao) {
+      antes = db.lerPunicao(sidP, userId);
+      const count = db.somarAviso(sidP, userId, motivo, { validadeMs: validadeDosAvisos(polGlobal) });
+      const degraus = escadaDePunicao(pol);
+      permissao = permissaoDoDegrau(degraus[Math.min(count, degraus.length) - 1]);
+      escolhido = { count };
+    }
+    if (!podeAplicar(permissao)) {
+      if (escolhido) db.restaurarPunicao(sidP, userId, antes);
+      console.warn(`[PUNIÇÃO] ${userId} em ${sidP}: quem decidiu não tem ${permissao} — nada aplicado`);
+      await log.registrar(ctx, "punicoes", { titulo: "⚖️ Punição não aplicada",
+        descricao: `<@${userId}> — quem decidiu não tem **${permissao}** para o próximo passo; nada foi feito.`,
+        en: { titulo: "⚖️ Punishment not applied", descricao: `<@${userId}> — whoever decided lacks **${permissao}** for the next step; nothing was done.` },
+        es: { titulo: "⚖️ Castigo no aplicado", descricao: `<@${userId}> — quien decidió no tiene **${permissao}** para el siguiente paso; no se hizo nada.` } });
+      return { recusado: true, permissao };
+    }
+  }
 
   const linhaNota = (nota != null)
     ? `\n**${tr(ctx, "Nota", "Score", "Puntuación")}:** ${nota.toFixed(1)}/10` : "";
@@ -386,7 +438,7 @@ async function aplicarPunicao(ctx, opts) {
     try {
       await banir(server, userId, { reason: `[AutoMod] ${motivo}` });
       acao = tr(ctx, "🔨 usuário BANIDO", "🔨 user BANNED", "🔨 usuario BANEADO");
-      await banGlobal.registrar(ctx, userId, motivo, "automod",
+      await banGlobal.registrar(ctx, userId, motivo, origemBan,
         { nome: message?.author?.username ?? null, membro: message?.member ?? message?.author ?? null });
     }
     catch (e) { console.error("[PUNIÇÃO][BAN]", descreverErro(e));
@@ -444,8 +496,8 @@ async function aplicarPunicao(ctx, opts) {
     return;
   }
 
-  const sid   = ctx.serverId ?? server?.id;
-  const count = db.somarAviso(sid, userId, motivo, { validadeMs: validadeDosAvisos(polGlobal) });
+  const sid   = sidP;
+  const count = escolhido?.count ?? db.somarAviso(sid, userId, motivo, { validadeMs: validadeDosAvisos(polGlobal) });
   const degraus = escadaDePunicao(pol);
   // Passou do último degrau definido? Fica no último (que é o ban).
   const degrau = degraus[Math.min(count, degraus.length) - 1];
@@ -517,7 +569,7 @@ async function aplicarPunicao(ctx, opts) {
   let acao = tr(ctx, "banido", "banned", "baneado");
   try {
     await banir(server, userId, { reason: `[AutoMod] ${motivo} (${count} avisos)` });
-    await banGlobal.registrar(ctx, userId, `${motivo} (${count} avisos)`, "automod",
+    await banGlobal.registrar(ctx, userId, `${motivo} (${count} avisos)`, origemBan,
       { nome: message?.author?.username ?? null, membro: message?.member ?? message?.author ?? null });
   } catch (e) {
     console.error("[PUNIÇÃO][BAN]", descreverErro(e));
@@ -1260,22 +1312,8 @@ export async function removerCargoSilence(server, userId, roleId, ctx) {
   }
   return { removido: true };
 }
-// ── Sinal da staff para a fila do dono (31 out 2026, P3a) ─────────────────
-// Cada warn/timeout/kick/ban manual (punir.js) vira um SINAL na fila de revisão
-// do dono do bot: a staff achou que alguém passou do limite — o dono compara
-// com o que os detectores fizeram. Nunca pune nada por si (acao "nenhuma") e
-// guarda só o necessário: o tipo, o servidor, o alvo, o canal, a mensagem
-// respondida (se a punição foi por resposta) e o motivo curto, sem menções.
-// Quem da staff agiu NÃO vai. Erro da fila nunca atrapalha a punição.
-export const TIPOS_SINAL_STAFF = ["warn", "timeout", "kick", "ban"];
-export async function sinalDaStaff(ctx, { tipo, alvoId, canalId = null, msgId = null, motivo = "" } = {}) {
-  if (!TIPOS_SINAL_STAFF.includes(tipo) || !alvoId || !ctx?.serverId) return null;
-  const trecho = assuntos.trechoDoCaso(motivo);
-  return assuntos.registrarNaFila({
-    tipo: "staff", categoria: `staff:${tipo}`, serverId: ctx.serverId, userId: alvoId, canalId, msgId,
-    origem: "staff", certeza: "media", nota: null, acao: "nenhuma", evidencia: trecho ? { trecho } : {}, detector: "staff",
-  });
-}
+// (31 out 2026, P3a, staff — R13) Saiu o `sinalDaStaff`: a punição manual da staff virava um
+// sinal na fila do dono do bot. O que a staff decide é dela e não vai ao dono.
 
 // Só para testes: a checagem de tema da última mensagem (roda em segundo plano).
 let ultimaVerificacaoDeAssunto = null;

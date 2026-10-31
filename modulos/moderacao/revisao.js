@@ -1,29 +1,28 @@
-// revisao.js — a fila de revisão do dono do bot (P3a, 31 out 2026).
+// revisao.js — a amostra diária do dono do bot (P3a, 31 out 2026).
 //
-// Os detectores (perfil, assuntos, imagens) e a ação manual da staff registram aqui
-// cada caso (`registrarCaso`). A fila decide sozinha o que chega ao dono:
-//   - entram: certeza média e baixa, discordância entre detectores, ação manual da
-//     staff (só como SINAL: a fila nunca pune nada) e uma amostra aleatória de todos
-//     os servidores (o que os detectores não puniram + o que puniram com certeza alta);
-//   - por dia, no máximo REVISAO_POR_DIA (10) casos, por DM com a Judy — nunca num
-//     canal: primeiro os de mais dúvida (nota perto do limiar), depois a amostra;
+// (31 out 2026, P3a, staff — R13) O dono do bot NÃO julga os casos dos servidores: o caso
+// duvidoso (certeza média/baixa, discordância) é da STAFF do servidor (casos-staff.js), e o
+// que ela decide vale só ali. Ao dono chega SÓ uma amostra, para medir o acerto e calibrar o
+// padrão GLOBAL do limiar:
+//   - entram: um sorteio de `REVISAO_AMOSTRA` das decisões dos detectores (punidas, alertadas
+//     à staff) e do que eles não puniram (`amostrar`), com tetos de 3 por servidor por dia e
+//     40 por dia no total; o resto não é guardado;
+//   - por dia, no máximo REVISAO_POR_DIA (10) casos, por DM com a Judy — nunca num canal —,
+//     um por servidor, sorteados; o que a escolha do dia não pega é apagado na mesma rodada;
 //   - o dono responde ✅ (o bot acertou) ou ❌ (errou) reagindo, ou com `&caso`.
-// O que o dono julga treina a moderação, sem modelo novo:
-//   1. na hora: caso novo muito parecido com um julgado herda o veredito (imagem:
-//      dHash com distância de Hamming ≤ 6; texto: MinHash de trigramas, Jaccard ≥ 0,8);
-//   2. toda noite (a rodada diária): o limiar de cada categoria é recalculado para a
-//      faixa de certeza alta manter precisão ≥ 95% nos casos julgados; o resumo ao
-//      dono mostra o acerto medido por categoria.
-// Retenção (PRIVACIDADE.md): trecho e link somem em 7 dias; caso julgado fica só
-// com hash/impressão + veredito (sem pessoa nem servidor, nem o pseudônimo); caso não
-// julgado some em 14 dias; caso herdado (só impressão + veredito) some em 30 dias; a
-// amostra que a escolha do dia não pegou é apagada na hora. A mensagem na DM do dono
-// de um caso que perdeu o trecho/link é editada para uma versão curta, sem eles.
+// O veredito do dono só MEDE (o resumo diário) e recalcula, toda noite, o limiar global de
+// cada categoria (faixa de certeza alta com precisão ≥ 95%). Ele nunca age sobre pessoa nem
+// caso de servidor e não vira herança (a herança é por servidor, da staff).
+// Retenção (PRIVACIDADE.md): trecho e link somem em 7 dias; caso julgado fica só com
+// hash/impressão + veredito (sem pessoa nem servidor, nem o pseudônimo); caso não julgado
+// some em 14 dias; a amostra que a escolha do dia não pegou é apagada na hora. A mensagem
+// na DM do dono de um caso que perdeu o trecho/link é editada para uma versão curta.
 // (31 out 2026, P3a, revisão) Com a fila desligada (sem `configurar`, ou `REVISAO_*`
 // inválido) nada é gravado — a retenção não teria timer —, mas a retenção do que já
 // existe roda no boot do mesmo jeito.
 //
-// Um timer só, e só ligado quando há caso esperando (`armar`).
+// Um timer só, e só ligado quando há o que fazer (`armar`). O limiar de cada servidor (os
+// vereditos da staff dele) é do casos-staff.js, no ciclo de 6 h do main.js — não daqui.
 
 import { createHash } from "node:crypto";
 import * as db from "../core/db.js";
@@ -35,8 +34,10 @@ import { registrarErro } from "../core/erros.js";
 import { tr } from "../core/i18n.js";
 
 // ── vocabulário da interface (BRIEF-P3a) ──
-export const TIPOS = new Set(["perfil-imagem", "perfil-texto", "assunto", "imagem", "staff"]);
-export const ORIGENS = new Set(["detector", "staff", "amostra", "discordancia"]);   // + "dono" (`&caso perdeu`), interno
+// (31 out 2026, P3a, staff) antes: também o tipo/origem "staff" (o sinal da punição manual) e a
+// origem "dono" (`&caso perdeu`). Agora: o que é da staff não vai ao dono.
+export const TIPOS = new Set(["perfil-imagem", "perfil-texto", "assunto", "imagem"]);
+export const ORIGENS = new Set(["detector", "amostra", "discordancia"]);
 export const CERTEZAS = new Set(["alta", "media", "baixa"]);
 export const ACOES = new Set(["punido", "alertado", "nenhuma"]);
 const CATEGORIA = /^[a-z0-9][a-z0-9:_-]{0,39}$/;
@@ -47,18 +48,17 @@ export const MIN_NA_FAIXA = 10;          // casos na faixa alta para confiar na 
 export const PRECISAO_ALVO = 0.95;
 export const LIMIAR_MIN = 0.5, LIMIAR_MAX = 0.98;   // nunca fora disso
 export const PASSO_MAX = 0.05;           // quanto o limiar anda por noite, no máximo
-export const RIGIDO_DESCONTO = 0.1;      // `&caso servidor <id> rigido`: o limiar desce isto
 export const HAMMING_MAX = 6;            // dHash 64 bits: até 6 bits diferentes = a mesma imagem
 export const JACCARD_MIN = 0.8;          // impressão de texto: 80% dos trigramas em comum
 export const AMOSTRA_TETO_SERVIDOR = 3;  // amostras guardadas por servidor por dia
 export const AMOSTRA_TETO_DIA = 40;      // amostras guardadas por dia, somando todos
-export const STAFF_POR_DIA = 3;          // (revisão P3a) sinais da staff na escolha do dia, no máximo
 export const TRECHO_MAX = 300;
 const DIA = 86400e3;
 
 export const porDia = () => numero("REVISAO_POR_DIA", 10, { min: 1, max: 100, inteiro: true });
 export const horaDaRodada = () => numero("REVISAO_HORA", 21, { min: 0, max: 23, inteiro: true });
-export const fracaoDaAmostra = () => numero("REVISAO_AMOSTRA", 0.002, { min: 0, max: 0.1 });
+// (31 out 2026, P3a, staff) padrão 0,02 (antes 0,002): só a amostra chega ao dono agora
+export const fracaoDaAmostra = () => numero("REVISAO_AMOSTRA", 0.02, { min: 0, max: 0.1 });
 
 export const inicioDoDia = (agora = Date.now()) => Math.floor(agora / DIA) * DIA;   // UTC
 export const donos = () => (process.env.SUPER_ADMINS || "").split(",").map((x) => x.trim()).filter(Boolean);
@@ -138,14 +138,14 @@ export function distanciaHash(a, b) {
   }
   return a === b ? 0 : Infinity;
 }
-const limparHash = (h) => { const s = String(h ?? "").trim().toLowerCase(); return /^[0-9a-f]{8,128}$/.test(s) ? s : null; };
+export const limparHash = (h) => { const s = String(h ?? "").trim().toLowerCase(); return /^[0-9a-f]{8,128}$/.test(s) ? s : null; };
 // A impressão fica para sempre (sobrevive à retenção e sai no `&caso exportar`). Só os formatos
 // que não levam a ninguém ficam como vieram: `m1:` (MinHash do texto), `dhash:<16 hex>` e o
 // próprio `h1:`. Todo o resto — ex.: `arquivo:<id do anexo>`, a do perfil quando a imagem não
 // tem hash, seja qual for o formato do ID — vira um resumo sha256 (`h1:`; só casa igual).
 // (31 out 2026, P3a, revisão) antes só virava resumo o que parecia um ULID.
 const IMPRESSAO_CRUA = /^(m1:[0-9a-f]{512}|dhash:[0-9a-f]{16}|h1:[0-9a-f]{32})$/;
-const limparImpressao = (i) => {
+export const limparImpressao = (i) => {
   const s = String(i ?? "").trim();
   if (!s || s.length > 600 || !/^[\w:+/=.-]+$/.test(s)) return null;
   if (IMPRESSAO_CRUA.test(s)) return s;
@@ -159,36 +159,31 @@ export function linkDeOrigem(link) {
   return /(^|\.)(stoatusercontent\.com|stoat\.chat|revoltusercontent\.com|revolt\.chat)$/i.test(u.hostname) ? u.href : null;
 }
 
-// ── a herança ──
-let referencias = new Map();   // categoria → linhas (cache; zera a cada veredito)
-function refsDe(categoria) {
-  if (!referencias.has(categoria)) {
-    if (referencias.size > 200) referencias = new Map();
-    referencias.set(categoria, db.filaReferencias(categoria));
-  }
-  return referencias.get(categoria);
+// ── a comparação (a herança por servidor usa: casos-staff.js) ──
+// O hash e a impressão de uma evidência, do jeito que ficam guardados
+export function impressoesDe(ev = {}) {
+  return { hash: limparHash(ev.hash), impressao: limparImpressao(ev.impressao) ?? impressaoDeTexto(ev.texto ?? ev.trecho ?? "") ?? null };
 }
-// `"certo"` = o dono já disse que algo assim é violação; `"errou"` = que não é; null = nada parecido
-export function vereditoParecido({ tipo = null, categoria, hash = null, impressao = null, texto = null } = {}) {
-  const cat = String(categoria ?? "").toLowerCase();
-  if (!CATEGORIA.test(cat)) return null;
+// A referência mais parecida (imagem: Hamming ≤ 6; texto: Jaccard ≥ 0,8), ou null. `refs` vem
+// do mais novo para o mais velho: no empate, vale o mais novo.
+export function maisParecido(refs, { hash = null, impressao = null, texto = null } = {}) {
   const h = limparHash(hash);
   const imp = limparImpressao(impressao) ?? (texto ? impressaoDeTexto(texto) : null);
   if (!h && !imp) return null;
   let melhor = null, nota = 0;
-  for (const r of refsDe(cat)) {   // mais recentes primeiro: no empate, vale o veredito mais novo
+  for (const r of refs ?? []) {
     let s = 0;
     if (h && r.hash) { const d = distanciaHash(h, r.hash); if (d <= HAMMING_MAX) s = 1 - d / 64; }
     if (imp && r.impressao) { const j = semelhancaTexto(imp, r.impressao); if (j >= JACCARD_MIN) s = Math.max(s, j); }
     if (s > nota) { nota = s; melhor = r; }
   }
-  return melhor ? (melhor.violacao ? "certo" : "errou") : null;
+  return melhor;
 }
 
 // ── a amostra ──
 // O detector chama para o que NÃO puniu; com true, registra o caso com `origem: "amostra"`.
-// A certeza alta do detector passa pelo mesmo sorteio e pelos mesmos tetos dentro do
-// `registrarCaso` (sorteado = reserva da amostra, para medir a faixa alta; o resto não é guardado).
+// As decisões do detector (punidas, alertadas à staff) passam pelo mesmo sorteio e pelos mesmos
+// tetos dentro do `registrarCaso` (o resto não é guardado).
 let sortear = Math.random;
 export function amostrar({ serverId } = {}, { agora = Date.now(), sorteio = sortear } = {}) {
   try {
@@ -201,30 +196,23 @@ function cabeAmostra(serverId, agora) {
   return db.filaAmostrasDesde(hoje) < AMOSTRA_TETO_DIA && db.filaAmostrasDesde(hoje, serverId) < AMOSTRA_TETO_SERVIDOR;
 }
 
-// ── os limiares ──
+// ── os limiares (o padrão GLOBAL; o de cada servidor: casos-staff.js) ──
 const padroes = new Map();      // categoria → o padrão que o detector usa (para a 1ª calibração)
 const limiaresCache = new Map();
-let rigidos = null;
-export function limiar(categoria, padrao, { serverId = null } = {}) {
+export function limiar(categoria, padrao) {
   const cat = String(categoria ?? "").toLowerCase();
   if (typeof padrao === "number" && Number.isFinite(padrao) && !padroes.has(cat)) padroes.set(cat, padrao);
-  return limiarDe(cat, padrao, serverId);
+  return limiarDe(cat, padrao);
 }
-// o mesmo, sem anotar o padrão (a fila consulta com o que o detector anotou)
-const limiarAtual = (cat) => limiarDe(cat, padroes.get(cat) ?? db.filaLimiar(cat)?.padrao ?? null, null);
-function limiarDe(cat, padrao, serverId) {
+// o mesmo, sem anotar o padrão (a fila e os servidores consultam com o que o detector anotou)
+export const limiarGlobal = (cat) => limiarDe(cat, padroes.get(cat) ?? db.filaLimiar(cat)?.padrao ?? null);
+function limiarDe(cat, padrao) {
   if (!limiaresCache.has(cat)) {
     let r = null;
     try { r = db.filaLimiar(cat); } catch (e) { registrarErro("REVISAO:limiar", e); }
     limiaresCache.set(cat, r && r.casos >= MIN_JULGADOS ? r.limiar : null);
   }
-  let v = limiaresCache.get(cat) ?? padrao;
-  if (serverId && typeof v === "number") {
-    try { rigidos ??= new Set(db.filaServidoresRigidos()); } catch (e) { registrarErro("REVISAO:rigidos", e); rigidos = new Set(); }
-    // rígido = max(0,5; normal − 0,1) — e nunca acima do normal (um padrão abaixo de 0,5 fica como está)
-    if (rigidos.has(String(serverId))) v = Math.min(v, Math.max(LIMIAR_MIN, Math.round((v - RIGIDO_DESCONTO) * 1000) / 1000));
-  }
-  return v;
+  return limiaresCache.get(cat) ?? padrao;
 }
 // A conta da noite, pura: o menor limiar t (entre as notas julgadas) em que os casos com
 // nota ≥ t são violação em ≥ 95% — com pelo menos MIN_NA_FAIXA casos na faixa. Sem t
@@ -250,7 +238,7 @@ export function precisaoNaFaixa(casos, t) {
 export function recalcularLimiares(agora = Date.now()) {
   const porCat = new Map();
   for (const c of db.filaJulgados({ limite: 20000 })) {
-    if (c.origem === "dono" || typeof c.nota !== "number") continue;
+    if (typeof c.nota !== "number") continue;
     const l = porCat.get(c.categoria) ?? [];
     if (l.length < 500) l.push(c);   // os 500 mais recentes de cada categoria
     porCat.set(c.categoria, l);
@@ -270,37 +258,25 @@ export function recalcularLimiares(agora = Date.now()) {
 }
 
 // ── registrar ──
-// (31 out 2026, P3a, revisão) Fila desligada (cfg null) → nada é gravado. Certeza alta do
-// detector → só o que o sorteio da amostra pegar (com os tetos dela); o resto não é guardado.
-// Nos dois casos o `herdado` é calculado do mesmo jeito (o detector usa).
+// (31 out 2026, P3a, staff) Só a AMOSTRA é guardada: toda decisão do detector (qualquer
+// certeza; punida, alertada à staff ou nada) passa pelo sorteio de REVISAO_AMOSTRA e pelos
+// tetos; `origem: "amostra"` (o que o detector não puniu, já sorteado por `amostrar`) só pelos
+// tetos. Fila desligada (cfg null) → nada é gravado. Devolve `{ codigo }` (null = não guardado).
+// Antes: média/baixa e o sinal da staff viravam "candidato" na fila do dono, e o veredito dele
+// virava herança (`herdado`) — agora isso é da staff de cada servidor (casos-staff.js).
 export function registrarCaso(dados = {}, { agora = Date.now(), sorteio = sortear } = {}) {
   try {
     const c = normalizar(dados);
-    if (!c) return { codigo: null, herdado: null };
-    const herdado = vereditoParecido({ categoria: c.categoria, hash: c.hash, impressao: c.impressao });
-    if (!cfg) return { codigo: null, herdado };
-    const alta = c.origem === "detector" && c.certeza === "alta";
-    if (alta && (!c.serverId || sorteio() >= fracaoDaAmostra() || !cabeAmostra(c.serverId, agora))) return { codigo: null, herdado };
-    let estado;
-    if (herdado) estado = "herdado";
-    else if (c.origem === "amostra") {
-      if (!cabeAmostra(c.serverId, agora)) return { codigo: null, herdado: null };
-      estado = "amostra";
-    } else if (alta) estado = "registro";
-    else estado = "candidato";
+    if (!c || !cfg) return { codigo: null };
+    if (c.origem !== "amostra" && (sorteio() >= fracaoDaAmostra())) return { codigo: null };
+    if (!c.serverId || !cabeAmostra(c.serverId, agora)) return { codigo: null };
     const codigo = novoCodigo();
-    const linha = { ...c, codigo, criadoEm: agora, estado };
-    if (herdado) {
-      // herdado: o detector já sabe o que fazer; nada que identifique alguém fica guardado (nem o pseudônimo)
-      Object.assign(linha, { veredito: herdado, violacao: herdado === "certo" ? 1 : 0, julgadoEm: agora, limpoEm: agora,
-        serverId: null, servidor: null, userId: null, canalId: null, msgId: null, link: null, trecho: null });
-    }
-    db.filaInserir(linha);
-    if (!herdado) armar(agora);
-    return { codigo, herdado };
+    db.filaInserir({ ...c, codigo, criadoEm: agora, estado: c.origem === "amostra" ? "amostra" : "registro" });
+    armar(agora);
+    return { codigo };
   } catch (e) {
     registrarErro("REVISAO:registrar", e);
-    return { codigo: null, herdado: null };
+    return { codigo: null };
   }
 }
 function normalizar(d) {
@@ -322,87 +298,42 @@ function normalizar(d) {
     serverId, servidor: serverId ? pseudonimo(serverId) : null,
     userId: id(d.userId), canalId: id(d.canalId), msgId: id(d.msgId),
     link: linkDeOrigem(ev.link), trecho,
-    hash: limparHash(ev.hash),
-    impressao: limparImpressao(ev.impressao) ?? impressaoDeTexto(ev.texto ?? ev.trecho ?? "") ?? null,
+    ...impressoesDe(ev),
   };
 }
 
 // ── julgar ──
-const ganchos = new Set();
-export function quandoJulgado(fn) { if (typeof fn === "function") ganchos.add(fn); return () => ganchos.delete(fn); }
-async function avisarGanchos(caso) {
-  const info = {
-    codigo: caso.codigo, tipo: caso.tipo, categoria: caso.categoria, serverId: caso.serverId, userId: caso.userId,
-    canalId: caso.canalId, msgId: caso.msgId, origem: caso.origem, certeza: caso.certeza, nota: caso.nota, acao: caso.acao, detector: caso.detector ?? null,
-    veredito: caso.veredito, violacao: !!caso.violacao, evidencia: { link: caso.link, hash: caso.hash, impressao: caso.impressao },
-  };
-  for (const fn of ganchos) {
-    try { await fn(info); } catch (e) { registrarErro("REVISAO:gancho", e); }
-  }
-}
 // O bot "alegou violação" em todo caso, menos na amostra do que ele não puniu.
 // violação = (o dono disse "certo") === (o bot alegou)
+// (31 out 2026, P3a, staff) o veredito do dono só mede e calibra o padrão global: não avisa
+// detector nenhum (antes: `quandoJulgado`, que punia/devolvia a voz no perfil) e não vira herança.
 export const alegou = (caso) => caso.origem !== "amostra" || (caso.acao ?? "nenhuma") !== "nenhuma";
-export async function julgar(codigo, veredito, { agora = Date.now() } = {}) {
+export function julgar(codigo, veredito, { agora = Date.now() } = {}) {
   if (veredito !== "certo" && veredito !== "errou") return null;
   const caso = db.filaCaso(codigo);
   if (!caso) return null;
   const violacao = (veredito === "certo") === alegou(caso) ? 1 : 0;
   db.filaAtualizar(caso.codigo, { veredito, violacao, julgadoEm: agora, estado: "julgado" });
-  referencias = new Map();
-  const novo = { ...caso, veredito, violacao, julgadoEm: agora, estado: "julgado" };
-  await avisarGanchos(novo);
   armar(agora);
-  return novo;
+  return { ...caso, veredito, violacao, julgadoEm: agora, estado: "julgado" };
 }
-// `&caso perdeu …`: o dono aponta o que o bot deixou passar. Vira um caso julgado (violação),
-// que vale para a herança em qualquer categoria; os ganchos decidem se punem.
-export async function registrarPerdido({ tipo, categoria = "perdeu", serverId = null, userId = null, canalId = null, msgId = null, evidencia = {} }, { agora = Date.now() } = {}) {
-  const c = normalizar({ tipo, categoria, serverId, userId, canalId, msgId, origem: "staff", certeza: null, nota: null, acao: "nenhuma", evidencia, detector: "dono" });
-  if (!c || !cfg) return null;   // fila desligada: nada é gravado (a retenção não teria timer)
-  if (!c.hash && !c.impressao && !c.link) return null;
-  const linha = { ...c, origem: "dono", codigo: novoCodigo(), criadoEm: agora, estado: "julgado", veredito: "certo", violacao: 1, julgadoEm: agora };
-  db.filaInserir(linha);
-  referencias = new Map();
-  await avisarGanchos(linha);
-  armar(agora);   // (revisão P3a) o caso tem trecho/IDs: a retenção de 7 dias precisa do timer
-  return linha;
-}
-export function definirModoServidor(serverId, modo, agora = Date.now()) {
-  if (modo !== "rigido" && modo !== "padrao") return false;
-  db.filaDefinirModoServidor(serverId, modo, agora);
-  rigidos = null;
-  return true;
-}
-export const modoDoServidor = (serverId) => db.filaModoServidor(serverId);
 
 // ── a escolha do dia ──
-// Primeiro os de mais dúvida (nota mais perto do limiar da categoria; staff e discordância
-// sem nota contam como dúvida máxima), mais antigos primeiro no empate; depois a amostra
-// (sorteada, um por servidor). A amostra tem vagas reservadas (1/5 do teto, mínimo 1),
-// senão nunca entraria — e a precisão da faixa alta nunca seria medida.
-export function duvida(caso) {
-  if (typeof caso.nota !== "number") return 0;
-  const t = limiarAtual(caso.categoria);
-  return Math.abs(caso.nota - (typeof t === "number" ? t : 0.5));
-}
+// Só a amostra: sorteada, um caso por servidor, até as vagas do dia (REVISAO_POR_DIA menos os
+// já enviados hoje). (31 out 2026, P3a, staff) antes: primeiro os casos de dúvida (candidatos),
+// com vagas reservadas à amostra e no máximo 3 sinais da staff — eles agora são da staff.
 export function escolherDoDia({ agora = Date.now(), vagas = null, sorteio = Math.random } = {}) {
   const livres = vagas ?? Math.max(0, porDia() - db.filaEnviadosDesde(inicioDoDia(agora)));
   if (livres <= 0) return [];
-  const desde = agora - db.FILA_DIAS_PENDENTE * DIA;
-  // (revisão P3a) no máximo STAFF_POR_DIA sinais da staff por dia (contando os já enviados hoje);
-  // o resto espera na fila como os outros, até o prazo de 14 dias
-  let vagasStaff = Math.max(0, STAFF_POR_DIA - db.filaEnviadosDesde(inicioDoDia(agora), { origem: "staff" }));
-  const candidatos = db.filaPorEstado("candidato", desde).sort((a, b) => duvida(a) - duvida(b) || a.criadoEm - b.criadoEm)
-    .filter((c) => c.origem !== "staff" || vagasStaff-- > 0);
-  const pool = db.filaPorEstado(["amostra", "registro"], desde);
+  const pool = db.filaPorEstado(["amostra", "registro"], agora - db.FILA_DIAS_PENDENTE * DIA);
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(sorteio() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
-  const vistos = new Set(), amostra = [];
-  for (const c of pool) { const k = c.serverId ?? c.codigo; if (vistos.has(k)) continue; vistos.add(k); amostra.push(c); }
-  const reserva = Math.min(amostra.length, Math.max(1, Math.round(porDia() / 5)), livres);
-  const escolhidos = candidatos.slice(0, livres - reserva);
-  for (const c of amostra) { if (escolhidos.length >= livres) break; escolhidos.push(c); }
-  for (const c of candidatos.slice(livres - reserva)) { if (escolhidos.length >= livres) break; if (!escolhidos.includes(c)) escolhidos.push(c); }
+  const vistos = new Set(), escolhidos = [];
+  for (const c of pool) {
+    if (escolhidos.length >= livres) break;
+    const k = c.serverId ?? c.codigo;
+    if (vistos.has(k)) continue;
+    vistos.add(k); escolhidos.push(c);
+  }
   return escolhidos;
 }
 
@@ -442,20 +373,19 @@ async function dmDoDono() {
 }
 const NOME_TIPO = {
   "perfil-imagem": ["perfil (imagem)", "profile (image)", "perfil (imagen)"], "perfil-texto": ["perfil (texto)", "profile (text)", "perfil (texto)"],
-  assunto: ["assunto", "topic", "tema"], imagem: ["imagem", "image", "imagen"], staff: ["staff", "staff", "staff"],
+  assunto: ["assunto", "topic", "tema"], imagem: ["imagem", "image", "imagen"],
 };
 const NOME_CERTEZA = { alta: ["alta", "high", "alta"], media: ["média", "medium", "media"], baixa: ["baixa", "low", "baja"] };
-const NOME_ORIGEM = { detector: ["detector", "detector", "detector"], staff: ["staff (sinal)", "staff (signal)", "staff (señal)"],
-  amostra: ["amostra", "sample", "muestra"], discordancia: ["discordância", "disagreement", "discrepancia"], dono: ["você", "you", "tú"] };
-const NOME_ACAO = { punido: ["punido", "punished", "castigado"], alertado: ["alertado", "alerted", "alertado"], nenhuma: ["nenhuma", "none", "ninguna"] };
+const NOME_ORIGEM = { detector: ["detector", "detector", "detector"], amostra: ["amostra", "sample", "muestra"], discordancia: ["discordância", "disagreement", "discrepancia"] };
+const NOME_ACAO = { punido: ["punido", "punished", "castigado"], alertado: ["alerta à staff", "staff alert", "alerta al staff"], nenhuma: ["nenhuma", "none", "ninguna"] };
 const nome = (tab, k, ctx) => { const x = tab[k]; return x ? tr(ctx, x[0], x[1], x[2]) : String(k ?? "—"); };
 const num = (n) => (typeof n === "number" ? n.toFixed(2) : "—");
 // O embed de um caso, como a DM mostra (nada de ID, nome de servidor nem cópia de imagem)
 export function embedDoCaso(caso, ctx = ctxDono()) {
-  const t = typeof caso.nota === "number" ? limiarAtual(caso.categoria) : null;
+  const t = typeof caso.nota === "number" ? limiarGlobal(caso.categoria) : null;
   const linhas = [
     `**${tr(ctx, "Nota", "Score", "Nota")}** ${num(caso.nota)}${typeof t === "number" ? ` · **${tr(ctx, "limiar", "threshold", "umbral")}** ${num(t)}` : ""}${caso.certeza ? ` · **${tr(ctx, "certeza", "certainty", "certeza")}** ${nome(NOME_CERTEZA, caso.certeza, ctx)}` : ""}`,
-    `**${tr(ctx, "Origem", "Source", "Origen")}** ${nome(NOME_ORIGEM, caso.origem, ctx)}${caso.detector && caso.detector !== "dono" ? ` (${caso.detector})` : ""} · **${tr(ctx, "ação do bot", "bot action", "acción del bot")}** ${nome(NOME_ACAO, caso.acao, ctx)}`,
+    `**${tr(ctx, "Origem", "Source", "Origen")}** ${nome(NOME_ORIGEM, caso.origem, ctx)}${caso.detector ? ` (${caso.detector})` : ""} · **${tr(ctx, "ação do bot", "bot action", "acción del bot")}** ${nome(NOME_ACAO, caso.acao, ctx)}`,
   ];
   if (caso.servidor) linhas.push(`**${tr(ctx, "Servidor", "Server", "Servidor")}** \`${caso.servidor}\``);
   if (caso.link) linhas.push(`**${tr(ctx, "Na origem", "At the source", "En el origen")}** [${tr(ctx, "abrir", "open", "abrir")}](${caso.link})`);
@@ -475,7 +405,7 @@ export async function enviarCasos(casos, { agora = Date.now() } = {}) {
     try { msg = await cfg.enviar(dm, embedDoCaso(c)); }
     catch (e) { registrarErro("REVISAO:enviar", e); }
     if (!msg?.id) break;   // a DM falhou: o resto fica para depois
-    db.filaAtualizar(c.codigo, { estado: c.estado === "julgado" || c.estado === "herdado" ? c.estado : "enviado", enviadoEm: agora, dmCanalId: dm.id ?? null, dmMsgId: msg.id });
+    db.filaAtualizar(c.codigo, { estado: c.estado === "julgado" ? c.estado : "enviado", enviadoEm: agora, dmCanalId: dm.id ?? null, dmMsgId: msg.id });
     enviados.push(c.codigo);
     for (const e of ["✅", "❌"]) {
       try { await msg.react?.(encodeURIComponent(e)); } catch (err) { registrarErro("REVISAO:react", err); break; }
@@ -526,6 +456,13 @@ function editorPadrao(client) {
     return client.api.patch(`/channels/${encodeURIComponent(canalId)}/messages/${encodeURIComponent(msgId)}`, payload);
   };
 }
+// (revisão staff) `&caso <código>` reenvia o caso: a mensagem antiga na DM vira a versão curta antes
+// (senão ela ficaria com o trecho e o link, já sem ID no banco para a retenção editar depois).
+export async function encurtarDmAntiga(caso, { editar = cfg?.editar ?? null } = {}) {
+  if (!caso?.dmMsgId || typeof editar !== "function") return false;
+  try { await editar(caso.dmCanalId, caso.dmMsgId, embedCurto(caso)); return true; }
+  catch (e) { console.warn(`[REVISAO] a DM antiga do caso ${caso.codigo} não foi editada (${String(e?.type ?? e?.name ?? "erro").slice(0, 40)})`); return false; }
+}
 export async function limparDms({ agora = Date.now(), editar = cfg?.editar ?? null } = {}) {
   if (typeof editar !== "function") return { editadas: 0, falhas: 0 };   // sem cliente: fica para a próxima rodada
   let editadas = 0, falhas = 0;
@@ -547,7 +484,6 @@ export async function limparDms({ agora = Date.now(), editar = cfg?.editar ?? nu
 export function acertoPorCategoria(agora = Date.now()) {
   const m = new Map();
   for (const c of db.filaJulgados({ desde: agora - 30 * DIA })) {
-    if (c.origem === "dono") continue;
     const x = m.get(c.categoria) ?? { categoria: c.categoria, julgados: 0, certos: 0 };
     x.julgados++; if (c.veredito === "certo") x.certos++;
     m.set(c.categoria, x);
@@ -560,12 +496,11 @@ export function acertoPorCategoria(agora = Date.now()) {
 }
 export function resumoDoDia({ agora = Date.now(), mudancas = [], ctx = ctxDono() } = {}) {
   const ultima = Number(db.filaEstado("ultimaRodada") ?? 0) || inicioDoDia(agora) - DIA;
-  const julgadosDesde = db.filaJulgados({ desde: ultima }).filter((c) => c.origem !== "dono").length;
-  const pendentes = db.filaContar(["candidato", "enviado"], agora - db.FILA_DIAS_PENDENTE * DIA);
-  const herdados = db.filaContarHerdados(ultima);
+  const julgadosDesde = db.filaJulgados({ desde: ultima }).length;
+  const pendentes = db.filaContar(["enviado"], agora - db.FILA_DIAS_PENDENTE * DIA);
   const pct = (x) => (x === null || x === undefined ? "—" : `${Math.round(x * 100)}%`);
   const linhas = [
-    `${tr(ctx, "Julgados", "Judged", "Juzgados")} **${julgadosDesde}** · ${tr(ctx, "herdados", "inherited", "heredados")} **${herdados}** · ${tr(ctx, "esperando", "waiting", "esperando")} **${pendentes}**`,
+    `${tr(ctx, "Julgados", "Judged", "Juzgados")} **${julgadosDesde}** · ${tr(ctx, "esperando", "waiting", "esperando")} **${pendentes}**`,
   ];
   const cats = acertoPorCategoria(agora);
   if (cats.length) {
@@ -573,7 +508,7 @@ export function resumoDoDia({ agora = Date.now(), mudancas = [], ctx = ctxDono()
     for (const c of cats) linhas.push(`\`${c.categoria}\` ${pct(c.acerto)} (${c.certos}/${c.julgados}) · ${tr(ctx, "faixa alta", "high band", "franja alta")} ${pct(c.precisaoAlta)} · ${tr(ctx, "limiar", "threshold", "umbral")} ${c.limiar === null ? tr(ctx, "padrão", "default", "predeterminado") : num(c.limiar)}`);
   }
   for (const m of mudancas) linhas.push(`↕ \`${m.categoria}\` ${num(m.de)} → ${num(m.para)}`);
-  return { title: tr(ctx, "📋 Fila de revisão", "📋 Review queue", "📋 Cola de revisión"), description: linhas.join("\n"), colour: "#5865F2", julgadosDesde, pendentes, herdados };
+  return { title: tr(ctx, "📋 Fila de revisão", "📋 Review queue", "📋 Cola de revisión"), description: linhas.join("\n"), colour: "#5865F2", julgadosDesde, pendentes };
 }
 export async function rodadaDiaria({ agora = Date.now() } = {}) {
   reter(agora);
@@ -596,7 +531,7 @@ export async function rodadaDiaria({ agora = Date.now() } = {}) {
 }
 // Para o `&caso` sem DM ou sem caso novo: quantos esperam e quantos já foram hoje
 export function situacao(agora = Date.now()) {
-  return { esperando: db.filaContar(["candidato", "enviado"], agora - db.FILA_DIAS_PENDENTE * DIA), hoje: db.filaEnviadosDesde(inicioDoDia(agora)), teto: porDia() };
+  return { esperando: db.filaContar(["enviado"], agora - db.FILA_DIAS_PENDENTE * DIA), hoje: db.filaEnviadosDesde(inicioDoDia(agora)), teto: porDia() };
 }
 // `&caso` sozinho: os próximos da fila agora (até completar o teto do dia)
 export async function enviarAgora({ agora = Date.now() } = {}) {
@@ -610,10 +545,10 @@ export function proximaRodada(agora, ultima = 0, hora = horaDaRodada()) {
   if (ultima < hoje) return agora + 60e3;                                   // a de hoje passou sem rodar (bot desligado)
   return hoje + DIA;
 }
-// Há o que fazer na rodada: caso ainda com identificação (fila, amostra, enviado sem resposta,
-// julgado há menos de 7 dias — a retenção precisa passar), mensagem da DM ainda por editar,
-// caso herdado (some em 30 dias) ou veredito novo para o resumo.
-export function temTrabalho(agora = Date.now()) {
+// Há o que fazer na rodada: caso ainda com identificação (amostra, enviado sem resposta,
+// julgado há menos de 7 dias — a retenção precisa passar), mensagem da DM ainda por editar ou
+// veredito novo do dono para o resumo.
+export function temTrabalho() {
   if (db.filaTemVivos()) return true;
   const ultima = Number(db.filaEstado("ultimaRodada") ?? 0);
   return db.filaJulgados({ desde: ultima + 1, limite: 1 }).length > 0;
@@ -622,7 +557,7 @@ export function armar(agora = Date.now()) {
   if (!cfg || cfg.semTimer || timer) return false;
   let quando;
   try {
-    if (!temTrabalho(agora)) return false;
+    if (!temTrabalho()) return false;
     quando = proximaRodada(agora, Number(db.filaEstado("ultimaRodada") ?? 0));
   } catch (e) { registrarErro("REVISAO:armar", e); return false; }
   timer = setTimeout(async () => {
@@ -645,13 +580,8 @@ export function exportar(agora = Date.now()) {
   return { versao: 1, geradoEm: new Date(agora).toISOString().slice(0, 10), limiares: db.filaLimiares().map((l) => ({ categoria: l.categoria, limiar: l.limiar, casos: l.casos, precisao: l.precisao })), casos };
 }
 
-// ── `&caso perdeu`: a evidência do perfil vem da área perfil (hash), quando ela se registra ──
-let perfil = {};
-export function configurarPerfil({ evidenciaDoPerfil = null, evidenciaDoLink = null } = {}) { perfil = { evidenciaDoPerfil, evidenciaDoLink }; }
-export const ganchosDoPerfil = () => perfil;
-
 // testes
-export function _zerar() { referencias = new Map(); limiaresCache.clear(); padroes.clear(); rigidos = null; ganchos.clear(); perfil = {}; sortear = Math.random; desligar(); }
+export function _zerar() { limiaresCache.clear(); padroes.clear(); sortear = Math.random; desligar(); }
 // Só para testes: a fila ligada (grava casos), sem cliente e sem o timer da rodada.
 export function _ligarParaTestes({ editar = null } = {}) { desligar(); cfg = { client: null, enviar: null, editar, semTimer: true }; }
 // Só para testes: o sorteio da amostra (inclusive o da certeza alta dentro do `registrarCaso`).

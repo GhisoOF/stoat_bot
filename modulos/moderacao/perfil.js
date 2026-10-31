@@ -12,8 +12,10 @@
 //   • imagem (foto, foto de servidor, banner): o hash (dHash) ANTES do modelo —
 //     o que o dono já julgou não gasta GPU —, depois o modelo de visão (avatar.js).
 // Cada achado tem uma nota (0–1) e uma categoria; a CERTEZA decide (certeza.js):
-// alta → age (o padrão: silenciar ATÉ TROCAR); média/baixa → fila do dono, sem
-// punir. O que o dono julgou (✅/❌) vale antes da nota, pela fila.
+// alta → age (o padrão: silenciar ATÉ TROCAR); média/baixa → (31 out 2026, P3a, staff)
+// alerta à STAFF do servidor com ✅/❌ (casos-staff.js), sem punir — antes ia à fila do
+// dono. O que a staff DESTE servidor já julgou (✅/❌) vale antes da nota, só aqui.
+// A amostra do dono (revisao.js) só mede: nunca age sobre ninguém.
 //
 // De onde vem cada parte, sem chamar a API por servidor (decisão do dono):
 //   • nome, status e foto: o cache de usuários da stoat.js (evento userUpdate);
@@ -30,6 +32,7 @@ import * as cz from "./certeza.js";
 import { detectarArte, conhecido as arteConhecida, idiomaDoTexto } from "./arte-texto.js";
 import { parecido, hashUtil, sha256 } from "./hash.js";
 import { CONHECIDOS } from "./conhecidos.js";
+import { maisParecido } from "./revisao.js";
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
 import { tirarTimeout } from "./timeout.js";
@@ -48,8 +51,10 @@ export const PUNIVEIS = new Set(["sexual", "odio", "gore"]);
 export const PREFIXO_TEXTO = "perfil-texto:";
 export const categoriaDeTexto = (c) => `${PREFIXO_TEXTO}${c}`;
 const categoriaBase = (c) => String(c ?? "").replace(PREFIXO_TEXTO, "");
-// categorias que o dono pode ter julgado numa imagem (a consulta antes do modelo)
-const CATEGORIAS_IMAGEM = ["sexual", "odio", "gore", "perdeu"];
+// categorias que a staff do servidor pode ter julgado numa imagem (a herança, por servidor)
+const CATEGORIAS_IMAGEM = ["sexual", "odio", "gore"];
+// o motivo de um achado que a staff deste servidor já confirmou num caso parecido
+const MOTIVO_STAFF = "confirmado pela staff";
 let conhecidos = CONHECIDOS;
 // Só para testes: o caso 1 não pode ser reproduzido (a arte não existe em lugar nenhum)
 export function _trocarConhecidos(lista) { const antes = conhecidos; conhecidos = lista ?? CONHECIDOS; return antes; }
@@ -133,44 +138,34 @@ export const resumoArte = (arte) => {
     + (idioma ? ` · idioma: ${idioma}` : "");
 };
 
-// O dono já julgou uma arte parecida? Pelo conjunto (hash + impressão do texto) e por desenho.
-async function herancaDaArte(arte, texto) {
-  const consultas = [{ hash: arte.conjunto.dhash, texto }, ...arte.desenhos.map((d) => ({ hash: d.dhash }))];
-  let errou = false;
-  for (const q of consultas) {
-    const v = await cz.vereditoParecido({ tipo: "perfil-texto", categoria: categoriaDeTexto("arte-texto"), ...q });
-    if (v === "certo") return "certo";
-    if (v === "errou") errou = true;
-  }
-  return errou ? "errou" : null;
-}
-
-// → { achado, visto }. `achado`: o que vai à decisão; `visto`: o que pode ir à amostra.
+// → { achado, visto, consultas }. `achado`: o que vai à decisão; `visto`: o que pode ir à
+// amostra; `consultas`: o que perguntar à herança de cada servidor (casos-staff.js).
+// (31 out 2026, P3a, staff) antes a herança (do dono) era consultada aqui, uma vez para todos
+// os servidores; agora é por servidor, em `aplicarNoServidor`.
 export async function avaliarTexto(campo, texto) {
   const t = String(texto ?? "");
-  if (!t.trim()) return { achado: null, visto: null };
+  if (!t.trim()) return { achado: null, visto: null, consultas: [] };
   const arte = detectarArte(t);
   if (arte) {
     // a arte em si nunca vai para a fila nem para a staff: o resumo, o hash e a impressão
     const evidencia = { trecho: resumoArte(arte), texto: t, hash: hashUtil(arte.conjunto.dhash) ? arte.conjunto.dhash : null };
     const k = arteConhecida(arte, conhecidos);
-    if (k) return { achado: { campo, tipo: "perfil-texto", categoria: categoriaDeTexto(k.categoria), nota: 1, motivos: ["arte em texto conhecida"], conhecido: k.id, herdado: null, evidencia }, visto: null };
-    const herdado = await herancaDaArte(arte, t);
-    if (herdado === "errou") return { achado: null, visto: null };
-    return { achado: { campo, tipo: "perfil-texto", categoria: categoriaDeTexto("arte-texto"), nota: 0.6, motivos: ["arte em texto"], herdado, evidencia }, visto: null };
+    if (k) return { achado: { campo, tipo: "perfil-texto", categoria: categoriaDeTexto(k.categoria), nota: 1, motivos: ["arte em texto conhecida"], conhecido: k.id, herdado: null, evidencia }, visto: null, consultas: [] };
+    const categoria = categoriaDeTexto("arte-texto");
+    // (revisão staff) a herança da staff numa arte só casa pelo sha256 EXATO do texto normalizado (a
+    // tolerância do dHash fica só para a lista CONHECIDOS): o caso da staff guarda só esse sha256
+    const exato = arte.impressoes?.[0] ?? null;
+    return {
+      achado: { campo, tipo: "perfil-texto", categoria, nota: 0.6, motivos: ["arte em texto"], herdado: null, evidencia, evidenciaStaff: { hash: exato } }, visto: null,
+      consultas: exato ? [{ categoria, hash: exato }] : [],
+    };
   }
   const n = notaDoTexto(t);
   const cat = n.categoria ? categoriaDeTexto(n.categoria) : null;
   const evidencia = { trecho: t.slice(0, 300), texto: t };
-  // sem categoria: só o que o dono apontou (`&caso perdeu`, que vale para qualquer categoria)
-  const herdado = await cz.vereditoParecido({ tipo: "perfil-texto", categoria: cat ?? "perdeu", texto: t });
   const visto = { campo, tipo: "perfil-texto", categoria: cat ?? categoriaDeTexto("sexual"), nota: n.nota, evidencia };
-  if (herdado === "errou") return { achado: null, visto };
-  if (!cat && herdado !== "certo") return { achado: null, visto };
-  return {
-    achado: { campo, tipo: "perfil-texto", categoria: cat ?? "perdeu", nota: n.nota, motivos: cat ? n.motivos : ["confirmado pelo dono do bot"], herdado, evidencia },
-    visto,
-  };
+  if (!cat) return { achado: null, visto, consultas: [] };
+  return { achado: { campo, tipo: "perfil-texto", categoria: cat, nota: n.nota, motivos: n.motivos, herdado: null, evidencia }, visto, consultas: [{ categoria: cat, texto: t }] };
 }
 
 // ── A imagem ────────────────────────────────────────────────────────────────
@@ -180,42 +175,36 @@ export async function avaliarTexto(campo, texto) {
 const impressaoDaImagem = (arquivo, hash) => (hash ? `dhash:${hash}` : `arquivo:${arquivo.id}`);
 // `falhou: true` = a análise não aconteceu (modelo fora do ar, fila cheia, erro, arquivo
 // ilegível): a parte conta como "não sei" — nunca como "trocou e passou limpo".
+// (31 out 2026, P3a, staff) antes, o que o dono já tinha julgado era consultado ANTES do
+// modelo (para todos os servidores); agora a herança é por servidor (`consultas`), depois.
 export async function avaliarImagem(campo, valor) {
   const arquivo = av.arquivoDe(valor, TAG[campo] ?? "avatars");
-  if (!arquivo) return { achado: null, visto: null, falhou: true };
+  if (!arquivo) return { achado: null, visto: null, falhou: true, consultas: [] };
   const h = await av.hashDaFoto(arquivo);
   const hash = hashUtil(h) ? h : null;
   const evidencia = { link: arquivo.url, hash, impressao: impressaoDaImagem(arquivo, hash) };
   const base = { campo, tipo: "perfil-imagem" };
-  // 1. conhecido proibido (a lista do repositório)
+  // 1. conhecido proibido (a lista do repositório, global)
   const k = hash ? conhecidos.find((c) => c.tipo === "perfil-imagem" && (c.dhash ?? []).some((r) => parecido(r, hash))) : null;
-  if (k) return { achado: { ...base, categoria: k.categoria, nota: 1, motivos: ["confirmado pelo dono do bot"], conhecido: k.id, herdado: null, evidencia }, visto: null };
-  // 2. o que o dono já julgou, antes do modelo
-  if (hash) {
-    let errou = false;
-    for (const categoria of CATEGORIAS_IMAGEM) {
-      const v = await cz.vereditoParecido({ tipo: "perfil-imagem", categoria, hash });
-      if (v === "certo") return { achado: { ...base, categoria, nota: null, motivos: ["confirmado pelo dono do bot"], herdado: "certo", evidencia }, visto: null };
-      if (v === "errou") errou = true;
-    }
-    if (errou) return { achado: null, visto: null };   // o dono disse que algo assim não é violação: nem gasta o modelo
-  }
-  // 3. o modelo de visão
+  if (k) return { achado: { ...base, categoria: k.categoria, nota: 1, motivos: ["já conhecido (lista do bot)"], conhecido: k.id, herdado: null, evidencia }, visto: null, consultas: [] };
+  const consultas = CATEGORIAS_IMAGEM.map((categoria) => ({ categoria, hash, impressao: evidencia.impressao }));
+  // 2. o modelo de visão
   const r = await av.analisarFoto(arquivo);
-  if (!r) return { achado: null, visto: null, falhou: true };
+  if (!r) return { achado: null, visto: null, falhou: true, consultas, evidencia };
   const comTrecho = { ...evidencia, trecho: String(r.descricao ?? "").slice(0, 300) };
   const visto = { ...base, categoria: r.categoria ?? "sexual", nota: r.nota ?? 0, evidencia: comTrecho };
-  if (!r.categoria) return { achado: null, visto };
+  if (!r.categoria) return { achado: null, visto, consultas, evidencia: comTrecho };
   return {
     achado: { ...base, categoria: r.categoria, nota: r.nota, motivos: r.motivos, grave: !!r.grave, descricao: String(r.descricao ?? ""), herdado: null, evidencia: comTrecho },
-    visto,
+    visto, consultas,
   };
 }
 
 // Uma vez por evento (vale para todos os servidores da pessoa). `incertos`: as partes que
 // não deu para analisar (imagem sem o modelo de visão, ou a análise falhou) — "não sei".
+// `consultas`: por parte, o que perguntar à herança de cada servidor.
 export async function avaliarValores(valores) {
-  const achados = [], vistos = [], incertos = [];
+  const achados = [], vistos = [], incertos = [], consultas = [];
   for (const [campo, valor] of Object.entries(valores ?? {})) {
     if (vazio(valor)) continue;   // apagou a parte: limpa
     let r = null;
@@ -225,38 +214,89 @@ export async function avaliarValores(valores) {
     if (r?.falhou) incertos.push(campo);
     if (r?.achado) achados.push(r.achado);
     if (r?.visto) vistos.push(r.visto);
+    if (r?.consultas?.length) {
+      const tipo = CAMPOS_IMAGEM.includes(campo) ? "perfil-imagem" : "perfil-texto";
+      consultas.push({ campo, tipo, lista: r.consultas, evidencia: r.achado?.evidencia ?? r.visto?.evidencia ?? r.evidencia ?? {} });
+    }
   }
-  return { achados, vistos, incertos };
+  return { achados, vistos, incertos, consultas };
 }
 
-// ── A fila do dono: um caso por pessoa, parte e conteúdo (6 h) ──────────────
+// A herança DESTE servidor (o que a staff dele já julgou): o ✅ vale antes do ❌
+async function herancaNoServidor(lista, serverId) {
+  let errou = false;
+  for (const q of lista) {
+    const v = await cz.vereditoParecido({ ...q, serverId });
+    if (v === "certo") return { veredito: "certo", categoria: q.categoria };
+    if (v === "errou") errou = true;
+  }
+  return errou ? { veredito: "errou" } : null;
+}
+// Os achados deste servidor: a herança acrescenta (✅) ou tira (❌) — a lista de conhecidos
+// (global) não muda. Uma parte que a staff disse ❌ e o modelo não conseguiu ver conta como limpa.
+async function comHeranca(aval, serverId) {
+  const achados = [...(aval?.achados ?? [])];
+  const incertos = new Set(aval?.incertos ?? []);
+  for (const c of aval?.consultas ?? []) {
+    const h = await herancaNoServidor(c.lista, serverId);
+    if (!h) continue;
+    const i = achados.findIndex((a) => a.campo === c.campo);
+    if (i >= 0 && achados[i].conhecido) continue;
+    if (h.veredito === "errou") { if (i >= 0) achados.splice(i, 1); incertos.delete(c.campo); continue; }
+    if (i >= 0) achados[i] = { ...achados[i], herdado: "certo", motivos: [...new Set([...(achados[i].motivos ?? []), MOTIVO_STAFF])] };
+    else achados.push({ campo: c.campo, tipo: c.tipo, categoria: h.categoria, nota: null, motivos: [MOTIVO_STAFF], herdado: "certo", evidencia: c.evidencia });
+    incertos.delete(c.campo);
+  }
+  return { achados, vistos: aval?.vistos ?? [], incertos: [...incertos] };
+}
+
+// ── A amostra do dono e o alerta à staff: um por pessoa, parte e conteúdo (6 h) ──
 const registrados = new Map();   // chave → quando
 const REGISTRO_MS = 6 * 3600_000;
 const chaveDo = (userId, d) => `${userId}:${d.campo}:${d.evidencia?.hash ?? d.evidencia?.impressao ?? sha256(d.evidencia?.texto ?? d.evidencia?.link ?? "")}`;
-async function registrarUmaVez(d, { serverId, userId, acao, origem = "detector", certeza = d.certeza }, agora = Date.now()) {
+function umaVez(chave, agora) {
   for (const [k, t] of registrados) if (agora - t > REGISTRO_MS) registrados.delete(k);
-  const chave = `${origem}:${chaveDo(userId, d)}`;
-  if (registrados.has(chave)) return { repetido: true };
-  const r = await cz.registrar({
+  if (registrados.has(chave)) return false;
+  registrados.set(chave, agora);
+  if (registrados.size > 5000) registrados.delete(registrados.keys().next().value);
+  return true;
+}
+async function registrarUmaVez(d, { serverId, userId, acao, origem = "detector", certeza = d.certeza }, agora = Date.now()) {
+  if (!umaVez(`${origem}:${chaveDo(userId, d)}`, agora)) return { repetido: true };
+  return cz.registrar({
     tipo: d.tipo, categoria: d.categoria, serverId, userId, canalId: null, msgId: null, origem,
     certeza, nota: typeof d.nota === "number" ? d.nota : null, acao, evidencia: d.evidencia, detector: `perfil:${d.campo}`,
   });
-  if (r) { registrados.set(chave, agora); if (registrados.size > 5000) registrados.delete(registrados.keys().next().value); }
-  return r;
+}
+// O que o ✅ da staff faz, no alerta (a ação do módulo)
+const O_QUE_FAZ = {
+  silenciar: ["silenciar até trocar", "silence until changed", "silenciar hasta que cambie"],
+  expulsar: ["expulsar", "kick", "expulsar"], banir: ["banir", "ban", "banear"],
+  alertar: ["registrar que é violação", "record it as a violation", "registrar que es una infracción"],
+};
+// O caso duvidoso vai à staff deste servidor (uma vez por pessoa, parte e conteúdo, a cada 6 h)
+async function alertarDuvida({ ctx, server, userId, origem, d, L }, agora = Date.now()) {
+  if (!umaVez(`staff:${server.id}:${chaveDo(userId, d)}`, agora)) return { repetido: true };
+  const acao = av.acaoDoAvatar(ctx.config?.automod?.antiAvatar ?? {});
+  const feito = L === "es" ? "nada todavía — decide el staff" : L === "en" ? "nothing yet — the staff decides" : "nada ainda — a staff decide";
+  const embed = av.embedDoAlerta(ctx, { server, userId, origem, achados: [d], feito, acao, L, conferir: true });
+  return cz.alertarStaff({ ctx, server, embed, oQueFaz: O_QUE_FAZ[acao],
+    caso: { tipo: d.tipo, categoria: d.categoria, userId, nota: typeof d.nota === "number" ? d.nota : null, parte: d.campo, evidencia: d.evidenciaStaff ?? d.evidencia } });
 }
 
 // ── Num servidor ────────────────────────────────────────────────────────────
 // `valores`: as partes checadas neste evento (uma parte com valor null foi
 // apagada — conta como "trocou" para devolver a voz). Devolve o que fez.
-// `limpas`: partes que o dono já disse (❌) que não são violação, com o mesmo conteúdo de agora
-// (ver `aoJulgar`) — contam como trocadas e limpas, seja o que for que a análise diga.
+// `limpas`: partes que a staff deste servidor disse (❌) que não são violação, com o mesmo
+// conteúdo de agora (ver `decisaoDaStaff`) — contam como trocadas e limpas.
 export async function aplicarNoServidor({ ctx, server, userId, aval: avalBruta, valores, origem, limpas = null }) {
   const L = idiomaDe(ctx);
+  const herdada = await comHeranca(avalBruta, server.id);
   const aval = limpas?.size ? {
-    achados: (avalBruta?.achados ?? []).filter((a) => !limpas.has(a.campo)),
-    vistos: (avalBruta?.vistos ?? []).filter((v) => !limpas.has(v.campo)),
-    incertos: (avalBruta?.incertos ?? []).filter((c) => !limpas.has(c)),
-  } : avalBruta;
+    achados: herdada.achados.filter((a) => !limpas.has(a.campo)),
+    vistos: herdada.vistos.filter((v) => !limpas.has(v.campo)),
+    incertos: herdada.incertos.filter((c) => !limpas.has(c)),
+  } : herdada;
   const decididos = [];
   for (const a of aval?.achados ?? []) {
     const certeza = a.conhecido || a.herdado === "certo" ? "alta"
@@ -265,14 +305,14 @@ export async function aplicarNoServidor({ ctx, server, userId, aval: avalBruta, 
     decididos.push({ ...a, certeza, decisao });
   }
   const punir = decididos.filter((d) => d.decisao === "punir");
-  const paraFila = decididos.filter((d) => d.decisao === "fila");
+  const paraStaff = decididos.filter((d) => d.decisao === "staff");
   const campos = Object.keys(valores ?? {});
   const cfg = ctx.config?.automod?.antiAvatar ?? {};
   let antes = db.perfilSilencioLer(server.id, userId);
   // a staff já tirou o silêncio (`&automod sentinela liberar`, `&untimeout`): o registro não vale mais
   if (antes && !db.estaSilenciado(server.id, userId)) { db.perfilSilencioTirar(server.id, userId); antes = null; }
   // (31 out 2026, P3a, revisão) só sai do silêncio a parte que foi trocada E reanalisada com
-  // sucesso E limpa (nada para punir nem para a fila). Análise que falhou = "não sei": fica.
+  // sucesso E limpa (nada para punir nem para a staff). Análise que falhou = "não sei": fica.
   const incertos = new Set(aval?.incertos ?? []);
   const comAchado = new Set(decididos.filter((d) => d.decisao !== "nada").map((d) => d.campo));
   const limpos = campos.filter((c) => !incertos.has(c) && !comAchado.has(c));
@@ -292,29 +332,25 @@ export async function aplicarNoServidor({ ctx, server, userId, aval: avalBruta, 
     else devolveu = await devolverVoz({ ctx, server, userId, L, fim: antes.fimAplicado ?? null });
   }
 
-  // a fila do dono: o punido (para medir o acerto) e o de certeza média/baixa (para julgar)
-  const semFila = [];
-  for (const d of [...punir, ...paraFila]) {
-    const acaoCaso = d.decisao !== "punir" ? "nenhuma" : ok && acao !== "alertar" ? "punido" : "alertado";
-    const r = await registrarUmaVez(d, { serverId: server.id, userId, acao: acaoCaso });
-    if (r === null && d.decisao === "fila" && d.certeza === "media") semFila.push(d);
-  }
-  // sem a fila (pacote sem ela, ou ela falhou): o caminho antigo — a staff confere, ninguém é punido
-  if (semFila.length) {
-    feito = L === "es" ? "nada — revisa el perfil" : L === "en" ? "nothing — check the profile" : "nada — confira o perfil";
-    await av.alertar(ctx, { server, userId, origem, achados: semFila, feito, acao: "alertar", L, conferir: true });
+  // os casos duvidosos: alerta à staff deste servidor, com ✅/❌ (ninguém é punido)
+  const alertados = new Set();
+  for (const d of paraStaff) if ((await alertarDuvida({ ctx, server, userId, origem, d, L }))?.id) alertados.add(d);
+  // a amostra do dono (a fila sorteia): o punido e o que foi à staff — só para medir o acerto
+  for (const d of [...punir, ...paraStaff]) {
+    const acaoCaso = d.decisao !== "punir" ? (alertados.has(d) ? "alertado" : "nenhuma") : ok && acao !== "alertar" ? "punido" : "alertado";
+    await registrarUmaVez(d, { serverId: server.id, userId, acao: acaoCaso });
   }
   // a amostra aleatória (a fila decide): só do que não apitou nada
   if (!decididos.length && aval?.vistos?.length && await cz.amostrar({ serverId: server.id })) {
     const v = aval.vistos[Math.floor(Math.random() * aval.vistos.length)];
     await registrarUmaVez(v, { serverId: server.id, userId, acao: "nenhuma", origem: "amostra", certeza: "baixa" });
   }
-  console.log(`[PERFIL] ${userId} em ${server.id} (${origem}; ${campos.join(",") || "—"}): ${punir.length ? `PUNIU [${punir.map((p) => `${p.campo}:${p.categoria}`).join(", ")}]` : paraFila.length ? `fila [${paraFila.map((p) => `${p.campo}:${p.categoria}:${p.certeza}`).join(", ")}]` : "ok"}${devolveu ? " · voz devolvida" : ""}`);
+  console.log(`[PERFIL] ${userId} em ${server.id} (${origem}; ${campos.join(",") || "—"}): ${punir.length ? `PUNIU [${punir.map((p) => `${p.campo}:${p.categoria}`).join(", ")}]` : paraStaff.length ? `staff [${paraStaff.map((p) => `${p.campo}:${p.categoria}:${p.certeza}`).join(", ")}]` : "ok"}${devolveu ? " · voz devolvida" : ""}`);
   return {
     apitou: punir.length > 0,
-    suspeita: !punir.length && paraFila.some((d) => d.certeza === "media"),
-    acao: punir.length ? acao : paraFila.length ? "fila" : null,
-    feito, motivos: (punir.length ? punir : paraFila).flatMap((d) => d.motivos), achados: decididos, devolveu,
+    suspeita: !punir.length && paraStaff.some((d) => d.certeza === "media"),
+    acao: punir.length ? acao : paraStaff.length ? "staff" : null,
+    feito, motivos: (punir.length ? punir : paraStaff).flatMap((d) => d.motivos), achados: decididos, devolveu,
   };
 }
 
@@ -350,11 +386,19 @@ export async function verificarPerfil({ ctx, server, userId, member = null, user
 
 // A mesma troca em todo servidor da Judy onde a pessoa está — pelo cache de
 // membros; a avaliação é uma só.
+// (revisão staff) Os servidores em que a pessoa está silenciada pelo perfil também entram, mesmo fora
+// do cache (depois de reiniciar o cache está vazio, e o silêncio "até trocar" ficaria preso): só
+// nesses há uma busca do membro — o resto continua só pelo cache.
+async function membroSilenciado(server, userId) {
+  try { return await server.fetchMember(userId); } catch { return null; }
+}
 async function checarEmTodos({ user, userId, valores, client, criarContexto, origem, limpas = null }) {
   const alvos = [];
+  const silenciada = new Set(db.perfilSilencioServidores(userId));
   for (const server of [...(client?.servers?.values?.() ?? [])]) {
-    const member = client?.serverMembers?.getByKey?.({ server: server.id, user: userId }) ?? null;
-    if (!member) continue;   // não está no cache deste servidor: não é checado aqui (sem fetchMember)
+    let member = client?.serverMembers?.getByKey?.({ server: server.id, user: userId }) ?? null;
+    if (!member && silenciada.has(server.id)) member = await membroSilenciado(server, userId);
+    if (!member) continue;   // não está no cache deste servidor (nem silenciada ali): não é checado aqui
     const ctx = criarContexto(server.id);
     if (!ligado(ctx?.config) || av.isento(ctx, server, userId, member, user)) continue;
     alvos.push({ server, ctx });
@@ -423,67 +467,79 @@ export async function aoEventoCru(ev, { client, criarContexto }) {
   return checarEmTodos({ user, userId: ev.id, valores, client, criarContexto, origem: "troca" });
 }
 
-// O dono julgou um caso de perfil e o bot tinha feito o contrário — é violação e
-// não puniu (✅ num caso de certeza média, ❌ na amostra, `&caso perdeu`), ou puniu
-// e não era (❌ num punido): o perfil ATUAL da pessoa é revisto. O caso julgado já
-// está no banco da fila — o que ainda for parecido herda o veredito: o "certo"
-// pune, o "errou" devolve a voz; o que a pessoa já trocou fica como está.
-// (31 out 2026, P3a, revisão) A pessoa ainda silenciada pelo perfil no servidor do caso também é
-// revista, mesmo que o bot não tenha punido aquele caso: o ❌ do dono (não é violação) numa parte
-// que estava "não sei"/média, com o mesmo conteúdo de agora, conta como limpa — e, se todas as
-// partes que apitaram estão limpas, a voz volta (só o timeout do perfil: `soSeAte`). O ✅ mantém.
-export async function aoJulgar(info, { client, criarContexto }) {
-  if (!String(info?.tipo ?? "").startsWith("perfil-") || !info.userId) return [];
-  const punido = info.acao === "punido";
-  const silenciado = !!(info.serverId && db.perfilSilencioLer(info.serverId, info.userId));
-  if (!!info.violacao === punido && !silenciado) return [];   // o bot já tinha feito o certo
-  const user = client?.users?.get?.(info.userId) ?? null;
-  if (!user) return [];
-  const p = await buscarPerfil(user);
-  const valores = valoresDe({ user, perfil: p });
-  const limpas = new Set();
-  const campo = String(info.detector ?? "").startsWith("perfil:") ? String(info.detector).slice(7) : null;
-  if (silenciado && !info.violacao && campo && campo in valores && await mesmoConteudo(campo, valores[campo], info.evidencia)) limpas.add(campo);
-  return checarEmTodos({ user, userId: info.userId, valores, client, criarContexto, origem: "revisao", limpas });
+// ── O ✅/❌ da staff num caso duvidoso de perfil (casos-staff.js) ──────────────
+// (31 out 2026, P3a, staff) Antes era o dono do bot que, pela fila, punia ou devolvia a voz
+// (`aoJulgar`). Agora é a staff do servidor do caso, e só ali.
+const PERMISSAO = { alertar: "ManageMessages", silenciar: "TimeoutMembers", expulsar: "KickMembers", banir: "BanMembers" };
+// A permissão que a reação pede: a da ação do módulo (a mesma do comando de moderação)
+export const permissaoDaStaff = (_caso, ctx) => PERMISSAO[av.acaoDoAvatar(ctx?.config?.automod?.antiAvatar ?? {})];
+// O valor atual da parte, sem chamar a API por servidor: usuário (cache ou uma busca), perfil
+// (bio/banner, guardado 6 h) e membro (só o cache). `ok: false` = não deu para ler.
+async function valorAtual(client, serverId, userId, campo) {
+  if (campo === "apelido" || campo === "avatarServidor") {
+    const member = client?.serverMembers?.getByKey?.({ server: serverId, user: userId }) ?? null;
+    return { ok: !!member, valor: member ? valoresDe({ member })[campo] : null };
+  }
+  const user = client?.users?.get?.(userId) ?? await client?.users?.fetch?.(userId).catch(() => null) ?? null;
+  if (!user) return { ok: false, valor: null };
+  if (campo === "bio" || campo === "banner") {
+    const p = await buscarPerfil(user);
+    return { ok: !!p, valor: p ? p[campo] ?? null : null };
+  }
+  return { ok: true, valor: valoresDe({ user })[campo] };
 }
-// O que o dono julgou é o que está no perfil agora? Imagem: o mesmo arquivo (link) ou o mesmo hash;
-// texto: a herança pela impressão já cuida (o ❌ vira "errou" no `avaliarTexto`).
-async function mesmoConteudo(campo, valor, ev = {}) {
-  if (!CAMPOS_IMAGEM.includes(campo) || vazio(valor)) return false;
-  const arquivo = av.arquivoDe(valor, TAG[campo] ?? "avatars");
-  if (!arquivo) return false;
-  if (ev?.link && ev.link === arquivo.url) return true;
-  if (!ev?.hash) return false;
-  const h = await av.hashDaFoto(arquivo);
-  return !!(hashUtil(h) && parecido(ev.hash, h));
+// O que a staff julgou é o que está no perfil agora? Imagem: o mesmo hash (ou o mesmo arquivo);
+// texto: a mesma impressão (ou o mesmo desenho).
+async function mesmoConteudo(campo, valor, caso) {
+  if (vazio(valor)) return false;
+  const ref = [{ hash: caso.hash ?? null, impressao: caso.impressao ?? null }];
+  if (CAMPOS_IMAGEM.includes(campo)) {
+    const arquivo = av.arquivoDe(valor, TAG[campo] ?? "avatars");
+    if (!arquivo) return false;
+    const h = caso.hash ? await av.hashDaFoto(arquivo) : null;
+    return !!maisParecido(ref, { hash: hashUtil(h) ? h : null, impressao: impressaoDaImagem(arquivo, null) });
+  }
+  const arte = detectarArte(String(valor));
+  if (arte) return !!caso.hash && arte.impressoes?.[0] === caso.hash;   // arte: só o sha256 exato
+  return !!maisParecido(ref, { texto: String(valor) });
+}
+export async function decisaoDaStaff({ ctx, server, caso, veredito }) {
+  const L = idiomaDe(ctx);
+  const campo = caso?.parte;
+  if (!caso?.userId || !server || (!CAMPOS_TEXTO.includes(campo) && !CAMPOS_IMAGEM.includes(campo))) return null;
+  // (revisão staff) o módulo desligado depois do alerta: o ✅ não age
+  if (veredito === "certo" && !ligado(ctx.config)) return L === "es" ? "nada — el módulo se desactivó" : L === "en" ? "nothing — the module was turned off" : "nada — o módulo foi desligado";
+  const atual = await valorAtual(ctx.client, server.id, caso.userId, campo);
+  // (revisão staff) sem conseguir ler o perfil agora (teto de buscas, a API falhou): o ✅ não age às cegas —
+  // o caso volta a esperar; o ❌ vale (não pune ninguém), só não devolve a voz sem conferir
+  if (!atual.ok && veredito === "certo") return { reabrir: true, feito: L === "es" ? "nada — no pude leer el perfil ahora" : L === "en" ? "nothing — couldn't read the profile now" : "nada — não deu para ler o perfil agora" };
+  if (!atual.ok) return null;
+  const mesmo = await mesmoConteudo(campo, atual.valor, caso);
+  if (veredito === "errou") {
+    // nada acontece — só a voz volta, se ela ainda estava silenciada por esta parte, com o mesmo conteúdo
+    const antes = db.perfilSilencioLer(server.id, caso.userId);
+    if (!antes?.campos.includes(campo) || !mesmo) return null;
+    const r = await aplicarNoServidor({ ctx, server, userId: caso.userId, aval: { achados: [], vistos: [], incertos: [], consultas: [] },
+      valores: { [campo]: atual.valor ?? null }, origem: "staff", limpas: new Set([campo]) });
+    return r?.devolveu ? (L === "es" ? "se le devolvió la voz" : L === "en" ? "voice given back" : "voz devolvida") : null;
+  }
+  if (!mesmo) return L === "es" ? "nada — la persona ya lo cambió" : L === "en" ? "nothing — the person already changed it" : "nada — a pessoa já trocou";
+  const acao = av.acaoDoAvatar(ctx.config?.automod?.antiAvatar ?? {});
+  const motivo = av.motivoDaPunicao([{ campo, motivos: [MOTIVO_STAFF] }], L);
+  const { feito, ok, ate = null } = await av.aplicarAcao({ ctx, server, userId: caso.userId, acao, motivo, L });
+  if (ok && acao === "silenciar") {
+    const antes = db.perfilSilencioLer(server.id, caso.userId);
+    db.perfilSilencioGravar(server.id, caso.userId, [...(antes?.campos ?? []), campo], motivo, Date.now(), ate);
+  }
+  // (revisão staff) o ban pelo ✅ entra na lista global como o de um `&ban` manual (decisão humana)
+  if (ok && acao === "banir") {
+    try { await (await import("./ban-global.js")).registrar(ctx, caso.userId, motivo, "manual", { nome: ctx.client?.users?.get?.(caso.userId)?.username ?? null }); }
+    catch (e) { registrarErro("PERFIL:banglobal", e); }
+  }
+  return feito;
 }
 
-// ── O `&caso perdeu` da fila: a evidência do perfil (com o hash) ────────────
-export async function evidenciaDoPerfil({ client, userId, parte }) {
-  const user = client?.users?.get?.(userId) ?? await client?.users?.fetch?.(userId).catch(() => null);
-  if (!user) return null;
-  const daImagem = async (valor, tag) => {
-    const arq = av.arquivoDe(valor, tag);
-    if (!arq) return null;
-    const h = await av.hashDaFoto(arq);
-    const hash = hashUtil(h) ? h : null;
-    return { link: arq.url, hash, impressao: impressaoDaImagem(arq, hash) };
-  };
-  if (parte === "avatar") return daImagem(user.avatar, "avatars");
-  const p = await buscarPerfil(user);
-  if (parte === "banner") return daImagem(p?.banner, "backgrounds");
-  const bio = String(p?.bio ?? "");
-  if (!bio.trim()) return null;
-  const arte = detectarArte(bio);
-  return arte ? { trecho: resumoArte(arte), texto: bio, hash: hashUtil(arte.conjunto.dhash) ? arte.conjunto.dhash : null }
-    : { trecho: bio.slice(0, 300), texto: bio };
-}
-export async function evidenciaDoLink({ link }) {
-  const h = await av.hashDaFoto({ id: `link:${link}`, url: link });
-  return hashUtil(h) ? { hash: h } : null;
-}
-
-// ── Ligar (main.js, uma vez): o evento cru e os ganchos da fila ─────────────
+// ── Ligar (main.js, uma vez): o evento cru (a bio e o banner) ───────────────
 let ligadoA = null;
 export async function ligar({ client, criarContexto }) {
   if (!client || ligadoA === client) return false;
@@ -492,9 +548,6 @@ export async function ligar({ client, criarContexto }) {
     if (ev?.type !== "UserUpdate") return;
     aoEventoCru(ev, { client, criarContexto }).catch((e) => registrarErro("PERFIL:evento", e));
   });
-  const f = await cz.fila();
-  f?.configurarPerfil?.({ evidenciaDoPerfil, evidenciaDoLink });
-  f?.quandoJulgado?.((info) => aoJulgar(info, { client, criarContexto }));
   return true;
 }
 

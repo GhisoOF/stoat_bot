@@ -99,7 +99,7 @@ import servidores from "./servidores.js";
 import debug from "./debug.js";
 import reset from "./reset.js";
 import privacidade from "./privacidade.js";
-import caso from "./caso.js";   // (31 out 2026, P3a) a fila de revisão do dono
+import caso from "./caso.js";   // (31 out 2026, P3a) a amostra diária do dono
 
 // A ordem desta lista é a ordem das rotas e da lista de gerenciáveis do `&comando`.
 export const REGISTRO = [

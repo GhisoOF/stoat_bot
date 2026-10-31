@@ -1181,16 +1181,9 @@
   "caso": {
    "acierto": "certo",
    "correct": "certo",
-   "default": "padrao",
-   "estricto": "rigido",
    "export": "exportar",
    "fallo": "errou",
-   "missed": "perdeu",
-   "perdio": "perdeu",
-   "predeterminado": "padrao",
    "right": "certo",
-   "server": "servidor",
-   "strict": "rigido",
    "wrong": "errou"
   },
   "config": {
@@ -2074,11 +2067,7 @@
   "caso": {
    "certo": "right",
    "errou": "wrong",
-   "exportar": "export",
-   "padrao": "default",
-   "perdeu": "missed",
-   "rigido": "strict",
-   "servidor": "server"
+   "exportar": "export"
   },
   "config": {
    "acesso": "access",
@@ -2582,9 +2571,6 @@
    "lista",
    "varrer"
   ],
-  "caso": [
-   "servidor"
-  ],
   "config.acesso": [
    "canais",
    "canal",
@@ -2825,11 +2811,7 @@
   "caso": {
    "certo": "acierto",
    "errou": "fallo",
-   "exportar": "exportar",
-   "padrao": "predeterminado",
-   "perdeu": "perdio",
-   "rigido": "estricto",
-   "servidor": "servidor"
+   "exportar": "exportar"
   },
   "config": {
    "acesso": "acceso",

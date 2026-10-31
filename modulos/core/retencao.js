@@ -38,9 +38,14 @@ const DA_PESSOA = [
     ] },
 ];
 const REVISAO_ROTULO = {
-  pt: "casos na revisão do dono do bot (o caso fica, sem você)",
-  en: "cases in the bot owner's review (the case stays, without you)",
-  es: "casos en la revisión del dueño del bot (el caso queda, sin ti)",
+  pt: "casos na amostra do dono do bot (o caso fica, sem você)",
+  en: "cases in the bot owner's sample (the case stays, without you)",
+  es: "casos en la muestra del dueño del bot (el caso queda, sin ti)",
+};
+const STAFF_ROTULO = {
+  pt: "alertas de caso duvidoso esperando a staff (saem)",
+  en: "doubtful-case alerts waiting for the staff (removed)",
+  es: "alertas de caso dudoso esperando al staff (se quitan)",
 };
 // O que fica, e por quê (o &privacidade apagar diz à pessoa)
 export const FICA_DA_PESSOA = {
@@ -93,6 +98,9 @@ export function dadosDaPessoa(userId, { apagar = false } = {}) {
     const n = apagar ? db.filaEsquecerUsuario(u) : contar("SELECT COUNT(*) n FROM revisao_casos WHERE userId = ?", u);
     r.push({ id: "revisao", rotulo: REVISAO_ROTULO, n });
   }
+  // (31 out 2026, P3a, staff) os casos duvidosos dela que esperam a staff de um servidor saem
+  // (o julgado já não tem a pessoa: só impressão, categoria, nota, veredito e servidor)
+  if (existe("staff_casos")) r.push({ id: "staff", rotulo: STAFF_ROTULO, n: db.staffDaPessoa(u, { apagar }) });
   if (apagar) db.setConsentimento(u, { memoria: false, fioGlobal: false, respondido: true });   // a escolha dela fica: não perguntar de novo
   return r;
 }
@@ -133,8 +141,11 @@ export const DIAS_APOS_SAIDA = Number(process.env.DIAS_APOS_SAIDA || 30);
 // alguém digitava outra palavra desconhecida, e num servidor quieto ficavam para sempre.
 // (31 out 2026, P3a, revisão) o registro do silêncio do perfil vencido (28 dias, o teto do
 // timeout do Stoat): antes só saía quando alguém o lia.
+// (31 out 2026, P3a, staff) o caso duvidoso que esperou 14 dias sem reação da staff; e, dos julgados,
+// o que passou dos 500 mais recentes daquele servidor e categoria.
 export function limparVencidos(agora = Date.now()) {
-  return { palavras: db.limparPalavrasVencidas(agora, { forcar: true }), perfilSilencio: db.perfilSilencioLimparVencidos(agora) };
+  const staff = db.staffReter(agora);
+  return { palavras: db.limparPalavrasVencidas(agora, { forcar: true }), perfilSilencio: db.perfilSilencioLimparVencidos(agora), casosStaff: staff.pendentes, casosStaffAntigos: staff.antigos };
 }
 
 // No `ready`: o servidor que tem config mas a Judy não está nele saiu enquanto

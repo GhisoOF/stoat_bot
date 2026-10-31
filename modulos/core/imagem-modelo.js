@@ -44,11 +44,21 @@ export function urlsDoModelo(env = process.env) {
   return { modelo: env.SD_MODELO_URL || p.modelo };
 }
 
-// O que baixar no arranque: [rótulo, url]
+// (31 out 2026, R10) URL de modelo só do Hugging Face, por https, no formato
+// usuario/repo/resolve/<ref>/<arquivo>. Regex fechada (sem grupo aninhado), sem
+// "..", sem query: o .env não aponta o download para outro lugar da rede.
+const URL_HF = /^(?!.*\.\.)https:\/\/huggingface\.co\/[A-Za-z0-9][\w.-]{0,95}\/[A-Za-z0-9][\w.-]{0,95}\/resolve\/[\w.-]{1,64}\/[\w.\/-]{1,300}$/;
+export const urlDeModeloValida = (url) => typeof url === "string" && URL_HF.test(url);
+
+// O que baixar no arranque: [rótulo, url]. URL fora do padrão lança erro.
 export function arquivosParaBaixar(env = process.env) {
   const u = urlsDoModelo(env);
-  if (u.modelo) return [["modelo de imagem", u.modelo]];
-  return [["modelo de difusão", u.difusao], ["VAE", u.vae], ["LLM do prompt", u.llm]];
+  const lista = u.modelo ? [["modelo de imagem", u.modelo]]
+    : [["modelo de difusão", u.difusao], ["VAE", u.vae], ["LLM do prompt", u.llm]];
+  for (const [rotulo, url] of lista) {
+    if (!urlDeModeloValida(url)) throw new Error(`${rotulo}: a URL tem de ser https://huggingface.co/<usuario>/<repo>/resolve/<ref>/<arquivo>`);
+  }
+  return lista;
 }
 
 export const ehTurbo = (env = process.env) => tipoDoModelo(env) !== "qwen-image" || /turbo/i.test(urlsDoModelo(env).difusao ?? "");

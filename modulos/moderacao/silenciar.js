@@ -15,7 +15,7 @@
 import * as log from "../core/log.js";
 import { citar } from "../core/aliases.js";
 import { tr } from "../core/i18n.js";
-import { descreverErro, tipoDoErro } from "../core/erros.js";
+import { descreverErro, tipoDoErro, registrarErro } from "../core/erros.js";
 import { resolverUsuario } from "../core/ids.js";
 import { lerDuracao, duracaoTexto } from "../core/duracao.js";
 import { MAX_TIMEOUT_MS as MAX_MS } from "./timeout.js";
@@ -106,7 +106,8 @@ export async function cmdSilenciar(message, args, ctx) {
   if (tirar) {
     try {
       await membro.edit({ remove: ["Timeout"] });
-      try { db.silenciarAte(ctx.serverId ?? server?.id, alvoId, 0); db.definirSilenciado(ctx.serverId ?? server?.id, alvoId, false); } catch {}
+      try { db.silenciarAte(ctx.serverId ?? server?.id, alvoId, 0); db.definirSilenciado(ctx.serverId ?? server?.id, alvoId, false); }
+      catch (e) { registrarErro("SILENCIAR:tirar-banco", e); }
       liberarQuarentena(ctx.serverId ?? server?.id, alvoId);
       await log.registrar(ctx, "punicoes", { titulo: "🔊 Silêncio retirado (manual)",
         descricao: `<@${alvoId}> teve o silêncio retirado por <@${message.authorId}>.`,
@@ -131,10 +132,14 @@ export async function cmdSilenciar(message, args, ctx) {
   const motivo = resto.slice(2).join(" ").trim();
   const ate = new Date(Date.now() + dur);
 
+  let semRegistro = false;
   try {
     await membro.edit({ timeout: ate.toISOString() });
-    // registra para reaplicar se a pessoa sair e voltar (o timeout é do membro)
-    try { db.silenciarAte(ctx.serverId ?? server?.id, alvoId, ate.getTime(), motivo || "silêncio manual"); } catch {}
+    // registra para reaplicar se a pessoa sair e voltar (o timeout é do membro).
+    // (31 out 2026, Reparo) se o banco falhar, a resposta DIZ: sem o registro,
+    // sair e voltar ao servidor tira o silêncio.
+    try { db.silenciarAte(ctx.serverId ?? server?.id, alvoId, ate.getTime(), motivo || "silêncio manual"); }
+    catch (e) { semRegistro = true; registrarErro("SILENCIAR:banco", e); }
   } catch (e) {
     const tipo = tipoDoErro(e);
     console.error("[SILENCIAR]", descreverErro(e));
@@ -160,7 +165,8 @@ export async function cmdSilenciar(message, args, ctx) {
       `**Tempo:** ${duracaoTexto(dur)}${ms > MAX_MS ? " _(o máximo)_" : ""} — até ${quando("pt")}`,
       `**Motivo:** ${motivo || "_(nenhum informado)_"}`,
       `**Por:** <@${message.authorId}>`,
-    ].join("\n"),
+      semRegistro ? "⚠️ _Não consegui gravar o silêncio no banco: se a pessoa sair e voltar, ele não é reaplicado._" : null,
+    ].filter(Boolean).join("\n"),
     colour: COR.mod,
   }, {
     title: "🔇 Action executed: TIMEOUT",
@@ -169,7 +175,8 @@ export async function cmdSilenciar(message, args, ctx) {
       `**Time:** ${duracaoTexto(dur, "en")}${ms > MAX_MS ? " _(the maximum)_" : ""} — until ${quando("en")}`,
       `**Reason:** ${motivo || "_(none given)_"}`,
       `**By:** <@${message.authorId}>`,
-    ].join("\n"),
+      semRegistro ? "⚠️ _I couldn't save the timeout in the database: if they leave and rejoin, it won't be reapplied._" : null,
+    ].filter(Boolean).join("\n"),
     colour: COR.mod,
   }, {
     title: "🔇 Acción ejecutada: SILENCIO",
@@ -178,7 +185,8 @@ export async function cmdSilenciar(message, args, ctx) {
       `**Tiempo:** ${duracaoTexto(dur, "es")}${ms > MAX_MS ? " _(el máximo)_" : ""} — hasta ${quando("es")}`,
       `**Motivo:** ${motivo || "_(no se indicó ninguno)_"}`,
       `**Por:** <@${message.authorId}>`,
-    ].join("\n"),
+      semRegistro ? "⚠️ _No pude guardar el silencio en la base de datos: si la persona sale y vuelve, no se reaplica._" : null,
+    ].filter(Boolean).join("\n"),
     colour: COR.mod,
   }));
 }

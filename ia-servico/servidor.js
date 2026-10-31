@@ -3,22 +3,27 @@ import { createServer } from "node:http";
 import { garantirDNS, estaInstalado, servidoresUsados } from "./dns-fallback.js";
 import * as ferramentas from "./ferramentas/index.js";
 import { moderarImagem } from "./ferramentas/ver-imagem.js";
+import { LLM_URL, pedirLLM, modelosDoLLM } from "./llm.js";
+import { chaveServicoIA } from "../modulos/ai/servicos.js";
 
 const PORTA        = Number(process.env.PORTA || 8090);
-const LLM_URL      = (process.env.LLM_URL || "").replace(/\/$/, "");
-const TOKEN_LLM = process.env.TOKEN_IA || process.env.LLM_TOKEN || "";
-const cabecalhosLLM = () => TOKEN_LLM
-  ? { "Content-Type": "application/json", Authorization: `Bearer ${TOKEN_LLM}` }
-  : { "Content-Type": "application/json" };
 const MODELO_PADRAO= process.env.LLM_MODEL || "";
 const NUM_CTX      = Number(process.env.NUM_CTX || 16384);
 const MAX_TOKENS   = Number(process.env.MAX_TOKENS || 4096);
 const MAX_VOLTAS   = Number(process.env.MAX_VOLTAS_FERRAMENTA || 6);
 const TIMEOUT_MS   = Number(process.env.LLM_TIMEOUT_MS || 300000);
 const CONTINUAR_MAX= Number(process.env.CONTINUAR_MAX || 2);   // emendas automáticas em resposta cortada
-const CHAVE        = process.env.IA_SERVICO_CHAVE || process.env.IA_CHAVE || "";   // opcional: exige header x-chave
+const CHAVE        = chaveServicoIA();   // obrigatória: header x-chave
 
 const log = (...a) => console.log("[IA]", ...a);
+
+// (31 out 2026, P1) Sem chave, o serviço não sobe: qualquer processo que alcançasse a
+// porta rodaria ferramentas (ler o código, gerar imagem, buscar na web) em nome do
+// bot. Embutido, o iniciar.js gera uma chave por boot sozinho.
+if (!CHAVE) {
+  console.error("[IA] sem chave (IA_SERVICO_CHAVE ou IA_CHAVE no ambiente): o serviço de IA não sobe sem ela. Defina a mesma chave no .env do bot e do serviço.");
+  process.exit(1);
+}
 
 function limparRaciocinio(texto) {
   return String(texto ?? "")
@@ -49,24 +54,13 @@ async function llm(messages, { modelo, comFerramentas = true, maxTokens = MAX_TO
   // (21 out 2026) o servidor que desligou a geração de imagem: o modelo nem vê a ferramenta
   if (comFerramentas) corpo.tools = ferramentas.definicoes().filter((d) => !(contexto.semImagem && d?.function?.name === "gerar_imagem"));
 
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
-  try {
-    const r = await fetch(`${LLM_URL}/v1/chat/completions`, {
-      method: "POST",
-      headers: cabecalhosLLM(),
-      body: JSON.stringify(corpo),
-      signal: ctrl.signal,
-    });
-    if (!r.ok) throw new Error(`LLM HTTP ${r.status} — ${(await r.text()).slice(0, 200)}`);
-    const j = await r.json();
-    const escolha = j?.choices?.[0] ?? {};
-    const msg = { ...(escolha.message ?? {}) };
-    if (msg.reasoning_content) log(`raciocínio (${msg.reasoning_content.length} chars, descartado): ${msg.reasoning_content.slice(0, 200)}`);
-    if (typeof msg.content === "string") msg.content = limparRaciocinio(msg.content);
-    // Mesmo formato interno de antes, para o resto do arquivo não mudar.
-    return { message: msg, done_reason: escolha.finish_reason ?? "?" };
-  } finally { clearTimeout(t); }
+  const j = await pedirLLM(corpo, { timeoutMs: TIMEOUT_MS });
+  const escolha = j?.choices?.[0] ?? {};
+  const msg = { ...(escolha.message ?? {}) };
+  if (msg.reasoning_content) log(`raciocínio (${msg.reasoning_content.length} chars, descartado): ${msg.reasoning_content.slice(0, 200)}`);
+  if (typeof msg.content === "string") msg.content = limparRaciocinio(msg.content);
+  // Mesmo formato interno de antes, para o resto do arquivo não mudar.
+  return { message: msg, done_reason: escolha.finish_reason ?? "?" };
 }
 
 // (21 out 2026) a Judy fala qualquer língua: a resposta sai na língua da PESSOA, nunca
@@ -77,51 +71,51 @@ function lembreteDeIdioma(idioma) {
     : "Responda na mesma língua da mensagem da pessoa (qualquer língua), independentemente do idioma dos resultados das ferramentas.";
 }
 
+// (31 out 2026, P1) A chamada de ferramenta escrita como TEXTO só conta quando a
+// resposta INTEIRA é a chamada (o JSON puro, ou um bloco ```json só com ele): é o que
+// o template do modelo produz. Uma passada só (JSON.parse) — a varredura antiga
+// abria um objeto em cada "{" e era quadrática: 64 mil "{" seguravam o serviço 11 s.
 function chamadasEmTexto(texto) {
-  const t = String(texto ?? "").trim();
+  let t = String(texto ?? "").trim();
   if (!t.includes("\"name\"") && !t.includes("\"function\"")) return [];
-  const achadas = [];
-  const nomesValidos = new Set(ferramentas.nomes());
-
-  // Candidatos: blocos ```json, e objetos de primeiro nível no texto.
-  const candidatos = [];
-  for (const m of t.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)) candidatos.push(m[1].trim());
-  // Varredura por chaves balanceadas — regex não fecha objeto aninhado.
-  for (let i = 0; i < t.length; i++) {
-    if (t[i] !== "{") continue;
-    let nivel = 0, dentroTexto = false, escapa = false;
-    for (let j = i; j < t.length; j++) {
-      const ch = t[j];
-      if (escapa) { escapa = false; continue; }
-      if (ch === "\\") { escapa = true; continue; }
-      if (ch === "\"") { dentroTexto = !dentroTexto; continue; }
-      if (dentroTexto) continue;
-      if (ch === "{") nivel++;
-      else if (ch === "}") {
-        nivel--;
-        if (nivel === 0) { candidatos.push(t.slice(i, j + 1)); i = j; break; }
-      }
-    }
+  if (t.startsWith("```")) {
+    const quebra = t.indexOf("\n");
+    if (quebra < 0 || t.length < 7 || !t.endsWith("```")) return [];
+    const rotulo = t.slice(3, quebra).trim().toLowerCase();
+    if (rotulo && rotulo !== "json") return [];
+    t = t.slice(quebra + 1, -3).trim();
   }
-
-  for (const bruto of candidatos) {
-    let o;
-    try { o = JSON.parse(bruto); } catch { continue; }
+  const objeto = t.startsWith("{") && t.endsWith("}");
+  const lista = t.startsWith("[") && t.endsWith("]");
+  if (!objeto && !lista) return [];
+  let o;
+  try { o = JSON.parse(t); } catch { return []; }
+  const nomesValidos = new Set(ferramentas.nomes());
+  const achadas = [];
+  for (const c of (Array.isArray(o) ? o : [o]).slice(0, 5)) {
     // Dois formatos vistos: {name, arguments} e {function:{name, arguments}}
-    const nome = o?.name ?? o?.function?.name;
-    let args = o?.arguments ?? o?.parameters ?? o?.function?.arguments ?? {};
+    const nome = c?.name ?? c?.function?.name;
+    let args = c?.arguments ?? c?.parameters ?? c?.function?.arguments ?? {};
     if (typeof args === "string") { try { args = JSON.parse(args); } catch { args = {}; } }
-    if (!nome || !nomesValidos.has(nome)) continue;
-    if (achadas.some((c) => c.function.name === nome && JSON.stringify(c.function.arguments) === JSON.stringify(args))) continue;
+    if (typeof nome !== "string" || !nomesValidos.has(nome)) continue;
+    if (achadas.some((x) => x.function.name === nome && JSON.stringify(x.function.arguments) === JSON.stringify(args))) continue;
     achadas.push({ id: undefined, function: { name: nome, arguments: args } });
   }
   return achadas;
 }
 
-// O contexto que o BOT manda junto (só campos conhecidos, só booleanos).
+// O contexto que o BOT manda junto (só campos conhecidos, cada um conferido).
+// (31 out 2026, P1) `feeds`: os feeds que o servidor da conversa cadastrou (o
+// buscar_rss só lê esses); `servidor`: de onde vem o pedido (o teto diário de imagens).
+function feedsDoBot(lista) {
+  return Array.isArray(lista) ? lista.filter((u) => typeof u === "string" && /^https?:\/\/\S{3,500}$/i.test(u)).slice(0, 50) : [];
+}
+function servidorDoBot(id) {
+  return typeof id === "string" && /^[\w-]{1,64}$/.test(id) ? id : null;
+}
 function contextoDe(corpo) {
   // (22 out 2026) o `imagemAdulta` saiu com o modo +18 — se chegar, é ignorado
-  return { semImagem: corpo?.contexto?.semImagem === true };
+  return { semImagem: corpo?.contexto?.semImagem === true, feeds: feedsDoBot(corpo?.contexto?.feeds), servidor: servidorDoBot(corpo?.contexto?.servidor) };
 }
 
 async function conversarComFerramentas(messages, { modelo, usarFerramentas = true, idioma = "pt", contexto = {} } = {}) {
@@ -297,20 +291,14 @@ function lerCorpo(req) {
 }
 
 const servidor = createServer(async (req, res) => {
-  // Chave opcional — protege o serviço se a porta ficar exposta.
-  if (CHAVE && req.headers["x-chave"] !== CHAVE) return json(res, 401, { erro: "não autorizado" });
+  // Chave obrigatória (o serviço nem sobe sem ela) — vale para todas as rotas.
+  if (req.headers["x-chave"] !== CHAVE) return json(res, 401, { erro: "não autorizado" });
 
   try {
     if (req.method === "GET" && req.url === "/saude") {
       let llmOk = false, modelos = [];
-      try {
-        const r = await fetch(`${LLM_URL}/v1/models`, { headers: cabecalhosLLM(), signal: AbortSignal.timeout(5000) });
-        if (r.ok) {
-          const d = await r.json().catch(() => ({}));
-          llmOk = true;
-          modelos = (d.data ?? d.models ?? []).map((m) => m.id || m.model || m.name).filter(Boolean);
-        }
-      } catch {}
+      try { modelos = await modelosDoLLM(); llmOk = true; }
+      catch (e) { log(`/saude: LLM inalcançável (${e?.message ?? e})`); }
       return json(res, 200, {
         // O campo `ollama` que duplicava `llm` saiu: o backend é llama.cpp desde
         // a migração, nada no bot lia esse campo, e o nome enganava quem depurava.
@@ -463,10 +451,7 @@ async function diagnosticoDeBoot() {
 
   // 4. O servidor de LLM — sem ele o serviço não responde nada
   try {
-    const r = await fetch(`${LLM_URL}/v1/models`, { headers: cabecalhosLLM(), signal: AbortSignal.timeout(5000) });
-    if (!r.ok) throw new Error(`HTTP ${r.status}${r.status === 404 ? " (a URL não serve /v1/models — llama-swap na porta certa?)" : ""}`);
-    const d = await r.json().catch(() => ({}));
-    const nomes = (d.data ?? d.models ?? []).map((m) => m.id || m.model || m.name).filter(Boolean);
+    const nomes = await modelosDoLLM();
     log(`✓ LLM respondendo em ${LLM_URL} (${nomes.length} modelo(s): ${nomes.join(", ") || "—"})`);
     if (nomes.length && !nomes.includes(MODELO_PADRAO)) {
       problemas.push(
@@ -494,9 +479,11 @@ async function diagnosticoDeBoot() {
   return problemas;
 }
 
-servidor.listen(PORTA, process.env.SERVICO_HOST || undefined, () => {
+// (31 out 2026, P1) 127.0.0.1 por padrão: a porta não fica aberta na rede de casa;
+// quem roda o serviço em outra máquina diz o endereço em SERVICO_HOST.
+servidor.listen(PORTA, process.env.SERVICO_HOST || "127.0.0.1", () => {
   log(`serviço de IA na porta ${PORTA}`);
-  log(`LLM: ${LLM_URL || "⚠️ NENHUM (IA_MODO/LLM_URL)"} | modelo: ${MODELO_PADRAO || "(o carregado no servidor)"}`);
+  log(`LLM: ${LLM_URL || "⚠️ NENHUM (IA_MODO=local ou LLM_URL)"} | modelo: ${MODELO_PADRAO || "(o carregado no servidor)"}`);
   log(`ferramentas: ${ferramentas.nomes().join(", ") || "(nenhuma)"}`);
   // roda depois de subir: um problema de rede não deve impedir o serviço
   diagnosticoDeBoot().catch((e) => console.error("[IA] diagnóstico falhou:", e?.message));

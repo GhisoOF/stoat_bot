@@ -112,6 +112,11 @@ export async function salvarCache(indice, cfgGlobal) {
   }
 }
 
+// Há quanto tempo o cache do disco foi gravado (ms); Infinity sem cache.
+export function idadeDoCache(agora = Date.now()) {
+  try { return agora - fs.statSync(caminhoCache()).mtimeMs; } catch { return Infinity; }
+}
+
 export function carregarCache(cfgGlobal) {
   try {
     const buf = fs.readFileSync(caminhoCache());

@@ -1,45 +1,94 @@
 
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
-import { iaLigada, conversaLigada, modoIA, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
+import { iaLigada, conversaLigada, imagemLigada, modoIA, numero, problemasDoEnv, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
 import { avisoSemTrava } from "./modulos/core/modelos-sem-trava.js";
-import { montarConfigSwap } from "./modulos/core/llama-swap-config.js";
+import { montarConfigSwap, flagsDoLlama, modeloValido } from "./modulos/core/llama-swap-config.js";
 import { arquivosParaBaixar, tipoDoModelo } from "./modulos/core/imagem-modelo.js";
 
-const IA_EMBUTIDA = iaLigada() && process.env.IA_EMBUTIDA !== "0";
-const VOZ_ATIVA = process.env.VOZ_ATIVA === "1";
 const LLAMA_BIN = process.env.LLAMA_BIN || "/usr/local/bin/llama-server";
 const SWAP_BIN = process.env.SWAP_BIN || "/usr/local/bin/llama-swap";
 
-// Padrões de localhost quando os serviços estão embutidos.
-if (IA_EMBUTIDA && !process.env.IA_SERVICO_URL) process.env.IA_SERVICO_URL = "http://127.0.0.1:8090";
-if (VOZ_ATIVA && !process.env.VOZ_SERVICO_URL) process.env.VOZ_SERVICO_URL = "http://127.0.0.1:8091";
+// ── O ambiente de cada processo filho (31 out 2026, R10) ──────────────────
+// Antes, todo filho herdava o .env inteiro: o llama-server, o curl e o
+// serviço de IA (que lê páginas da web) levavam o BOT_TOKEN junto. Agora cada
+// um recebe só o que usa. "X_*" = toda variável que começa com "X_"; "X*"
+// inclui a própria X. Variável nova lida por um serviço entra na lista dele
+// (o teste p1-infra confere a do ia-servico e a do voz-servico).
+const ENV_BASE = ["PATH", "HOME", "LANG", "LC_ALL", "TZ", "TMPDIR", "NODE_ENV",
+  "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR", "LD_LIBRARY_PATH"];
+// os ajustes de GPU que quem hospeda põe no .env (Vulkan, ROCm, CUDA): não são
+// segredo, e o llama e o sd.cpp precisam deles (mesma lista do modulos/ai/servicos.js)
+const GPU = ["GGML_*", "VK_*", "MESA_*", "RADV_*", "HSA_*", "ROC*", "HIP_*", "CUDA_*", "AMD_*"];
+export const ENV_FILHO = {
+  // llama-server e llama-swap (que repassa o seu ambiente ao llama-server)
+  llama: ["LLAMA_CACHE", "HF_TOKEN", ...GPU],
+  curl: [],
+  iaServico: ["IA_CHAVE", "IA_SERVICO_CHAVE", "IMAGEM*", "SD_*", "LLM_*", "SEARXNG_*", "GITHUB_*", "CODIGO_*",
+    "RSS_*", "REDE_*", "CALC_TIMEOUT_MS", "CDN_URL", "CONTINUAR_MAX", "DNS_FALLBACK", "FERRAMENTAS_OFF",
+    "MAX_TOKENS", "MAX_VOLTAS_FERRAMENTA", "NUM_CTX", ...GPU],
+  // o voz-servico entra na call com a conta do bot: é o único que leva o BOT_TOKEN
+  vozServico: ["BOT_TOKEN", "VOZ_*", "TTS_*", "PIPER_*", "MUSICA_*", "SPOTIFY_*", "LIVEKIT_*", "STOAT_API", "YTDLP_BIN"],
+};
 
-// Chave dos serviços internos (15 out 2026): sem VOZ_CHAVE/IA_SERVICO_CHAVE no
-// .env, qualquer processo que alcançasse 127.0.0.1:8090/8091 mandava a Judy
-// falar ou rodar ferramentas. Embutidos, bot e serviços são filhos DESTE
-// processo: uma chave aleatória por boot basta, e ninguém precisa configurar.
-if (IA_EMBUTIDA && !process.env.IA_SERVICO_CHAVE && !process.env.IA_CHAVE) process.env.IA_SERVICO_CHAVE = randomBytes(24).toString("hex");
-if (VOZ_ATIVA && !process.env.VOZ_CHAVE) process.env.VOZ_CHAVE = randomBytes(24).toString("hex");
+export function envDoFilho(nomes = [], extra = {}, fonte = process.env) {
+  const regras = [...ENV_BASE, ...nomes];
+  const passa = (k) => regras.some((r) => (r.endsWith("*") ? k.startsWith(r.slice(0, -1)) : k === r));
+  const env = {};
+  for (const [k, v] of Object.entries(fonte)) if (v !== undefined && passa(k)) env[k] = v;
+  return { ...env, ...extra };
+}
 
-// ler_codigo de fábrica: o código do próprio bot já está na imagem (este
-// diretório). Sem este padrão, quem não configurasse nada ficava com a
-// ferramenta apontando para lugar NENHUM — e toda leitura de arquivo falhava
-// com "nem CODIGO_DIR nem GITHUB_REPO estão configurados". Agora o padrão é
-// ler o próprio código, do disco, sem rede e sem token. Quem definir
-// GITHUB_REPO ou CODIGO_DIR no .env continua mandando (têm prioridade).
-// Segurança: o ler_codigo já ignora dotfiles e bloqueia .env/token/secret/.db.
-if (!process.env.CODIGO_DIR && !process.env.GITHUB_REPO) {
-  process.env.CODIGO_DIR = process.cwd();
-  console.info(`[INICIAR] ler_codigo: lendo o próprio código em ${process.cwd()} (defina GITHUB_REPO ou CODIGO_DIR para mudar).`);
+// curl só por https (também nos redirecionamentos), com teto de tempo e de tamanho
+const curlSeguro = (segundos, bytes) => ["-fL", "--retry", "2", "--proto", "=https", "--proto-redir", "=https",
+  "--connect-timeout", "30", "--max-time", String(segundos), "--max-filesize", String(bytes)];
+
+// Vozes do catálogo do Piper: idioma[_REGIAO]-pessoa-qualidade. Fechada: nada
+// de ".", "/" ou "..", então o nome não sai da pasta das vozes nem da URL.
+const VOZ = /^([a-z]{2,3})(?:_([A-Za-z]{2,4}))?-([A-Za-z0-9_]{1,64})-([a-z_]{1,16})$/;
+export function urlDaVoz(nome) {
+  const m = VOZ.exec(nome);
+  if (!m) return null;
+  const [, lang, regiao, pessoa, qualidade] = m;
+  const pasta = regiao ? `${lang}_${regiao}` : lang;
+  return `https://huggingface.co/rhasspy/piper-voices/resolve/main/${lang}/${pasta}/${pessoa}/${qualidade}/${nome}.onnx`;
+}
+const vozesPedidas = () => (process.env.VOZES || "pt_BR-faber-medium").split(",").map((v) => v.trim()).filter(Boolean);
+
+// O que o boot confere antes de subir qualquer coisa: o problemasDoEnv() e o
+// que entra na linha de comando dos filhos. Lista vazia = pode subir.
+export function problemasDoBoot() {
+  const p = [...problemasDoEnv()];
+  const tentar = (fn) => { try { fn(); } catch (e) { p.push(e.message.replace(/^\.env: /, "")); } };
+  tentar(() => flagsDoLlama(process.env.LLAMA_FLAGS));
+  tentar(() => numero("LLAMA_NGL", 999, { min: 0, max: 9999, inteiro: true }));
+  for (const v of ["LLAMA_CTX", "LLAMA_CTX_MODERACAO"]) tentar(() => numero(v, 4096, { min: 256, max: 4_194_304, inteiro: true }));
+  for (const v of ["LLAMA_PORTA", "IA_PORTA", "VOZ_PORTA"]) tentar(() => numero(v, 8082, { min: 1024, max: 65535, inteiro: true }));
+  tentar(() => numero("IA_TTL", 3600, { min: 1, max: 604_800, inteiro: true }));
+  if (!/^\/[\w.\/-]+$/.test(LLAMA_BIN)) p.push("LLAMA_BIN tem de ser um caminho absoluto simples");
+  if (iaLigada() && modoIA() === "local") {
+    // os mesmos valores que o boot passa ao -hf e ao YAML do llama-swap
+    const modelos = { MODELO: process.env.MODELO, MODELO_VISAO: process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO, MODELO_MODERACAO: process.env.MODELO_MODERACAO };
+    for (const [v, m] of Object.entries(modelos)) {
+      if (m && !modeloValido(m)) p.push(`${v}: use usuario/repositorio:quantizacao do Hugging Face (ex.: ${MODELO_LOCAL_PADRAO})`);
+    }
+    if (imagemLigada()) tentar(() => arquivosParaBaixar());
+  }
+  if (process.env.VOZ_ATIVA === "1") {
+    const ruins = [...vozesPedidas(), ...(process.env.PIPER_VOZ ? [process.env.PIPER_VOZ] : [])].filter((n) => !urlDaVoz(n));
+    if (ruins.length) p.push(`VOZES/PIPER_VOZ: "${ruins.join(", ").slice(0, 80)}" fora do padrão idioma_REGIAO-pessoa-qualidade (ex.: pt_BR-faber-medium)`);
+  }
+  return p;
 }
 
 const filhos = new Set();
 let encerrando = false;
 
-function subir(nome, cwd, arquivo, { reiniciar = true, env = {}, flags = [] } = {}) {
+// `ambiente`: a lista do ENV_FILHO; null = o ambiente inteiro (só o bot).
+function subir(nome, cwd, arquivo, { reiniciar = true, env = {}, flags = [], ambiente = null } = {}) {
   if (!existsSync(`${cwd}/${arquivo}`)) {
     console.warn(`[INICIAR] ${nome}: ${cwd}/${arquivo} não existe — pulando.`);
     return;
@@ -49,8 +98,9 @@ function subir(nome, cwd, arquivo, { reiniciar = true, env = {}, flags = [] } = 
     const p = spawn(process.execPath, [...flags, arquivo], {
       cwd, stdio: "inherit",
       // SERVICO_HOST: os serviços embutidos ouvem só em 127.0.0.1 — o bot fala com
-      // eles por ali, e ninguém mais na rede (nem outro contêiner) alcança
-      env: { SERVICO_HOST: "127.0.0.1", ...process.env, ...env },
+      // eles por ali, e ninguém mais na rede (nem outro contêiner) alcança. Fixo
+      // DEPOIS do ambiente: um SERVICO_HOST no .env não abre os serviços.
+      env: { ...(ambiente ? envDoFilho(ambiente) : process.env), ...env, SERVICO_HOST: "127.0.0.1" },
     });
     filhos.add(p);
     console.info(`[INICIAR] ${nome} de pé (pid ${p.pid}).`);
@@ -66,10 +116,10 @@ function subir(nome, cwd, arquivo, { reiniciar = true, env = {}, flags = [] } = 
   lancar();
 }
 
-function subirBin(nome, bin, args, env = {}) {
+function subirBin(nome, bin, args, env) {
   let tentativas = 0;
   const lancar = () => {
-    const p = spawn(bin, args, { stdio: "inherit", env: { ...process.env, ...env } });
+    const p = spawn(bin, args, { stdio: "inherit", env });
     filhos.add(p);
     console.info(`[INICIAR] ${nome} de pé (pid ${p.pid}).`);
     p.on("error", (err) => console.error(`[INICIAR] ${nome}: ${err.message}`));
@@ -89,207 +139,233 @@ function encerrar(code = 0) {
   for (const p of filhos) { try { p.kill("SIGTERM"); } catch {} }
   setTimeout(() => process.exit(code), 3000).unref();
 }
-process.on("SIGTERM", () => encerrar(0));
-process.on("SIGINT", () => encerrar(0));
 
-if (iaLigada() && !conversaLigada()) {
-  console.info(`[INICIAR] CONVERSA=0 — modo enxuto: IA só para moderação, relatório e RSS (sem chat, sem gerar imagem; contexto ${process.env.LLAMA_CTX}, modelo sai da memória após ${process.env.IA_TTL}s parado).`);
-}
-// (22 out 2026) sem modo +18: avisa se o .env aponta para um modelo sem trava
-if (iaLigada()) { const aviso = avisoSemTrava(); if (aviso) console.warn(aviso); }
-if (!iaLigada()) {
-  console.info("[INICIAR] IA=0 — módulos de IA desligados (nem serviço, nem modelo).");
-} else if (modoIA() === "local" && (process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO || process.env.MODELO_MODERACAO)) {
-  // Dois modelos (conversa + visão) → llama-swap: ele serve os dois na mesma
-  // API OpenAI, carregando cada um por demanda. O bot escolhe por papel
-  // (LLM_MODEL para conversa, LLM_MODEL_VISAO para imagens).
-  if (existsSync(SWAP_BIN)) {
-    const cache = process.env.LLAMA_CACHE || "/data/modelos";
-    try { mkdirSync(cache, { recursive: true }); } catch {}
-    const conversa = process.env.MODELO || MODELO_LOCAL_PADRAO;
-    const visao = process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO || null;
-    // modelo pequeno só para julgar a moderação (fica carregado junto da conversa)
-    const moderacao = (process.env.MODELO_MODERACAO || "").trim() || null;
-    const ngl = process.env.LLAMA_NGL || "999";
-    const ctx = process.env.LLAMA_CTX || "8192";
-    // Nomes curtos e estáveis: é por eles que o bot pede cada modelo.
-    process.env.LLM_MODEL = process.env.LLM_MODEL || "conversa";
-    if (visao) process.env.LLM_MODEL_VISAO = "visao";
-    if (moderacao) process.env.LLM_MODEL_JUIZ = "moderacao";
+// Importado (pelos testes), o arquivo só expõe as funções acima; o boot roda
+// quando ele é o programa (node iniciar.js).
+const PRINCIPAL = !!process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (PRINCIPAL) {
+  const problemas = problemasDoBoot();
+  if (problemas.length) {
+    console.error(`[INICIAR] O .env tem ${problemas.length} problema(s) — nada foi iniciado:\n${problemas.map((x) => `  - ${x}`).join("\n")}`);
+    process.exit(1);
+  }
+  process.on("SIGTERM", () => encerrar(0));
+  process.on("SIGINT", () => encerrar(0));
 
-    // ── Download dos modelos NO BOOT, antes de tudo ─────────────────────
-    // Antes, o download era refém do primeiro pedido: o llama-swap só ligava
-    // o servidor sob demanda, o pedido estourava o timeout, o swap matava o
-    // servidor e o download morria junto — avançava só em rajadas de ~2min
-    // por mensagem. Agora o boot baixa cada modelo até o fim (com progresso
-    // no docker logs) e o bot só conecta ao Stoat com tudo pronto no disco.
-    // Um marcador em ${cache} evita repetir a checagem nos boots seguintes.
-    // Soma os bytes já em disco de um diretório (recursivo) — é o medidor
-    // honesto do download: o progresso do llama usa \r e o docker logs engole.
-    const tamanhoDir = (d) => {
-      let total = 0;
-      try {
-        for (const f of readdirSync(d, { recursive: true, withFileTypes: true })) {
-          if (f.isFile()) { try { total += statSync(join(f.parentPath ?? f.path, f.name)).size; } catch {} }
-        }
-      } catch {}
-      return total;
-    };
-    const baixarModelo = (m) => new Promise((res) => {
-      const marca = `${cache}/.pronto-${m.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      if (existsSync(marca)) return res(true);
-      console.info(`[INICIAR] baixando modelo ${m} — o bot só sobe quando terminar (progresso abaixo)…`);
-      const dirModelo = join(cache, `models--${m.split(":")[0].replaceAll("/", "--")}`);
-      let bytesAntes = tamanhoDir(dirModelo);
-      let quando = Date.now();
-      const progresso = setInterval(() => {
-        const agora = tamanhoDir(dirModelo);
-        const vel = Math.max(0, (agora - bytesAntes) / ((Date.now() - quando) / 1000));
-        console.info(`[INICIAR] download: ${(agora / 1e9).toFixed(2)} GB no disco (${(vel / 1e6).toFixed(1)} MB/s)`);
-        bytesAntes = agora; quando = Date.now();
-      }, 10_000);
-      progresso.unref?.();
-      const p = spawn(LLAMA_BIN,
-        ["-hf", m, "--host", "127.0.0.1", "--port", "8199", "-c", "256", "-ngl", "0"],
-        { env: { ...process.env, LLAMA_CACHE: cache }, stdio: ["ignore", "inherit", "inherit"] });
-      let vivo = true;
-      p.on("exit", (c) => { if (vivo) { vivo = false; clearInterval(progresso); console.error(`[INICIAR] download de ${m} falhou (saída ${c}) — o llama-swap tenta de novo sob demanda.`); res(false); } });
-      const espera = setInterval(async () => {
-        if (!vivo) return clearInterval(espera);
+  const IA_EMBUTIDA = iaLigada() && process.env.IA_EMBUTIDA !== "0";
+  const VOZ_ATIVA = process.env.VOZ_ATIVA === "1";
+
+  // Padrões de localhost quando os serviços estão embutidos.
+  if (IA_EMBUTIDA && !process.env.IA_SERVICO_URL) process.env.IA_SERVICO_URL = "http://127.0.0.1:8090";
+  if (VOZ_ATIVA && !process.env.VOZ_SERVICO_URL) process.env.VOZ_SERVICO_URL = "http://127.0.0.1:8091";
+
+  // Chave dos serviços internos (15 out 2026): sem VOZ_CHAVE/IA_SERVICO_CHAVE no
+  // .env, qualquer processo que alcançasse 127.0.0.1:8090/8091 mandava a Judy
+  // falar ou rodar ferramentas. Embutidos, bot e serviços são filhos DESTE
+  // processo: uma chave aleatória por boot basta, e ninguém precisa configurar.
+  if (IA_EMBUTIDA && !process.env.IA_SERVICO_CHAVE && !process.env.IA_CHAVE) process.env.IA_SERVICO_CHAVE = randomBytes(24).toString("hex");
+  if (VOZ_ATIVA && !process.env.VOZ_CHAVE) process.env.VOZ_CHAVE = randomBytes(24).toString("hex");
+
+  // ler_codigo de fábrica: o código do próprio bot já está na imagem (este
+  // diretório, só leitura). Quem definir GITHUB_REPO ou CODIGO_DIR no .env
+  // continua mandando. O ler_codigo já ignora dotfiles e bloqueia .env/token/.db.
+  if (!process.env.CODIGO_DIR && !process.env.GITHUB_REPO) {
+    process.env.CODIGO_DIR = process.cwd();
+    console.info(`[INICIAR] ler_codigo: lendo o próprio código em ${process.cwd()} (defina GITHUB_REPO ou CODIGO_DIR para mudar).`);
+  }
+
+  if (iaLigada() && !conversaLigada()) {
+    console.info(`[INICIAR] CONVERSA=0 — modo enxuto: IA só para moderação, relatório e RSS (sem chat, sem gerar imagem; contexto ${process.env.LLAMA_CTX}, modelo sai da memória após ${process.env.IA_TTL}s parado).`);
+  }
+  // (22 out 2026) sem modo +18: avisa se o .env aponta para um modelo sem trava
+  if (iaLigada()) { const aviso = avisoSemTrava(); if (aviso) console.warn(aviso); }
+  const ngl = String(numero("LLAMA_NGL", 999));
+  const ctx = String(numero("LLAMA_CTX", 8192));
+  const portaLlama = String(numero("LLAMA_PORTA", 8082));
+  const flagsExtra = flagsDoLlama(process.env.LLAMA_FLAGS);  // ex.: "--temp 1.0 --top-p 0.95 --top-k 64" (Gemma) — cada família tem o seu
+  if (!iaLigada()) {
+    console.info("[INICIAR] IA=0 — módulos de IA desligados (nem serviço, nem modelo).");
+  } else if (modoIA() === "local" && (process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO || process.env.MODELO_MODERACAO)) {
+    // Dois modelos (conversa + visão) → llama-swap: ele serve os dois na mesma
+    // API OpenAI, carregando cada um por demanda. O bot escolhe por papel
+    // (LLM_MODEL para conversa, LLM_MODEL_VISAO para imagens).
+    if (existsSync(SWAP_BIN)) {
+      const cache = process.env.LLAMA_CACHE || "/data/modelos";
+      try { mkdirSync(cache, { recursive: true }); } catch {}
+      const conversa = process.env.MODELO || MODELO_LOCAL_PADRAO;
+      const visao = process.env.MODELO_VISAO || process.env.LLM_MODEL_VISAO || null;
+      // modelo pequeno só para julgar a moderação (fica carregado junto da conversa)
+      const moderacao = (process.env.MODELO_MODERACAO || "").trim() || null;
+      // Nomes curtos e estáveis: é por eles que o bot pede cada modelo.
+      process.env.LLM_MODEL = process.env.LLM_MODEL || "conversa";
+      if (visao) process.env.LLM_MODEL_VISAO = "visao";
+      if (moderacao) process.env.LLM_MODEL_JUIZ = "moderacao";
+
+      // ── Download dos modelos NO BOOT, antes de tudo ─────────────────────
+      // Antes, o download era refém do primeiro pedido: o llama-swap só ligava
+      // o servidor sob demanda, o pedido estourava o timeout, o swap matava o
+      // servidor e o download morria junto. Agora o boot baixa cada modelo até
+      // o fim (com progresso no docker logs) e o bot só conecta com tudo pronto.
+      // Um marcador em ${cache} evita repetir a checagem nos boots seguintes.
+      // Soma os bytes já em disco de um diretório (recursivo) — é o medidor
+      // honesto do download: o progresso do llama usa \r e o docker logs engole.
+      const tamanhoDir = (d) => {
+        let total = 0;
         try {
-          const r = await fetch("http://127.0.0.1:8199/health").catch(() => null);
-          if (r?.ok) {
-            clearInterval(espera); clearInterval(progresso); vivo = false;
-            try { writeFileSync(marca, new Date().toISOString()); } catch {}
-            console.info(`[INICIAR] modelo pronto no disco: ${m}`);
-            try { p.kill("SIGTERM"); } catch {}
-            res(true);
+          for (const f of readdirSync(d, { recursive: true, withFileTypes: true })) {
+            if (f.isFile()) { try { total += statSync(join(f.parentPath ?? f.path, f.name)).size; } catch {} }
           }
         } catch {}
-      }, 3000);
-    });
-    for (const m of [...new Set([conversa, visao, moderacao].filter(Boolean))]) await baixarModelo(m);
-
-    // ── Pré-download dos modelos de GERAÇÃO DE IMAGEM (mesma lógica dos de
-    // conversa acima): sem isto, o download acontecia dentro do primeiro
-    // `&chat desenha...`, estourando o timeout do chat — exatamente o mesmo
-    // problema que já resolvemos para os LLMs, agora estendido ao gerador.
-    if ((process.env.IMAGEM ?? "1").trim() !== "0") {
-      const SD_DIR = process.env.SD_MODELOS_DIR || "/data/modelos-sd";
-      // as URLs saem do mesmo lugar que o gerador usa (modulos/core/imagem-modelo.js)
-      const urlsSD = arquivosParaBaixar();
-      console.info(`[INICIAR] gerador de imagem: ${tipoDoModelo()}`);
-
-      const baixarArquivoSD = (rotulo, url) => new Promise((res) => {
-        let nome; try { nome = url.split("/").pop().split("?")[0]; } catch { nome = "modelo"; }
-        const destino = join(SD_DIR, nome);
-        const marca = `${SD_DIR}/.pronto-${nome.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-        if (existsSync(destino) && existsSync(marca)) return res(true);
-        try { mkdirSync(SD_DIR, { recursive: true }); } catch {}
-        console.info(`[INICIAR] baixando ${rotulo} (${nome}) — o bot só sobe quando terminar…`);
-        const tmp = `${destino}.baixando`;
-        const p = spawn("curl", ["-fL", "--retry", "2", url, "-o", tmp], { stdio: ["ignore", "ignore", "inherit"] });
-        let bytesAntes = 0, quando = Date.now();
+        return total;
+      };
+      const baixarModelo = (m) => new Promise((res) => {
+        const marca = `${cache}/.pronto-${m.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        if (existsSync(marca)) return res(true);
+        console.info(`[INICIAR] baixando modelo ${m} — o bot só sobe quando terminar (progresso abaixo)…`);
+        const dirModelo = join(cache, `models--${m.split(":")[0].replaceAll("/", "--")}`);
+        let bytesAntes = tamanhoDir(dirModelo);
+        let quando = Date.now();
         const progresso = setInterval(() => {
-          let agora = 0; try { agora = statSync(tmp).size; } catch {}
+          const agora = tamanhoDir(dirModelo);
           const vel = Math.max(0, (agora - bytesAntes) / ((Date.now() - quando) / 1000));
-          console.info(`[INICIAR] ${rotulo}: ${(agora / 1e9).toFixed(2)} GB no disco (${(vel / 1e6).toFixed(1)} MB/s)`);
+          console.info(`[INICIAR] download: ${(agora / 1e9).toFixed(2)} GB no disco (${(vel / 1e6).toFixed(1)} MB/s)`);
           bytesAntes = agora; quando = Date.now();
         }, 10_000);
         progresso.unref?.();
-        p.on("exit", (c) => {
-          clearInterval(progresso);
-          if (c === 0) {
-            try { renameSync(tmp, destino); writeFileSync(marca, new Date().toISOString()); } catch {}
-            console.info(`[INICIAR] ${rotulo} pronto no disco.`);
-            res(true);
-          } else {
-            try { unlinkSync(tmp); } catch {}
-            console.error(`[INICIAR] download de ${rotulo} falhou (saída ${c}) — a ferramenta gerar_imagem tentará de novo sob demanda.`);
-            res(false);
-          }
-        });
+        const p = spawn(LLAMA_BIN,
+          ["-hf", m, "--host", "127.0.0.1", "--port", "8199", "-c", "256", "-ngl", "0"],
+          { env: envDoFilho(ENV_FILHO.llama, { LLAMA_CACHE: cache }), stdio: ["ignore", "inherit", "inherit"] });
+        let vivo = true;
+        p.on("exit", (c) => { if (vivo) { vivo = false; clearInterval(progresso); console.error(`[INICIAR] download de ${m} falhou (saída ${c}) — o llama-swap tenta de novo sob demanda.`); res(false); } });
+        const espera = setInterval(async () => {
+          if (!vivo) return clearInterval(espera);
+          try {
+            const r = await fetch("http://127.0.0.1:8199/health").catch(() => null);
+            if (r?.ok) {
+              clearInterval(espera); clearInterval(progresso); vivo = false;
+              try { writeFileSync(marca, new Date().toISOString()); } catch {}
+              console.info(`[INICIAR] modelo pronto no disco: ${m}`);
+              try { p.kill("SIGTERM"); } catch {}
+              res(true);
+            }
+          } catch {}
+        }, 3000);
       });
-      for (const [rotulo, url] of urlsSD) await baixarArquivoSD(rotulo, url);
+      for (const m of [...new Set([conversa, visao, moderacao].filter(Boolean))]) await baixarModelo(m);
+
+      // ── Pré-download dos modelos de GERAÇÃO DE IMAGEM (mesma lógica dos de
+      // conversa acima): sem isto, o download acontecia dentro do primeiro
+      // `&chat desenha...`, estourando o timeout do chat.
+      if ((process.env.IMAGEM ?? "1").trim() !== "0") {
+        const SD_DIR = process.env.SD_MODELOS_DIR || "/data/modelos-sd";
+        // as URLs saem do mesmo lugar que o gerador usa (modulos/core/imagem-modelo.js),
+        // já conferidas (só https://huggingface.co/…) no problemasDoBoot
+        const urlsSD = arquivosParaBaixar();
+        console.info(`[INICIAR] gerador de imagem: ${tipoDoModelo()}`);
+
+        const baixarArquivoSD = (rotulo, url) => new Promise((res) => {
+          let nome; try { nome = url.split("/").pop().split("?")[0]; } catch { nome = "modelo"; }
+          const destino = join(SD_DIR, nome);
+          const marca = `${SD_DIR}/.pronto-${nome.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+          if (existsSync(destino) && existsSync(marca)) return res(true);
+          try { mkdirSync(SD_DIR, { recursive: true }); } catch {}
+          console.info(`[INICIAR] baixando ${rotulo} (${nome}) — o bot só sobe quando terminar…`);
+          const tmp = `${destino}.baixando`;
+          // até 20 GiB e 6 h por arquivo (o maior hoje, a difusão Q8 do Qwen, tem 7,6 GB)
+          const p = spawn("curl", [...curlSeguro(6 * 3600, 20 * 1024 ** 3), url, "-o", tmp],
+            { stdio: ["ignore", "ignore", "inherit"], env: envDoFilho(ENV_FILHO.curl) });
+          let bytesAntes = 0, quando = Date.now();
+          const progresso = setInterval(() => {
+            let agora = 0; try { agora = statSync(tmp).size; } catch {}
+            const vel = Math.max(0, (agora - bytesAntes) / ((Date.now() - quando) / 1000));
+            console.info(`[INICIAR] ${rotulo}: ${(agora / 1e9).toFixed(2)} GB no disco (${(vel / 1e6).toFixed(1)} MB/s)`);
+            bytesAntes = agora; quando = Date.now();
+          }, 10_000);
+          progresso.unref?.();
+          p.on("exit", (c) => {
+            clearInterval(progresso);
+            if (c === 0) {
+              try { renameSync(tmp, destino); writeFileSync(marca, new Date().toISOString()); } catch {}
+              console.info(`[INICIAR] ${rotulo} pronto no disco.`);
+              res(true);
+            } else {
+              try { unlinkSync(tmp); } catch {}
+              console.error(`[INICIAR] download de ${rotulo} falhou (saída ${c}) — a ferramenta gerar_imagem tentará de novo sob demanda.`);
+              res(false);
+            }
+          });
+        });
+        for (const [rotulo, url] of urlsSD) await baixarArquivoSD(rotulo, url);
+      }
+
+      const cfg = `/data/llama-swap.yaml`;
+      const extra = flagsExtra.join(" ");
+      const comando = (m, c = ctx) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${c} -ngl ${ngl} --jinja${extra ? " " + extra : ""}`;
+      // mesmo modelo nos dois papéis → uma entrada só, "visao" é apelido dela
+      // IA_TTL: quanto tempo o modelo fica na memória sem uso (s). Padrão 1 h; no
+      // modo enxuto (CONVERSA=0) 5 min — a RAM/GPU volta para o resto da máquina.
+      const ttl = numero("IA_TTL", 3600);
+      writeFileSync(cfg, montarConfigSwap({ conversa, visao, moderacao, comando, ttlConversa: ttl, ttlVisao: Math.min(600, ttl), ctxModeracao: process.env.LLAMA_CTX_MODERACAO || "4096" }));
+      console.info(`[INICIAR] IA local (llama-swap): conversa=${conversa} · visão=${!visao ? "nenhuma" : visao === conversa ? "o mesmo modelo (apelido, sem 2ª cópia)" : visao}${moderacao ? ` · moderação=${moderacao === conversa ? "o mesmo modelo" : `${moderacao} (fica carregado junto)`}` : ""}`);
+      subirBin("llama-swap", SWAP_BIN, ["-config", cfg, "-listen", `127.0.0.1:${portaLlama}`],
+        envDoFilho(ENV_FILHO.llama, { LLAMA_CACHE: cache }));
+    } else {
+      console.error(`[INICIAR] MODELO_VISAO/MODELO_MODERACAO definido mas ${SWAP_BIN} não existe nesta imagem — seguindo com um modelo só (sem visão nem modelo de moderação).`);
     }
-
-    const cfg = `/data/llama-swap.yaml`;
-    const flagsExtra = (process.env.LLAMA_FLAGS || "").trim();  // ex.: "--temp 1.0 --top-p 0.95 --top-k 64" (Gemma) — cada família tem o seu
-    const comando = (m, c = ctx) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${c} -ngl ${ngl} --jinja${flagsExtra ? " " + flagsExtra : ""}`;
-    // mesmo modelo nos dois papéis → uma entrada só, "visao" é apelido dela
-    // IA_TTL: quanto tempo o modelo fica na memória sem uso (s). Padrão 1 h; no
-    // modo enxuto (CONVERSA=0) 5 min — a RAM/GPU volta para o resto da máquina.
-    const ttl = Number(process.env.IA_TTL) > 0 ? Number(process.env.IA_TTL) : 3600;
-    writeFileSync(cfg, montarConfigSwap({ conversa, visao, moderacao, comando, ttlConversa: ttl, ttlVisao: Math.min(600, ttl), ctxModeracao: process.env.LLAMA_CTX_MODERACAO || "4096" }));
-    console.info(`[INICIAR] IA local (llama-swap): conversa=${conversa} · visão=${!visao ? "nenhuma" : visao === conversa ? "o mesmo modelo (apelido, sem 2ª cópia)" : visao}${moderacao ? ` · moderação=${moderacao === conversa ? "o mesmo modelo" : `${moderacao} (fica carregado junto)`}` : ""}`);
-    subirBin("llama-swap", SWAP_BIN,
-      ["-config", cfg, "-listen", `127.0.0.1:${process.env.LLAMA_PORTA || "8082"}`],
-      { LLAMA_CACHE: cache });
-  } else {
-    console.error(`[INICIAR] MODELO_VISAO/MODELO_MODERACAO definido mas ${SWAP_BIN} não existe nesta imagem — seguindo com um modelo só (sem visão nem modelo de moderação).`);
-  }
-} else if (modoIA() === "local") {
-  // Modo local: llama-server embutido baixa o modelo do Hugging Face no
-  // primeiro arranque (flag -hf) e guarda em /data/modelos — o download de
-  // gigabytes acontece uma vez, sobrevive a rebuilds e não incha a imagem.
-  if (existsSync(LLAMA_BIN)) {
-    const modelo = process.env.MODELO || MODELO_LOCAL_PADRAO;
-    const cache = process.env.LLAMA_CACHE || "/data/modelos";
-    try { mkdirSync(cache, { recursive: true }); } catch {}
-    console.info(`[INICIAR] IA local: ${modelo} (primeiro arranque baixa o modelo — pode demorar)`);
-    // -ngl: camadas na GPU. O build é Vulkan, mas sem esta flag o llama.cpp
-    // carrega tudo na CPU mesmo com adaptador disponível. 999 = "tudo o que
-    // couber"; sem GPU exposta ao container, ele cai para CPU sozinho.
-    const ngl = process.env.LLAMA_NGL || "999";
-    const flagsExtra = (process.env.LLAMA_FLAGS || "").trim().split(/\s+/).filter(Boolean);
-    subirBin("llama", LLAMA_BIN,
-      ["-hf", modelo, "--host", "127.0.0.1", "--port", process.env.LLAMA_PORTA || "8082",
-       "-c", process.env.LLAMA_CTX || "8192", "-ngl", ngl, "--jinja", ...flagsExtra],
-      { LLAMA_CACHE: cache });
-  } else {
-    console.error(`[INICIAR] IA_MODO=local mas ${LLAMA_BIN} não existe nesta imagem — a IA vai falhar. Use IA_MODO=online ou aponte LLM_URL para um servidor externo.`);
-  }
-} else if (modoIA() === "online" && !(process.env.TOKEN_IA || process.env.LLM_TOKEN)) {
-  console.warn("[INICIAR] IA_MODO=online sem TOKEN_IA — a maioria das plataformas vai recusar as chamadas.");
-}
-
-if (IA_EMBUTIDA) subir("ia-servico", "./ia-servico", "servidor.js", { env: { PORTA: process.env.IA_PORTA || "8090" } });
-if (VOZ_ATIVA) {
-  const vozesDir = process.env.PIPER_VOZES || "/data/vozes";
-  try { mkdirSync(vozesDir, { recursive: true }); } catch {}
-  // Quais vozes baixar: a env VOZES lista nomes do catálogo oficial do Piper
-  // (https://huggingface.co/rhasspy/piper-voices), separados por vírgula.
-  // O nome carrega o caminho: pt_BR-faber-medium → pt/pt_BR/faber/medium/.
-  const pedidos = (process.env.VOZES || "pt_BR-faber-medium")
-    .split(",").map((v) => v.trim()).filter(Boolean);
-  const urlDaVoz = (nome) => {
-    const m = /^([a-z]{2,3})(?:_([A-Za-z]+))?-(.+)-([a-z_]+)$/.exec(nome);
-    if (!m) return null;
-    const [, lang, regiao, pessoa, qualidade] = m;
-    const pasta = regiao ? `${lang}_${regiao}` : lang;
-    return `https://huggingface.co/rhasspy/piper-voices/resolve/main/${lang}/${pasta}/${pessoa}/${qualidade}/${nome}.onnx`;
-  };
-  const jaTem = new Set(existsSync(vozesDir) ? readdirSync(vozesDir) : []);
-  for (const nome of pedidos) {
-    if (jaTem.has(`${nome}.onnx`) && jaTem.has(`${nome}.onnx.json`)) continue;
-    const url = urlDaVoz(nome);
-    if (!url) { console.error(`[INICIAR] voz: nome "${nome}" fora do padrão idioma_REGIAO-pessoa-qualidade (ex.: pt_BR-faber-medium) — pulando.`); continue; }
-    console.info(`[INICIAR] voz: baixando ${nome} (uma vez, fica no volume)…`);
-    for (const suf of [".onnx", ".onnx.json"]) {
-      const r = spawnSync("curl", ["-fL", "--retry", "2", `${url.replace(/\.onnx$/, "")}${suf}`, "-o", `${vozesDir}/${nome}${suf}`], { stdio: "inherit" });
-      if (r.status !== 0) console.error(`[INICIAR] voz: download de ${nome}${suf} falhou — confira o nome no catálogo rhasspy/piper-voices.`);
+  } else if (modoIA() === "local") {
+    // Modo local: llama-server embutido baixa o modelo do Hugging Face no
+    // primeiro arranque (flag -hf) e guarda em /data/modelos — o download de
+    // gigabytes acontece uma vez, sobrevive a rebuilds e não incha a imagem.
+    if (existsSync(LLAMA_BIN)) {
+      const modelo = process.env.MODELO || MODELO_LOCAL_PADRAO;
+      const cache = process.env.LLAMA_CACHE || "/data/modelos";
+      try { mkdirSync(cache, { recursive: true }); } catch {}
+      console.info(`[INICIAR] IA local: ${modelo} (primeiro arranque baixa o modelo — pode demorar)`);
+      // -ngl: camadas na GPU. O build é Vulkan, mas sem esta flag o llama.cpp
+      // carrega tudo na CPU mesmo com adaptador disponível. 999 = "tudo o que
+      // couber"; sem GPU exposta ao container, ele cai para CPU sozinho.
+      subirBin("llama", LLAMA_BIN,
+        ["-hf", modelo, "--host", "127.0.0.1", "--port", portaLlama, "-c", ctx, "-ngl", ngl, "--jinja", ...flagsExtra],
+        envDoFilho(ENV_FILHO.llama, { LLAMA_CACHE: cache }));
+    } else {
+      console.error(`[INICIAR] IA_MODO=local mas ${LLAMA_BIN} não existe nesta imagem — a IA vai falhar. Aponte LLM_URL para um servidor externo, ou use IA=0.`);
     }
   }
-  subir("voz-servico", "./voz-servico", "servidor.js", {
-    // O revoice/werift quebra com o navigator global do Node 22+.
-    flags: ["--no-experimental-global-navigator"],
-    env: {
-      VOZ_PORTA: process.env.VOZ_PORTA || "8091",
-      // A primeira voz da lista vira a padrão, salvo PIPER_VOZ explícito.
-      PIPER_VOZ: process.env.PIPER_VOZ || pedidos[0] || "pt_BR-faber-medium",
-    },
-  });
-}
 
-// O bot é o processo principal: se ele sair, tudo sai.
-subir("bot", ".", "main.js", { reiniciar: false });
+  if (IA_EMBUTIDA) subir("ia-servico", "./ia-servico", "servidor.js", { ambiente: ENV_FILHO.iaServico, env: { PORTA: process.env.IA_PORTA || "8090" } });
+  if (VOZ_ATIVA) {
+    const vozesDir = process.env.PIPER_VOZES || "/data/vozes";
+    try { mkdirSync(vozesDir, { recursive: true }); } catch {}
+    // Quais vozes baixar: a env VOZES lista nomes do catálogo oficial do Piper
+    // (https://huggingface.co/rhasspy/piper-voices), separados por vírgula.
+    // O nome carrega o caminho: pt_BR-faber-medium → pt/pt_BR/faber/medium/.
+    // (os nomes já passaram pela regex fechada no problemasDoBoot)
+    const pedidos = vozesPedidas();
+    const jaTem = new Set(existsSync(vozesDir) ? readdirSync(vozesDir) : []);
+    for (const nome of pedidos) {
+      if (jaTem.has(`${nome}.onnx`) && jaTem.has(`${nome}.onnx.json`)) continue;
+      const url = urlDaVoz(nome);
+      console.info(`[INICIAR] voz: baixando ${nome} (uma vez, fica no volume)…`);
+      for (const suf of [".onnx", ".onnx.json"]) {
+        // uma voz "high" tem ~110 MB: teto de 200 MiB e 10 min por arquivo
+        const r = spawnSync("curl", [...curlSeguro(600, 200 * 1024 ** 2), `${url.replace(/\.onnx$/, "")}${suf}`, "-o", `${vozesDir}/${nome}${suf}`],
+          { stdio: "inherit", env: envDoFilho(ENV_FILHO.curl) });
+        if (r.status !== 0) console.error(`[INICIAR] voz: download de ${nome}${suf} falhou — confira o nome no catálogo rhasspy/piper-voices.`);
+      }
+    }
+    subir("voz-servico", "./voz-servico", "servidor.js", {
+      // O revoice/werift quebra com o navigator global do Node 22+.
+      flags: ["--no-experimental-global-navigator"],
+      ambiente: ENV_FILHO.vozServico,
+      env: {
+        VOZ_PORTA: process.env.VOZ_PORTA || "8091",
+        // A primeira voz da lista vira a padrão, salvo PIPER_VOZ explícito.
+        PIPER_VOZ: process.env.PIPER_VOZ || pedidos[0] || "pt_BR-faber-medium",
+      },
+    });
+  }
+
+  // O bot é o processo principal: se ele sair, tudo sai. Ele leva o ambiente
+  // inteiro (é quem usa o .env), com as chaves dos serviços que este boot gerou.
+  subir("bot", ".", "main.js", { reiniciar: false });
+}

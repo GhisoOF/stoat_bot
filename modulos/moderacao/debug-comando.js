@@ -21,6 +21,7 @@ import * as db from "../core/db.js";
 import { lingua, idiomaDe, tr } from "../core/i18n.js";
 import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
 import { descreverErro } from "../core/erros.js";
+import { chaveServicoIA } from "../ai/servicos.js";
 import { MODULOS_AUTOMOD, moduloLigado, escadaDePunicao, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 // (22 out 2026) `iaExiste` = a IA está disponível aqui; `iaAqui` = e o chat está ligado
 import { servidorPermitido as temIA, iaDisponivel, imagemLigadaAqui } from "../ai/chat.js";
@@ -202,26 +203,32 @@ function secaoModeracao(d, T) {
   return { titulo: T("🛡 Moderação", "🛡 Moderation", "🛡 Moderación"), itens };
 }
 
+// (31 out 2026, R6/R10) nome de variável do .env e erro técnico só para o dono do
+// bot; a staff vê o estado e "avise quem hospeda o bot".
+const soDono = (d, txt) => (d.ehDono ? txt : "");
+const avisarHost = (T) => T("avise quem hospeda o bot", "tell whoever hosts the bot", "avisa a quien aloja el bot");
+
 async function secaoVoz(d, T) {
   const itens = [];
   if (!d.vozAqui) {
-    itens.push({ nivel: "info", texto: T("voz e música não estão liberadas neste servidor (`TTS_SERVIDORES`)", "voice and music aren't enabled on this server (`TTS_SERVIDORES`)", "la voz y la música no están habilitadas en este servidor (`TTS_SERVIDORES`)") });
+    itens.push({ nivel: "info", texto: T("voz e música não estão liberadas neste servidor", "voice and music aren't enabled on this server", "la voz y la música no están habilitadas en este servidor") + soDono(d, " (`TTS_SERVIDORES`)") });
     return { titulo: T("🔊 Voz e música", "🔊 Voice and music", "🔊 Voz y música"), itens };
   }
   const url = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
   if (!url) {
-    itens.push({ nivel: "erro", texto: T("`VOZ_SERVICO_URL` não definida — o serviço de voz não é encontrado", "`VOZ_SERVICO_URL` isn't set — the voice service can't be found", "`VOZ_SERVICO_URL` no está definida — no se encuentra el servicio de voz") });
+    itens.push({ nivel: "erro", texto: T("o serviço de voz não é encontrado", "the voice service can't be found", "no se encuentra el servicio de voz") + (d.ehDono ? " (`VOZ_SERVICO_URL`)" : ` — ${avisarHost(T)}`) });
   } else {
     const t0 = Date.now();
     try {
-      const r = await d.fetcher(`${url}/saude`, { signal: AbortSignal.timeout(6000) });
+      const r = await d.fetcher(`${url}/saude`, { signal: AbortSignal.timeout(6000), headers: process.env.VOZ_CHAVE ? { "x-chave": process.env.VOZ_CHAVE } : {} });
       const s = await r.json();
       itens.push({ nivel: r.ok ? "ok" : "erro", texto: T(`serviço de voz respondeu em ${Date.now() - t0} ms`, `voice service answered in ${Date.now() - t0} ms`, `el servicio de voz respondió en ${Date.now() - t0} ms`) });
-      itens.push({ nivel: s.piper?.ok ? "ok" : "erro", texto: `Piper: ${s.piper?.ok ? s.piper.vozAtual ?? "ok" : s.piper?.erro ?? "?"}` });
-      itens.push({ nivel: s.voz?.pronto ? "ok" : "erro", texto: `LiveKit: ${s.voz?.pronto ? T("pronto", "ready", "listo") : s.voz?.erro ?? "?"}` });
+      const falhou = (x) => (d.ehDono ? String(x ?? "?").slice(0, 200) : T("com falha", "failing", "con fallo"));
+      itens.push({ nivel: s.piper?.ok ? "ok" : "erro", texto: `Piper: ${s.piper?.ok ? s.piper.vozAtual ?? "ok" : falhou(s.piper?.erro)}` });
+      itens.push({ nivel: s.voz?.pronto ? "ok" : "erro", texto: `LiveKit: ${s.voz?.pronto ? T("pronto", "ready", "listo") : falhou(s.voz?.erro)}` });
     } catch (e) {
-      itens.push({ nivel: "erro", texto: T(`serviço de voz inalcançável (${e?.message ?? e})`, `voice service unreachable (${e?.message ?? e})`, `servicio de voz inalcanzable (${e?.message ?? e})`),
-        dica: T("na máquina do bot: `bash scripts/judy-diag.sh`", "on the bot's machine: `bash scripts/judy-diag.sh`", "en la máquina del bot: `bash scripts/judy-diag.sh`") });
+      itens.push({ nivel: "erro", texto: T("serviço de voz inalcançável", "voice service unreachable", "servicio de voz inalcanzable") + soDono(d, ` (${String(e?.message ?? e).slice(0, 200)})`),
+        dica: d.ehDono ? T("na máquina do bot: `bash scripts/judy-diag.sh`", "on the bot's machine: `bash scripts/judy-diag.sh`", "en la máquina del bot: `bash scripts/judy-diag.sh`") : avisarHost(T) });
     }
   }
   const c = d.config?.tts;
@@ -233,8 +240,7 @@ async function secaoVoz(d, T) {
 async function secaoIA(d, T) {
   const itens = [];
   if (!d.iaExiste) {
-    itens.push({ nivel: "info", texto: T("a IA de conversa não está liberada neste servidor (o dono do bot escolhe em `SERVIDOR`)",
-      "the chat AI isn't enabled on this server (the bot owner picks in `SERVIDOR`)", "la IA de conversación no está habilitada en este servidor (el dueño del bot elige en `SERVIDOR`)") });
+    itens.push({ nivel: "info", texto: T("a IA de conversa não está liberada neste servidor", "the chat AI isn't enabled on this server", "la IA de conversación no está habilitada en este servidor") + soDono(d, " (`CHAT_SERVIDORES`)") });
     return { titulo: T("🤖 IA", "🤖 AI", "🤖 IA"), itens };
   }
   // (22 out 2026) o chat e a imagem são escolha do servidor (começam desligados)
@@ -242,27 +248,27 @@ async function secaoIA(d, T) {
     ? { nivel: "ok", texto: T("chat ligado neste servidor", "chat on for this server", "chat activado en este servidor") }
     : { nivel: "info", texto: T(`chat desligado neste servidor — \`${citarInterno("chat.on")}\` liga`, `chat off for this server — \`${citarInterno("chat.on")}\` turns it on`, `chat desactivado en este servidor — \`${citar("chat.on", "es")}\` lo activa`) });
   const visao = !!(process.env.LLM_MODEL_VISAO || process.env.LLM_MODEL_MODERACAO);
-  if (!d.imagem) itens.push({ nivel: "info", texto: T("geração de imagem desligada no bot (`IMAGEM=0`)", "image generation off in the bot (`IMAGEM=0`)", "generación de imágenes desactivada en el bot (`IMAGEM=0`)") });
+  if (!d.imagem) itens.push({ nivel: "info", texto: T("geração de imagem desligada no bot", "image generation off in the bot", "generación de imágenes desactivada en el bot") + soDono(d, " (`IMAGEM=0`)") });
   else if (!d.imagemAqui) itens.push({ nivel: "info", texto: T(`geração de imagem desligada neste servidor — \`${citarInterno("chat.imagem")} on\` liga`, `image generation off for this server — \`${citarInterno("chat.imagem")} on\` turns it on`, `generación de imágenes desactivada en este servidor — \`${citar("chat.imagem", "es")} on\` la activa`) });
   else if (!visao) itens.push({ nivel: "aviso", texto: T("geração de imagem ligada, mas sem modelo de visão: toda imagem é conferida antes de sair, então nenhuma sai",
       "image generation on, but no vision model: every image is checked before it goes out, so none will", "generación de imágenes activada, pero sin modelo de visión: toda imagen se revisa antes de salir, así que no saldrá ninguna"),
-    dica: T("defina `MODELO_VISAO` no `.env`", "set `MODELO_VISAO` in `.env`", "define `MODELO_VISAO` en el `.env`") });
+    dica: d.ehDono ? T("defina `MODELO_VISAO` no `.env`", "set `MODELO_VISAO` in `.env`", "define `MODELO_VISAO` en el `.env`") : avisarHost(T) });
   else itens.push({ nivel: "ok", texto: T("geração de imagem ligada (cada imagem conferida pela visão)", "image generation on (each image checked by the vision model)", "generación de imágenes activada (cada imagen revisada por la visión)") });
   const servico = (process.env.IA_SERVICO_URL || "").replace(/\/$/, "");
-  if (!servico) itens.push({ nivel: "aviso", texto: T("`IA_SERVICO_URL` não definida — sem ferramentas (busca, código, imagem)", "`IA_SERVICO_URL` isn't set — no tools (search, code, images)", "`IA_SERVICO_URL` no está definida — sin herramientas (búsqueda, código, imágenes)") });
+  if (!servico) itens.push({ nivel: "aviso", texto: T("sem ferramentas (busca, código, imagem)", "no tools (search, code, images)", "sin herramientas (búsqueda, código, imágenes)") + soDono(d, " (`IA_SERVICO_URL`)") });
   else {
     try {
       const r = await d.fetcher(`${servico}/saude`, { signal: AbortSignal.timeout(6000),
-        headers: process.env.IA_SERVICO_CHAVE ? { "x-chave": process.env.IA_SERVICO_CHAVE } : {} });
+        headers: chaveServicoIA() ? { "x-chave": chaveServicoIA() } : {} });
       const s = await r.json();
       itens.push({ nivel: s.llm?.alcancavel ? "ok" : "erro", texto: s.llm?.alcancavel
         ? T(`modelo respondendo (${(s.llm.modelos ?? []).length} carregado(s))`, `model answering (${(s.llm.modelos ?? []).length} loaded)`, `modelo respondiendo (${(s.llm.modelos ?? []).length} cargado(s))`)
         : T("o servidor do modelo não responde — a IA fica muda", "the model server doesn't answer — the AI goes silent", "el servidor del modelo no responde — la IA se queda muda") });
     } catch (e) {
-      itens.push({ nivel: "erro", texto: T(`serviço da IA inalcançável (${e?.message ?? e})`, `AI service unreachable (${e?.message ?? e})`, `servicio de la IA inalcanzable (${e?.message ?? e})`) });
+      itens.push({ nivel: "erro", texto: T("serviço da IA inalcançável", "AI service unreachable", "servicio de la IA inalcanzable") + soDono(d, ` (${String(e?.message ?? e).slice(0, 200)})`) });
     }
   }
-  itens.push({ nivel: process.env.SEARXNG_URL ? "ok" : "info", texto: process.env.SEARXNG_URL ? T("busca na web ligada", "web search on", "búsqueda web activada") : T("busca na web desligada (sem `SEARXNG_URL`)", "web search off (no `SEARXNG_URL`)", "búsqueda web desactivada (sin `SEARXNG_URL`)") });
+  itens.push({ nivel: process.env.SEARXNG_URL ? "ok" : "info", texto: process.env.SEARXNG_URL ? T("busca na web ligada", "web search on", "búsqueda web activada") : T("busca na web desligada", "web search off", "búsqueda web desactivada") + soDono(d, " (`SEARXNG_URL`)") });
   return { titulo: T("🤖 IA", "🤖 AI", "🤖 IA"), itens };
 }
 

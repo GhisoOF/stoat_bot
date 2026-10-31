@@ -1,5 +1,6 @@
 
 import { resolverCargo } from "../core/ids.js";
+import { podeUsarCargo } from "../core/hierarquia.js";
 import { citar, citarInterno } from "../core/aliases.js";
 import { tr, lingua } from "../core/i18n.js";
 
@@ -217,6 +218,12 @@ export async function cmdStaff(message, args, ctx) {
           description: `**${alvo.nome}** ya cuenta como staff.`, colour: COR.aviso }));
     }
 
+    // (31 out 2026, R6) só quem está ACIMA do cargo o promove a staff
+    const pode = await podeUsarCargo(server, message, alvo.id, ctx);
+    if (!pode.ok) return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Acima de você", description: `${pode.pt}.`, colour: COR.erro },
+      { title: "🚫 Above you", description: `${pode.en}.`, colour: COR.erro },
+      { title: "🚫 Por encima de ti", description: `${pode.es ?? pode.en}.`, colour: COR.erro }));
     a.cargosStaff.push(alvo.id);
     salvarConfig?.();
     return sendEmbed(message.channel, tr(ctx, {

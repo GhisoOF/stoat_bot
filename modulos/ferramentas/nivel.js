@@ -5,8 +5,9 @@ import { tr, lingua, idiomaDe } from "../core/i18n.js";
 import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
 import * as log from "../core/log.js";
 import { idsDeCargos, rankDoCargo, rankDoMembro, editarCargos } from "../core/hierarquia.js";
-import { descreverErro, tipoDoErro } from "../core/erros.js";
+import { descreverErro, tipoDoErro, registrarErro } from "../core/erros.js";
 import { canalDeOutroServidor } from "../moderacao/pertence.js";
+import { numero } from "../core/env.js";
 
 const _tabelasXp = new Map();   // `${base}|${mult}` → number[] (acumulado por nível)
 function tabelaXp(base, mult, ateNivel) {
@@ -75,15 +76,18 @@ function botDoServidor(server, botMember) {
 
 // Falha de configuração (cargo acima do bot, falta de AssignRoles) se repete a
 // cada mensagem; no log e no relatório ela entra UMA vez a cada 6 h por servidor.
+// (31 out 2026, R9) o aviso vai pelo registrarErro com a etiqueta [XP], sem o
+// nome do servidor (o relatório do dono recebe só a etiqueta); o Map tem teto.
 const avisados = new Map();
 const AVISO_MS = 6 * 3600e3;
-function avisarUmaVez(chave, ...msg) {
+const MAX_AVISADOS = 2000;
+function avisarUmaVez(chave, texto) {
   const t = avisados.get(chave) ?? 0;
   if (Date.now() - t < AVISO_MS) return;
+  if (avisados.size >= MAX_AVISADOS) avisados.clear();
   avisados.set(chave, Date.now());
-  console.warn(...msg);
+  registrarErro("XP", texto);
 }
-const nomeServ = (server) => `"${server?.name ?? server?.id ?? "?"}"`;
 
 export async function sincronizarCargos(server, member, serverId, { nivel = null, botMember = null } = {}) {
   if (!server || !member || !serverId) return null;
@@ -101,15 +105,15 @@ export async function sincronizarCargos(server, member, serverId, { nivel = null
     try { return !!(server.roles?.get?.(id) ?? server.roles?.[id]); } catch { return true; }
   };
   const apagados = marcos.map((c) => c.roleId).filter((id) => id && !existe(id));
-  if (apagados.length) avisarUmaVez(`apagado:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: ${apagados.length} cargo(s) de nível foram apagados do servidor — recrie com ${citarInterno("xp.criarcargos")}`);
+  if (apagados.length) avisarUmaVez(`apagado:${serverId}`, `sincronizar: ${apagados.length} cargo(s) de nível foram apagados do servidor — recrie com ${citarInterno("xp.criarcargos")}`);
   const faltando = marcos.map((c) => c.roleId).filter((id) => id && !atuais.has(id) && existe(id));
   if (!faltando.length) return { concedidos: [], nivel: nivelAtual, bloqueados: null };
 
   const plano = planejarCargos({ server, botMember: botDoServidor(server, botMember), member, faltando });
   const bloqueados = (plano.membroAcima || plano.acimaDoBot.length || plano.botSemCargo)
     ? { membroAcima: plano.membroAcima, acimaDoBot: plano.acimaDoBot, botSemCargo: plano.botSemCargo } : null;
-  if (plano.botSemCargo) avisarUmaVez(`semcargo:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: o bot não tem nenhum cargo — o Stoat não deixa ele dar cargos a ninguém; dê um cargo ao bot acima dos cargos de nível`);
-  if (plano.acimaDoBot.length) avisarUmaVez(`acima:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: ${plano.acimaDoBot.length} cargo(s) de nível acima do cargo do bot — suba o cargo do bot (${citarInterno("xp.cargos")} mostra quais)`);
+  if (plano.botSemCargo) avisarUmaVez(`semcargo:${serverId}`, `sincronizar: o bot não tem nenhum cargo — o Stoat não deixa ele dar cargos a ninguém; dê um cargo ao bot acima dos cargos de nível`);
+  if (plano.acimaDoBot.length) avisarUmaVez(`acima:${serverId}`, `sincronizar: ${plano.acimaDoBot.length} cargo(s) de nível acima do cargo do bot — suba o cargo do bot (${citarInterno("xp.cargos")} mostra quais)`);
   if (plano.membroAcima) console.log(`[XP] ${userId} em ${serverId} está acima do bot na hierarquia — cargos de nível não podem ser dados`);
   if (!plano.dar.length) return { concedidos: [], nivel: nivelAtual, bloqueados };
 
@@ -121,7 +125,7 @@ export async function sincronizarCargos(server, member, serverId, { nivel = null
   } catch (e) {
     const tipo = tipoDoErro(e);
     if (tipo === "MissingPermission") {
-      avisarUmaVez(`perm:${serverId}`, `[XP][sincronizar] servidor ${nomeServ(server)}: falta a permissão AssignRoles ao bot — sem ela nenhum cargo de nível é dado`);
+      avisarUmaVez(`perm:${serverId}`, `sincronizar: falta a permissão AssignRoles ao bot — sem ela nenhum cargo de nível é dado`);
       return { concedidos: [], nivel: nivelAtual, bloqueados, erro: descreverErro(e) };
     }
     // Cache desatualizado (alguém mexeu na ordem agora): tenta um a um, para
@@ -136,7 +140,7 @@ export async function sincronizarCargos(server, member, serverId, { nivel = null
       console.log(`[XP] cargos sincronizados (um a um) para ${userId} em ${serverId}: +${dados.length} de ${plano.dar.length}`);
       return { concedidos: dados, nivel: nivelAtual, bloqueados };
     }
-    avisarUmaVez(`erro:${serverId}:${tipoDoErro(ultimoErro)}`, `[XP][sincronizar] servidor ${nomeServ(server)}: ${descreverErro(ultimoErro)}`);
+    avisarUmaVez(`erro:${serverId}:${tipoDoErro(ultimoErro)}`, `sincronizar: ${descreverErro(ultimoErro)}`);
     return { concedidos: [], nivel: nivelAtual, bloqueados, erro: descreverErro(ultimoErro) };
   }
 }
@@ -145,7 +149,7 @@ export async function sincronizarCargos(server, member, serverId, { nivel = null
 // nunca era tentado de novo (só no próximo nível ou ao reentrar). Agora, ao
 // ganhar XP, confere de novo — no máximo a cada 6 h por pessoa.
 const conferidos = new Map();
-const RECONFERIR_MS = Number(process.env.XP_RECONFERIR_MS || 6 * 3600e3);
+const RECONFERIR_MS = numero("XP_RECONFERIR_MS", 6 * 3600e3, { min: 0 });
 export function deveReconferir(serverId, userId, agora = Date.now()) {
   const k = `${serverId}:${userId}`;
   if (conferidos.has(k) && agora - conferidos.get(k) < RECONFERIR_MS) return false;
@@ -508,7 +512,7 @@ export async function cmdXp(message, args, ctx) {
       await sendEmbed(message.channel, aviso);
       const anuncio = g.canalAnuncio && g.canalAnuncio !== message.channelId
         ? await ctx.client?.channels?.fetch?.(g.canalAnuncio).catch(() => null) : null;
-      if (anuncio?.sendMessage && anuncio.serverId === serverId) await sendEmbed(anuncio, aviso).catch(() => {});
+      if (anuncio?.sendMessage && anuncio.serverId === serverId) await sendEmbed(anuncio, aviso).catch((e) => registrarErro("XP", e));
     }
     return;
   }

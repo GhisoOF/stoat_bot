@@ -8,7 +8,7 @@
     "stoat.js": "^7.3.6"
   },
   "overrides": {
-    "seroval": "1.6.8",
-    "seroval-plugins": "1.6.8"
+    "seroval": "1.6.12",
+    "seroval-plugins": "1.6.12"
   }
 }

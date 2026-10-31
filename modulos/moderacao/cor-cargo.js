@@ -4,7 +4,9 @@ import * as db from "../core/db.js";
 import { CORES as NOMES, CORES_EN, CORES_ES, normalizarCor as corSolida, nomesDeCor } from "../core/cores.js";
 import { tr, lingua, idiomaDe } from "../core/i18n.js";
 import { chamarApi } from "../core/stoat-api.js";
-import { canalDeOutroServidor } from "./pertence.js";
+import { canalDesteServidor, podeEscreverNoCanal } from "./pertence.js";
+import { podeUsarCargo } from "../core/hierarquia.js";
+import { descreverErro, registrarErro } from "../core/erros.js";
 import { segundosPara } from "../core/ritmo-api.js";
 
 // Gradientes prontos — o atalho para o efeito bonito sem montar nada.
@@ -96,6 +98,27 @@ export function tempoDoLote(alvos, existentes, nomeDe, valorDe) {
     pedidos += !ja ? 2 : mesmaCor(ja.r?.colour, valorDe(it)) ? 0 : 1;
   }
   return segundosPara(pedidos);
+}
+
+// ── Só reaproveita cargo que JÁ é de painel de cor (31 out 2026, R9) ────────
+// Antes, qualquer cargo com o nome da cor ("Verde", "Ouro") entrava no painel,
+// e qualquer membro o pegava reagindo. Cargo de painel = criado pelo `&cor
+// painel|criar` (a lista fica na config) ou já ligado por reação a um painel de
+// cor deste servidor com o emoji daquela cor (os painéis de antes desta regra).
+const MAX_CARGOS_PAINEL = 200;
+export function ehCargoDePainel(config, serverId, roleId, emoji = null) {
+  if ((config?.corPainel?.cargos ?? []).includes(roleId)) return true;
+  if (!emoji) return false;
+  const e = String(emoji).replace(/\uFE0F/g, "");
+  try { return db.listReactionRolesServidor(serverId).some((r) => r.roleId === roleId && String(r.emoji).replace(/\uFE0F/g, "") === e); }
+  catch { return false; }
+}
+function lembrarCargoDePainel(config, roleId) {
+  if (!config) return;
+  config.corPainel ??= { cargos: [] };
+  config.corPainel.cargos ??= [];
+  if (!config.corPainel.cargos.includes(roleId)) config.corPainel.cargos.push(roleId);
+  if (config.corPainel.cargos.length > MAX_CARGOS_PAINEL) config.corPainel.cargos.splice(0, config.corPainel.cargos.length - MAX_CARGOS_PAINEL);
 }
 
 function temPermissoes(role) {
@@ -219,15 +242,15 @@ export function separarCargoECor(server, args) {
 }
 
 async function aplicarCor(serverId, roleId, colour, en = false) {
-  if (!process.env.BOT_TOKEN) return { ok: false, erro: X3(en, "BOT_TOKEN não está definido no ambiente do bot.", "BOT_TOKEN isn't set in the bot's environment.", "BOT_TOKEN no está definido en el entorno del bot.") };
-
   const r = await chamarApi(`/servers/${serverId}/roles/${roleId}`, {
     metodo: "PATCH",
     corpo: colour === null ? { remove: ["Colour"] } : { colour },
     ms: 15_000,
   });
   if (r.ok) return { ok: true };
-  if (r.erro) return { ok: false, erro: X3(en, `Não consegui falar com a API: ${r.erro}`, `I couldn't reach the API: ${r.erro}`, `No pude comunicarme con la API: ${r.erro}`) };
+  // (31 out 2026, R10) nada de nome de variável, código HTTP nem corpo da API na tela: vai ao log
+  registrarErro("COR:api", r.erro ?? `HTTP ${r.status} ${String(r.texto ?? "").slice(0, 300)}`);
+  if (r.erro) return { ok: false, erro: X3(en, "Não consegui falar com o Stoat agora — tente de novo.", "I couldn't reach the Stoat right now — try again.", "No pude comunicarme con Stoat ahora — inténtalo de nuevo.") };
 
   const dica = en === "es"
     ? (r.status === 403 ? " — el rol del bot necesita **ManageRole** y estar **por encima** del rol que está editando."
@@ -243,7 +266,7 @@ async function aplicarCor(serverId, roleId, colour, en = false) {
       : r.status === 400 ? " — o Stoat recusou o valor da cor (aceita: hex/`rgb()`/nome, ou `linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)` — ângulo em `deg`, `%` inteiro, até 128 caracteres)."
       : r.status === 404 ? " — cargo ou servidor não encontrado."
       : "");
-  return { ok: false, erro: `${X3(en, "API respondeu", "The API answered", "La API respondió")} ${r.status}${dica}${r.texto ? `\n\`\`\`\n${r.texto.slice(0, 300)}\n\`\`\`` : ""}` };
+  return { ok: false, erro: `${X3(en, "O Stoat recusou", "The Stoat refused it", "Stoat lo rechazó")}${dica}` };
 }
 
 export async function cmdCor(message, args, ctx) {
@@ -445,8 +468,16 @@ export async function cmdCor(message, args, ctx) {
     }
     // o canal do painel tem de ser deste servidor — confere ANTES de criar cargos
     if (canalAlvoId && canalAlvoId !== message.channelId) {
-      const alvo = ctx.client?.channels?.get?.(canalAlvoId) ?? await ctx.client?.channels?.fetch?.(canalAlvoId).catch(() => null);
-      if (!alvo || canalDeOutroServidor(alvo, ctx.serverId)) {
+      // (31 out 2026, R9) só canal DESTE servidor, e onde quem pede pode escrever
+      const deste = canalDesteServidor(server, canalAlvoId);
+      const alvo = deste ? (ctx.client?.channels?.get?.(deste.id) ?? await ctx.client?.channels?.fetch?.(deste.id)?.catch?.(() => null) ?? null) : null;
+      if (alvo && !podeEscreverNoCanal(message, alvo, server, ctx)) {
+        return sendEmbed(message.channel, tr(ctx,
+          { title: "🚫 Sem permissão nesse canal", description: `Você não pode enviar mensagens em <#${canalAlvoId}> — então eu também não publico lá por você.`, colour: COR.erro },
+          { title: "🚫 No permission in that channel", description: `You can't send messages in <#${canalAlvoId}> — so I won't post there for you.`, colour: COR.erro },
+          { title: "🚫 Sin permiso en ese canal", description: `No puedes enviar mensajes en <#${canalAlvoId}> — así que yo tampoco publico ahí por ti.`, colour: COR.erro }));
+      }
+      if (!alvo) {
         return sendEmbed(message.channel, tr(ctx,
           { title: "❌ Canal inválido", description: `<#${canalAlvoId}> não é um canal **deste servidor** onde eu possa escrever. Use \`${citarInterno("cor.painel.aqui", P)}\`.`, colour: COR.erro },
           { title: "❌ Invalid channel", description: `<#${canalAlvoId}> isn't a channel **on this server** I can write to. Use \`${citarInterno("cor.painel.aqui", P)}\`.`, colour: COR.erro },
@@ -491,6 +522,10 @@ export async function cmdCor(message, args, ctx) {
         falhas.push({ ...it, erro: X("já existe um cargo com esse nome, e ele tem permissões — renomeie-o", "a role with this name already exists and has permissions — rename it", "ya existe un rol con ese nombre y tiene permisos — cámbiale el nombre") });
         continue;
       }
+      if (jaExiste && !ehCargoDePainel(ctx.config, serverId, jaExiste.id, emojiDoItem(it))) {
+        falhas.push({ ...it, erro: X("já existe um cargo com esse nome que não é de um painel de cor — renomeie-o", "a role with this name already exists and isn't from a color panel — rename it", "ya existe un rol con ese nombre que no es de un panel de colores — cámbiale el nombre") });
+        continue;
+      }
       let roleId = jaExiste?.id ?? null;
       let criado = false;
       if (!roleId) {
@@ -498,11 +533,12 @@ export async function cmdCor(message, args, ctx) {
           const r = await server.createRole(nomeDoItem(it, en));
           roleId = r?.id ?? r?._id ?? r;
           criado = true;
-        } catch (e) { falhas.push({ ...it, erro: X(`não consegui criar (${e?.message ?? e})`, `couldn't create (${e?.message ?? e})`, `no pude crearlo (${e?.message ?? e})`) }); continue; }
+        } catch (e) { const d = descreverErro(e, L === true ? "en" : L === false ? "pt" : L); falhas.push({ ...it, erro: X(`não consegui criar (${d})`, `couldn't create (${d})`, `no pude crearlo (${d})`) }); continue; }
       }
       const r = jaExiste && mesmaCor(jaExiste.r?.colour, valorDoItem(it)) ? { ok: true } : await aplicarCor(serverId, roleId, valorDoItem(it), L);
       if (!r.ok) { falhas.push({ ...it, erro: r.erro.split("\n")[0] }); continue; }
       if (criado) novosCargos++; else reaproveitados++;
+      lembrarCargoDePainel(ctx.config, roleId);
       prontos.push({ ...it, roleId });
       await new Promise((s) => setTimeout(s, 350));   // limite de taxa
     }
@@ -527,6 +563,7 @@ export async function cmdCor(message, args, ctx) {
         colour: COR.erro }));
     }
 
+    ctx.salvarConfig?.();   // a lista dos cargos de painel (corPainel.cargos)
     // ── 2. Só os cargos? termina aqui ──
     if (soCargos) {
       return sendEmbed(message.channel, tr(ctx, {
@@ -567,7 +604,7 @@ export async function cmdCor(message, args, ctx) {
       canal = destinoId === message.channelId ? message.channel
         : (ctx.client?.channels?.get?.(destinoId) ?? await ctx.client?.channels?.fetch?.(destinoId));
     } catch {}
-    if (canalDeOutroServidor(canal, ctx.serverId)) canal = null;   // canal de outro servidor: não
+    if (destinoId !== message.channelId && !canalDesteServidor(server, destinoId)) canal = null;   // canal de outro servidor: não
     if (!canal?.sendMessage) {
       return sendEmbed(message.channel, tr(ctx, {
         title: "❌ Canal inválido",
@@ -618,13 +655,13 @@ export async function cmdCor(message, args, ctx) {
         if (n === 0) {
           return sendEmbed(message.channel, tr(ctx,
             { title: "❌ Não consegui publicar",
-              description: `Erro ao enviar no canal: ${e?.message ?? e}\n\n_Falta **SendMessage**/**SendEmbeds** ali?_`, colour: COR.erro },
+              description: `Erro ao enviar no canal: ${descreverErro(e, "pt")}\n\n_Falta **SendMessage**/**SendEmbeds** ali?_`, colour: COR.erro },
             { title: "❌ Couldn't publish",
-              description: `Error sending in the channel: ${e?.message ?? e}\n\n_Missing **SendMessage**/**SendEmbeds** there?_`, colour: COR.erro },
+              description: `Error sending in the channel: ${descreverErro(e, "en")}\n\n_Missing **SendMessage**/**SendEmbeds** there?_`, colour: COR.erro },
             { title: "❌ No pude publicar",
-              description: `Error al enviar en el canal: ${e?.message ?? e}\n\n_¿Falta **SendMessage**/**SendEmbeds** ahí?_`, colour: COR.erro }));
+              description: `Error al enviar en el canal: ${descreverErro(e, "es")}\n\n_¿Falta **SendMessage**/**SendEmbeds** ahí?_`, colour: COR.erro }));
         }
-        semReacao.push(`${TITULO[parte.tipo][chaveTitulo]} (${e?.message ?? e})`);
+        semReacao.push(`${TITULO[parte.tipo][chaveTitulo]} (${descreverErro(e, chaveTitulo)})`);
         continue;
       }
 
@@ -648,7 +685,7 @@ export async function cmdCor(message, args, ctx) {
           await painelMsg.react(encodeURIComponent(emoji));
           ligados++;
         } catch (e) {
-          semReacao.push(`${nomeDoItem(c, en)} (${e?.message ?? e})`);
+          semReacao.push(`${nomeDoItem(c, en)} (${descreverErro(e, chaveTitulo)})`);
         }
         await new Promise((s) => setTimeout(s, 300));   // limite de taxa das reações
       }
@@ -731,6 +768,15 @@ export async function cmdCor(message, args, ctx) {
         "", `\`${ce("cor")} @VIP #FF00AA\` · \`${ce("cor")} Le Gooby linear-gradient(224deg, #73E696 50%, #F7EEB2 50%)\``].join("\n"),
       colour: COR.erro };
     return sendEmbed(message.channel, tr(ctx, emb, emb, embEs));
+  }
+
+  // (31 out 2026, R6) quem pinta tem de estar ACIMA do cargo (como no &reactionrole)
+  {
+    const pode = await podeUsarCargo(server, message, cargo.id, ctx);
+    if (!pode.ok) return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Acima de você", description: `${pode.pt}.`, colour: COR.erro },
+      { title: "🚫 Above you", description: `${pode.en}.`, colour: COR.erro },
+      { title: "🚫 Por encima de ti", description: `${pode.es ?? pode.en}.`, colour: COR.erro }));
   }
 
   const resto = achado.resto;

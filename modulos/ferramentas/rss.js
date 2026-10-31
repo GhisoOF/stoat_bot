@@ -1,12 +1,12 @@
-
-import { buscarSeguro, lerTexto, erroEmIngles } from "../core/seguranca.js";
+import ParserRSS from "rss-parser";   // dependência: sem ele, o boot para (antes caía num leitor por regex)
+import { buscarSeguro, lerTexto, erroEmIngles, textoDeFora } from "../core/seguranca.js";
 import { citar, citarInterno } from "../core/aliases.js";
 import * as db from "../core/db.js";
-import { ULID } from "../core/ids.js";
-import { canalDeOutroServidor } from "../moderacao/pertence.js";
+import { canalDeOutroServidor, canalDesteServidor } from "../moderacao/pertence.js";
+import { registrarErro } from "../core/erros.js";
 import * as log from "../core/log.js";
 import { tr, lingua, textoDoIdioma, idiomaDaTela } from "../core/i18n.js";
-import { servidorNaLista } from "../core/env.js";
+import { servidorNaLista, numero } from "../core/env.js";
 import { servidorDaCasa } from "../core/casa.js";
 
 let resumirIA = null;
@@ -31,75 +31,69 @@ export function iaNoRssAqui(serverId, config) {
   return ["on", "1", "sim", "true", "ligado"].includes((process.env.CHAT_PADRAO ?? "").trim().toLowerCase()) || servidorDaCasa(serverId);
 }
 
-const MAX_ITENS   = Number(process.env.RSS_MAX_ITENS || 50);
-const MAX_FEEDS_SERVIDOR = Number(process.env.RSS_MAX_FEEDS || 25);
-const INTERVALO_MS = Number(process.env.RSS_INTERVALO_MS || 3600_000);  // 1 hora
+const MAX_ITENS   = numero("RSS_MAX_ITENS", 50, { min: 1, max: 500, inteiro: true });
+const MAX_FEEDS_SERVIDOR = numero("RSS_MAX_FEEDS", 25, { min: 1, inteiro: true });
+const INTERVALO_MS = numero("RSS_INTERVALO_MS", 3600_000, { min: 60_000, inteiro: true });  // 1 hora
+// (31 out 2026, R11) o `&rss agora` baixa todos os feeds do servidor: no máximo
+// um a cada RSS_AGORA_MIN_MS por servidor
+const AGORA_MIN_MS = numero("RSS_AGORA_MIN_MS", 5 * 60_000, { min: 0, inteiro: true });
 
 // O canal de destino por servidor fica na config (rss.canalId).
 function getCanalId(config) { return config?.rss?.canalId ?? null; }
 
-let ParserRSS = null;
 export const _interno = { parseFeed: null };   // gancho de teste (opcional)
 
+// Título, resumo e link vêm de FORA (31 out 2026): passam aqui, uma vez, pelo
+// textoDeFora (sem ping em massa, sem link mascarado) e o link só se for http(s).
+const linkHttp = (u) => { try { const x = new URL(String(u ?? "")); return /^https?:$/.test(x.protocol) ? x.href : ""; } catch { return ""; } };
+export function limparFeed(feed, url) {
+  return {
+    titulo: textoDeFora(feed?.titulo || url, { max: 200 }),
+    itens: (feed?.itens ?? []).map((i) => ({
+      ...i,
+      titulo: textoDeFora(String(i.titulo ?? "").trim(), { max: 300 }),
+      resumo: textoDeFora(String(i.resumo ?? "").replace(/\s+/g, " ").trim(), { max: 400 }),
+      link: linkHttp(i.link),
+    })),
+  };
+}
+
 async function parseFeed(url) {
-  if (_interno.parseFeed) return _interno.parseFeed(url);   // usado só em testes
-  if (ParserRSS === null) {
-    try { ParserRSS = (await import("rss-parser")).default; }
-    catch { ParserRSS = false; }   // não instalado → usa fallback
-  }
-  if (ParserRSS) {
-    // O rss-parser buscava a URL SOZINHO (parseURL), por fora da trava
-    // anti-SSRF — qualquer staff de qualquer servidor fazia o bot sondar a
-    // rede interna. Agora a busca é nossa (IP conferido, teto de tamanho) e o
-    // rss-parser só interpreta o texto (12 out 2026).
-    const parser = new ParserRSS();
-    const feed = await parser.parseString(await baixarFeed(url));
-    return {
-      titulo: feed.title || url,
-      itens: (feed.items || []).map((i) => ({
-        guid:  i.guid || i.id || i.link || i.title,
-        titulo: (i.title || "").trim(),
-        link:  i.link || "",
-        data:  i.isoDate || i.pubDate || null,
-        resumo: (i.contentSnippet || i.content || "").replace(/\s+/g, " ").trim().slice(0, 400),
-      })),
-    };
-  }
-  return await parseFeedManual(url);
+  if (_interno.parseFeed) return limparFeed(await _interno.parseFeed(url), url);   // usado só em testes
+  // O rss-parser buscava a URL SOZINHO (parseURL), por fora da trava
+  // anti-SSRF — qualquer staff de qualquer servidor fazia o bot sondar a
+  // rede interna. Agora a busca é nossa (IP conferido, teto de tamanho) e o
+  // rss-parser só interpreta o texto (12 out 2026).
+  const feed = await new ParserRSS().parseString(await baixarFeed(url));
+  return limparFeed({
+    titulo: feed.title || url,
+    itens: (feed.items || []).map((i) => ({
+      guid:  i.guid || i.id || i.link || i.title,
+      titulo: i.title || "",
+      link:  i.link || "",
+      data:  i.isoDate || i.pubDate || null,
+      resumo: i.contentSnippet || i.content || "",
+    })),
+  }, url);
 }
 
 // O endereço vem da staff: só internet pública (um feed em 127.0.0.1 ou na
 // rede interna fazia o bot sondar os próprios serviços), com teto de tamanho.
-const MAX_FEED = Number(process.env.RSS_MAX_BYTES || 3 * 1024 * 1024);
+const MAX_FEED = numero("RSS_MAX_BYTES", 3 * 1024 * 1024, { min: 1024, inteiro: true });
 async function baixarFeed(url) {
   const r = await buscarSeguro(url, { signal: AbortSignal.timeout(20_000), headers: { "User-Agent": "JudyRSS/1.0" } });
   if (!r.ok) { r.descartar?.(); throw new Error(`HTTP ${r.status}`); }
   return await lerTexto(r, MAX_FEED);
 }
 
-// Fallback sem dependência: regex simples para <item>/<entry>
-async function parseFeedManual(url) {
-  const xml = await baixarFeed(url);
-
-  const tituloFeed = (xml.match(/<title>([\s\S]*?)<\/title>/i)?.[1] || url).trim();
-  const blocos = xml.match(/<(item|entry)[\s\S]*?<\/\1>/gi) || [];
-  const pega = (b, tag) => {
-    const m = b.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, "i"));
-    return m ? m[1].replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<[^>]+>/g, "").trim() : "";
-  };
-  const pegaLink = (b) =>
-    b.match(/<link[^>]*href="([^"]+)"/i)?.[1] || pega(b, "link");
-
-  const itens = blocos.map((b) => ({
-    guid:  pega(b, "guid") || pega(b, "id") || pegaLink(b) || pega(b, "title"),
-    titulo: pega(b, "title"),
-    link:  pegaLink(b),
-    data:  pega(b, "pubDate") || pega(b, "updated") || pega(b, "published") || null,
-    resumo: (pega(b, "description") || pega(b, "summary") || pega(b, "content"))
-              .replace(/\s+/g, " ").slice(0, 400),
-  }));
-  return { titulo: tituloFeed, itens };
+// O motivo que pode ir para a tela: só os nossos (bloqueado, HTTP n, tempo,
+// tamanho); erro de biblioteca ou de rede vira uma frase só (R10).
+export function motivoDoFeed(err, lang = "pt") {
+  const m = String(err?.message ?? "").replace(/\s*\([^)]*\)\s*$/, "");   // sem o endereço entre parênteses
+  if (/^(bloqueado: |HTTP \d{3}$|tempo esgotado|redirects demais|resposta grande demais)/.test(m)) return lang === "pt" ? m : erroEmIngles(m);
+  return lang === "es" ? "no pude leer esa dirección como RSS/Atom" : lang === "en" ? "I couldn't read that address as RSS/Atom" : "não consegui ler esse endereço como RSS/Atom";
 }
+const semUrl = (t) => String(t ?? "").replace(/https?:\/\/\S+/g, "‹url›");
 
 // ── Coleta os itens NOVOS de todos os feeds de um servidor ──
 async function coletarNovos(serverId) {
@@ -108,7 +102,7 @@ async function coletarNovos(serverId) {
   for (const f of feeds) {
     try {
       const feed = await parseFeed(f.url);
-      const tituloFeed = f.titulo || feed.titulo || f.url;
+      const tituloFeed = textoDeFora(f.titulo || feed.titulo || f.url, { max: 200 });
       for (const item of feed.itens) {
         if (!item.guid) continue;
         // marcarVisto devolve true se era novo
@@ -118,10 +112,11 @@ async function coletarNovos(serverId) {
       }
       // se o feed não tinha título salvo, guarda agora
       if (!f.titulo && feed.titulo) {
-        try { db.addFeed(serverId, f.url, feed.titulo); } catch {}
+        try { db.addFeed(serverId, f.url, feed.titulo); } catch (e) { registrarErro("RSS", e); }
       }
     } catch (err) {
-      console.error(`[RSS] falha ao ler ${f.url}:`, err.message);
+      // (31 out 2026, R9) sem a URL (nem o servidor) no aviso: só o número do feed
+      registrarErro("RSS", `falha ao ler o feed #${f.id}: ${semUrl(err?.message)}`);
     }
   }
   return novos;
@@ -206,7 +201,7 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
           const rotulo = cat === "Geral" ? "" : ` · ${cat}`;
           await canal.sendMessage({ embeds: [{
             title: cicloEs ? `📰 El resumen de Judy${rotulo} — ${agora}` : cicloEn ? `📰 Judy's digest${rotulo} — ${agora}` : `📰 O resumo da Judy${rotulo} — ${agora}`,
-            description: fecharResumo(resumo, itens),
+            description: textoDeFora(fecharResumo(resumo, itens)),   // o modelo leu texto de fora: a saída também passa
             colour: "#a78bfa",
           }] });
         }
@@ -252,11 +247,14 @@ export async function rodarCiclo(serverId, ctx, { forcado = false } = {}) {
       en: { titulo: "📰 RSS posted", descricao: `${novos.length} news item(s) posted in <#${canalId}>.` },
       es: { titulo: "📰 RSS publicado", descricao: `${novos.length} noticia(s) publicada(s) en <#${canalId}>.` },
     });
-  } catch {}
+  } catch (e) { registrarErro("RSS", e); }
 
   return { ok: true, quantidade: novos.length };
 }
 
+// (31 out 2026, R11) setTimeout encadeado: o próximo ciclo só é marcado quando o
+// atual termina — um ciclo lento (muitos feeds, modelo devagar) nunca se sobrepõe
+// ao seguinte, como acontecia com o setInterval.
 let timer = null;
 export function iniciarAgendador(ctx) {
   if (timer) return;
@@ -274,12 +272,17 @@ export function iniciarAgendador(ctx) {
       }
       db.limparVistosAntigos(30);
     } catch (err) {
-      console.error("[RSS] erro no ciclo:", err.message);
+      registrarErro("RSS", err);
     }
+    timer = setTimeout(tick, INTERVALO_MS);
+    timer.unref?.();
   };
-  timer = setInterval(tick, INTERVALO_MS);
+  timer = setTimeout(tick, INTERVALO_MS);
+  timer.unref?.();
   console.log(`[RSS] agendador ligado (a cada ${Math.round(INTERVALO_MS / 60000)} min)`);
 }
+
+const ultimoAgora = new Map();   // serverId → ms do último `&rss agora`
 
 export async function cmdRss(message, args, ctx) {
   const { sendEmbed, COR, getServer, membroTemPermissao, PREFIXO, serverId, config, salvarConfig } = ctx;
@@ -324,24 +327,25 @@ export async function cmdRss(message, args, ctx) {
         { title: "❌ Feeds demais", description: `Este servidor já tem **${MAX_FEEDS_SERVIDOR}** feeds — o máximo. Tire um com \`${citarInterno("rss.remove", PREFIXO)} <id>\`.`, colour: COR.erro },
         { title: "❌ Too many feeds", description: `This server already has **${MAX_FEEDS_SERVIDOR}** feeds — the maximum. Remove one with \`${citarInterno("rss.remove", PREFIXO)} <id>\`.`, colour: COR.erro },
         { title: "❌ Demasiados feeds", description: `Este servidor ya tiene **${MAX_FEEDS_SERVIDOR}** feeds — el máximo. Quita uno con \`${citar("rss.remove", "es", PREFIXO)} <id>\`.`, colour: COR.erro }));
-    // valida buscando o feed uma vez
-    let titulo = null;
-    try { titulo = (await parseFeed(url)).titulo; }
+    // valida lendo o feed UMA vez — e é essa leitura que marca o conteúdo atual
+    // como visto (31 out 2026: antes eram duas leituras, e se a segunda falhasse
+    // nada era marcado e o próximo ciclo despejava até 50 itens velhos)
+    let feed = null;
+    try { feed = await parseFeed(url); }
     catch (err) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Feed inacessível",
-          description: `Não consegui ler esse RSS.\n**Erro:** ${err.message}`, colour: COR.erro },
+          description: `Não consegui ler esse RSS.\n**Erro:** ${motivoDoFeed(err, "pt")}`, colour: COR.erro },
         { title: "❌ Unreachable feed",
-          description: `I couldn't read that RSS.\n**Error:** ${erroEmIngles(err.message)}`, colour: COR.erro },
+          description: `I couldn't read that RSS.\n**Error:** ${motivoDoFeed(err, "en")}`, colour: COR.erro },
         { title: "❌ Feed inaccesible",
-          description: `No pude leer ese RSS.\n**Error:** ${erroEmIngles(err.message)}`, colour: COR.erro }));
+          description: `No pude leer ese RSS.\n**Error:** ${motivoDoFeed(err, "es")}`, colour: COR.erro }));
     }
+    const titulo = feed.titulo;
     const novo = db.addFeed(serverId, url, titulo, categoria);
-    // já marca os itens atuais como vistos (só resume o que vier DEPOIS)
     if (novo) {
-      const feeds = db.listarFeeds(serverId);
-      const f = feeds.find((x) => x.url === url);
-      try { for (const it of (await parseFeed(url)).itens) if (it.guid) db.marcarVisto(f.id, it.guid); } catch {}
+      const f = db.listarFeeds(serverId).find((x) => x.url === url);
+      for (const it of feed.itens) if (it.guid) db.marcarVisto(f.id, it.guid);
     }
     return sendEmbed(message.channel, tr(ctx, {
       title: novo ? "✅ Feed adicionado" : "ℹ️ Já cadastrado",
@@ -388,7 +392,7 @@ export async function cmdRss(message, args, ctx) {
 
   // ── list ──
   if (sub === "list" || sub === "lista") {
-    const feeds = db.listarFeeds(serverId);
+    const feeds = db.listarFeeds(serverId).map((f) => ({ ...f, titulo: f.titulo ? textoDeFora(f.titulo, { max: 200 }) : null }));
     if (!feeds.length)
       return sendEmbed(message.channel, tr(ctx,
         { title: "📰 Feeds RSS", description: `Nenhum feed. Adicione com \`${citarInterno("rss.add", PREFIXO)} <url>\`.`, colour: COR.mod },
@@ -448,8 +452,8 @@ export async function cmdRss(message, args, ctx) {
           description: "La curaduría no se publicará hasta que vuelvas a definir un canal.", colour: COR.mod }));
     }
     let canalId = null;
-    if (!arg || arg === "aqui" || arg === "here") canalId = message.channelId;
-    else if (ULID.test(args[1].replace(/[<#>]/g, ""))) canalId = args[1].replace(/[<#>]/g, "");
+    if (!arg || arg === "aqui" || arg === "here" || arg === "aquí") canalId = message.channelId;
+    else if (/^<?#?[0-9A-HJKMNP-TV-Z]{26}>?$/i.test(args[1])) canalId = canalDesteServidor(server, args[1])?.id ?? "fora";
     else return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Uso incorreto",
         description: `\`${citarInterno("rss.canal.aqui", PREFIXO)}\` · \`${citarInterno("rss.canal", PREFIXO)} <id>\` · \`${citarInterno("rss.canal.off", PREFIXO)}\``, colour: COR.erro },
@@ -458,9 +462,9 @@ export async function cmdRss(message, args, ctx) {
       { title: "❌ Uso incorrecto",
         description: `\`${citar("rss.canal.aqui", "es", PREFIXO)}\` · \`${citar("rss.canal", "es", PREFIXO)} <id>\` · \`${citar("rss.canal.off", "es", PREFIXO)}\``, colour: COR.erro }));
     // o canal precisa ser DESTE servidor (15 out 2026: um ID de outro servidor
-    // fazia a Judy postar o resumo lá)
-    const canalAlvo = ctx.client?.channels?.get?.(canalId) ?? await ctx.client?.channels?.fetch?.(canalId)?.catch?.(() => null);
-    if (canalDeOutroServidor(canalAlvo, ctx.serverId))
+    // fazia a Judy postar o resumo lá; 31 out: conferido pela lista do servidor,
+    // não pelo canal buscado — um canal fora do cache passava)
+    if (canalId === "fora")
       return sendEmbed(message.channel, tr(ctx,
         { title: "🚫 Canal de outro servidor", description: "Esse canal é de outro servidor — escolha um canal daqui.", colour: COR.erro },
         { title: "🚫 Channel from another server", description: "That channel belongs to another server — pick one from here.", colour: COR.erro },
@@ -474,6 +478,14 @@ export async function cmdRss(message, args, ctx) {
 
   // ── agora (forçar ciclo) ──
   if (sub === "agora" || sub === "now" || sub === "testar") {
+    const espera = AGORA_MIN_MS - (Date.now() - (ultimoAgora.get(serverId) ?? 0));
+    if (espera > 0) {
+      const min = Math.ceil(espera / 60_000);
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "⏳ Calma", description: `A curadoria acabou de rodar aqui — tente de novo em ${min} min.`, colour: COR.aviso },
+        { title: "⏳ Hold on", description: `The curation just ran here — try again in ${min} min.`, colour: COR.aviso },
+        { title: "⏳ Calma", description: `La curaduría acaba de ejecutarse aquí — vuelve a intentarlo en ${min} min.`, colour: COR.aviso }));
+    }
     if (!getCanalId(config))
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Sem canal", description: `Defina primeiro com \`${citarInterno("rss.canal.aqui", PREFIXO)}\`.`, colour: COR.erro },
@@ -486,6 +498,8 @@ export async function cmdRss(message, args, ctx) {
         description: "Fetching and summarizing the news. This may take a while.", colour: COR.info },
       { title: "⏳ Ejecutando la curaduría…",
         description: "Buscando y resumiendo las novedades. Puede tardar un rato.", colour: COR.info }));
+    for (const [sid, t] of ultimoAgora) if (Date.now() - t >= AGORA_MIN_MS) ultimoAgora.delete(sid);   // o Map só guarda quem está na espera
+    ultimoAgora.set(serverId, Date.now());
     try {
       const r = await rodarCiclo(serverId, ctx, { forcado: true });
       if (!r.ok)
@@ -494,14 +508,14 @@ export async function cmdRss(message, args, ctx) {
           { title: "❌ Failed", description: MOTIVO_EN[r.motivo] ?? r.motivo, colour: COR.erro },
           { title: "❌ Falló", description: MOTIVO_ES[r.motivo] ?? MOTIVO_EN[r.motivo] ?? r.motivo, colour: COR.erro }));
     } catch (err) {
-      console.error("[RSS] erro no ciclo forçado:", err);
+      registrarErro("RSS", err);
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Erro na curadoria",
-          description: `O resumo pode ter sido postado, mas algo falhou depois.\n**Erro:** ${err.message}`, colour: COR.erro },
+          description: "O resumo pode ter sido postado, mas algo falhou depois.", colour: COR.erro },
         { title: "❌ Error in the curation",
-          description: `The digest may have been posted, but something failed afterwards.\n**Error:** ${erroEmIngles(err.message)}`, colour: COR.erro },
+          description: "The digest may have been posted, but something failed afterwards.", colour: COR.erro },
         { title: "❌ Error en la curaduría",
-          description: `Puede que el resumen se haya publicado, pero algo falló después.\n**Error:** ${erroEmIngles(err.message)}`, colour: COR.erro }));
+          description: "Puede que el resumen se haya publicado, pero algo falló después.", colour: COR.erro }));
     }
     return; // o próprio ciclo já postou
   }
@@ -776,7 +790,7 @@ export async function publicarRelatorio(canal, novos, { lang = "pt", agora = "",
     for (let i = 0; i < blocos.length; i++) {
       await canal.sendMessage({ embeds: [{
         title: `${titulo}${blocos.length > 1 ? ` (${i + 1}/${blocos.length})` : ""} — ${agora}`,
-        description: blocos[i], colour: cve ? "#e5484d" : "#a78bfa",
+        description: textoDeFora(blocos[i]), colour: cve ? "#e5484d" : "#a78bfa",
       }] });
     }
   }
@@ -787,7 +801,7 @@ export async function publicarRelatorio(canal, novos, { lang = "pt", agora = "",
     const comentario = cortarEmFrase(tirarNumerosInventados(String(bruto ?? "").trim(),
       novos.map((it) => ({ ...it, resumo: `${it.resumo ?? ""} ${pistaDoLink(it.link)}` }))), 700);
     if (comentario) {
-      await canal.sendMessage({ embeds: [{ title: es ? "💬 Judy opina" : en ? "💬 Judy's take" : "💬 A Judy comenta", description: comentario, colour: "#a78bfa" }] });
+      await canal.sendMessage({ embeds: [{ title: es ? "💬 Judy opina" : en ? "💬 Judy's take" : "💬 A Judy comenta", description: textoDeFora(comentario), colour: "#a78bfa" }] });
     }
   } catch (e) { console.error("[RSS] comentário falhou:", e.message); }
 }

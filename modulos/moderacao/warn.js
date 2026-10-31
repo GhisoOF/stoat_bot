@@ -9,6 +9,7 @@ import { escadaDePunicao, rotuloDegrau, validadeDosAvisos } from "./automod-engi
 import { aplicarTimeout } from "./timeout.js";
 import { banir } from "../core/banir.js";
 import { descreverErro } from "../core/erros.js";
+import { podeAgirSobre } from "../core/hierarquia.js";
 
 export async function cmdWarn(message, args, ctx) {
   // ── A família dos avisos mora aqui dentro ──
@@ -113,6 +114,23 @@ export async function cmdWarn(message, args, ctx) {
       { title: "🚫 No se puede", description: `<@${alvoId}> es dueño del servidor (o del bot) — no recibe avisos.`, colour: COR.aviso }));
   }
 
+  // (31 out 2026, R6) o alvo tem de ser MEMBRO daqui, e quem avisa tem de estar
+  // ACIMA dele (como no `&silenciar`). Antes só se checava ManageMessages, e a
+  // escada banía com a permissão do BOT — quem só apagava mensagens banía até
+  // cargo acima do seu.
+  const membroAlvo = await server.fetchMember?.(alvoId)?.catch?.(() => null) ?? null;
+  if (!membroAlvo) {
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "❌ Não está no servidor", description: `<@${alvoId}> não é membro daqui — não há quem avisar.`, colour: COR.erro },
+      { title: "❌ Not in the server", description: `<@${alvoId}> isn't a member here — nobody to warn.`, colour: COR.erro },
+      { title: "❌ No está en el servidor", description: `<@${alvoId}> no es miembro de aquí — no hay a quién advertir.`, colour: COR.erro }));
+  }
+  const pode = await podeAgirSobre(server, message, alvoId, ctx);
+  if (!pode.ok) return sendEmbed(message.channel, tr(ctx,
+    { title: "🚫 Acima de você", description: `${pode.pt}.`, colour: COR.erro },
+    { title: "🚫 Above you", description: `${pode.en}.`, colour: COR.erro },
+    { title: "🚫 Por encima de ti", description: `${pode.es ?? pode.en}.`, colour: COR.erro }));
+
   const pol = config?.automod?.punicao ?? { modo: "avisar" };
   const total = db.somarAviso(serverId, alvoId, motivo, { validadeMs: validadeDosAvisos(pol) });
   // O aviso manual segue a MESMA escada do automod (antes: ban no
@@ -138,8 +156,19 @@ export async function cmdWarn(message, args, ctx) {
     `**Total de avisos:** ${total}${acumular ? ` de ${limite}` : ""}`,
   ]);
 
+  // O degrau só roda se QUEM PEDIU pode fazer aquilo por conta própria: ban com
+  // BanMembers, silêncio com TimeoutMembers. Sem isso, o aviso fica registrado
+  // e a resposta diz que o degrau não foi aplicado.
+  const permDoDegrau = degrau.tipo === "ban" ? "BanMembers" : degrau.tipo === "mute" ? "TimeoutMembers" : null;
+  const semPermissao = permDoDegrau && !membroTemPermissao(message, server, permDoDegrau);
   let banido = false;
-  if (degrau.tipo === "ban") {
+  if (semPermissao) {
+    const oQue = degrau.tipo === "ban" ? ["ban", "ban", "ban"] : [`silêncio de ${degrau.rotulo}`, `${degrau.rotulo} of silence`, `silencio de ${degrau.rotulo}`];
+    linhas.push("", tr(ctx,
+      `⚠️ Este aviso chegaria ao degrau **${oQue[0]}**, mas ele **não foi aplicado**: você não tem **${permDoDegrau}**. O aviso ficou registrado — alguém com essa permissão decide.`,
+      `⚠️ This warning reaches the **${oQue[1]}** step, but it **wasn't applied**: you don't have **${permDoDegrau}**. The warning is recorded — someone with that permission decides.`,
+      `⚠️ Este aviso llega al escalón **${oQue[2]}**, pero **no se aplicó**: no tienes **${permDoDegrau}**. El aviso quedó registrado — decide alguien con ese permiso.`));
+  } else if (degrau.tipo === "ban") {
     try {
       await banir(server, alvoId, { reason: es
         ? `Límite de ${limite} avisos alcanzado — último: ${motivo}`

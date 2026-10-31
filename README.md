@@ -35,9 +35,7 @@ docker compose up -d --build
 | Voz nas calls (Piper + ffmpeg) | dentro da imagem; `VOZ_ATIVA=1` e as vozes baixam sozinhas no primeiro arranque — `VOZES=` escolhe quais (qualquer idioma do catálogo do Piper) |
 | Geração de imagem (stable-diffusion.cpp, Vulkan + Z-Image-Turbo por padrão) | dentro da imagem; os modelos (~6,5 GB: difusão + VAE + LLM do prompt) baixam **no arranque**, antes do bot conectar — `IMAGEM=0` desliga, `SD_MODELO_TIPO=sd` volta ao SD-Turbo (1 arquivo, mais leve), `SD_MODELO_TIPO=qwen-image` usa o **Qwen-Image 2.1** (~13 GB; padrão: os pesos oficiais, Q8_0 do unsloth + VAE da Comfy-Org; `SD_Q_DIFUSAO_URL` troca o arquivo, e um com "turbo" no nome roda em 8 passos), `SD_URL` troca por um A1111/Forge externo. Antes de desenhar, o LLM local é **descarregado da GPU** (volta sozinho na próxima mensagem) e, se ainda faltar memória, a 2ª tentativa vai no modo econômico (LLM do prompt na CPU, VAE em blocos) — `IMAGEM_LIBERAR_GPU=0` desliga |
 
-Visão (a IA **ler** imagens) depende só de o modelo escolhido enxergar —
-funciona de fábrica no modo `online` com um modelo multimodal, e no modo
-`local` conforme o GGUF escolhido. Para rodar **só o bot**, sem a busca:
+Visão (a IA **ler** imagens) depende só de o GGUF escolhido enxergar. Para rodar **só o bot**, sem a busca:
 `docker compose up -d stoat-bot`.
 
 As variáveis que importam:
@@ -50,9 +48,10 @@ As variáveis que importam:
 | `MODELO_MODERACAO` | modelo **pequeno** só para o juiz da moderação (temas proibidos, `&modia`) dos **outros** servidores — o de `SERVIDOR` continua com o modelo da conversa. Ex.: `ggml-org/gemma-3-1b-it-GGUF:Q4_K_M` (~0,8 GB). No modo local fica carregado junto do de conversa (grupo sem troca no llama-swap). *Small model for the moderation judge on the other servers; yours keeps the chat model.* |
 | `IA` | `0` desliga todos os módulos de IA — o bot de moderação segue completo |
 | `CONVERSA` | `0` = **modo enxuto**: a IA fica só para moderação (temas proibidos, visão de imagens e fotos de perfil), o relatório horário e o RSS. Sem chat, memória, comentários e geração de imagem; o `&modia` fica **só com `MODELO_MODERACAO`** (o juiz pequeno, que aguenta ler toda mensagem), em todo servidor — e no modo enxuto a casa também é julgada por ele; o modelo usa contexto 4096 e sai da memória após 5 min parado (`IA_TTL`). Com `BUSCA_WEB=0`, o SearXNG nem sobe. *Lean mode: AI only for moderation, the log report and RSS; `&modia` on every server when a dedicated `MODELO_MODERACAO` exists.* |
-| `IA_MODO` | `local` roda um modelo na sua máquina (o **MODELO** é baixado do Hugging Face no primeiro arranque e guardado no volume); `online` usa uma plataforma via `TOKEN_IA` (padrão: OpenRouter) |
-| `MODELO` | local: `repo:quantização` GGUF do HF · online: nome do modelo na plataforma |
-| `TOKEN_IA` | token da plataforma, só no modo `online` |
+| `IA_MODO` | `local` (ou vazio): roda o modelo na sua máquina — o **MODELO** é baixado do Hugging Face no primeiro arranque e guardado no volume. O modo `online` saiu em 31 out 2026: nenhuma conversa vai a um serviço de IA de fora, e `IA_MODO=online` impede o boot com o aviso |
+| `MODELO` | `usuario/repositorio:quantização` de um GGUF do Hugging Face (outro formato impede o boot) |
+| `SEARXNG_SECRET` | **obrigatória** para o compose subir (inclusive `up -d stoat-bot`): `openssl rand -hex 32` |
+| `MEMORIA_LIMITE` | teto de memória do container do bot (padrão `24g`) |
 | `PROMPT` | personalidade padrão da IA no seu texto — e `&personalidade` troca por servidor, sem redeploy |
 | `IMAGEM` | `0` desliga a geração de imagem embutida (`SD_URL` aponta para um gerador externo); `SD_MODELO_TIPO=sd` troca o padrão (Z-Image-Turbo) pelo SD-Turbo clássico; `SD_MODELO_TIPO=qwen-image`, pelo Qwen-Image 2.1 (`SD_Q_DIFUSAO_URL`, `SD_Q_VAE_URL`, `SD_Q_LLM_URL`) |
 | `AUTUMN_URL` | endereço do serviço de upload de anexos do Stoat (`cdn.stoatusercontent.com` por padrão) — normalmente não precisa mexer |
@@ -247,7 +246,8 @@ diz exatamente o que clicar.
   novidades da Judy a cada atualização (lista em `modulos/ferramentas/novidades.js`:
   cada pacote novo acrescenta uma entrada no topo, em pt/en/es).
 - **Acesso** (`&acesso` + `&staff`): cargos de staff moderam sem permissão
-  nativa; comandos restritos a canais escolhidos.
+  nativa (a configuração continua exigindo a permissão do Stoat); comandos
+  restritos a canais escolhidos.
 
 **IA** (nos servidores de `SERVIDOR`; tudo desligável com `IA=0`)
 
@@ -532,7 +532,9 @@ próprio bot: `&help <comando>`. Um resumo:
 | **ManageServer** | `&modia`, `&personalidade`, `&chat esquecer tudo` |
 
 O **dono do servidor** sempre pode tudo; cargos marcados em `&acesso cargo`
-moderam sem permissão nativa. Os comandos administrativos **do bot** (fora de
+moderam sem permissão nativa (kick, ban, silenciar, avisos, limpar), mas não
+valem para **ManagePermissions**, **ManageRole** nem **ManageServer**: a
+configuração do bot e dos cargos exige a permissão do próprio Stoat. Os comandos administrativos **do bot** (fora de
 qualquer servidor) exigem estar em `DONO`/`SUPER_ADMINS`.
 
 ---
@@ -553,11 +555,14 @@ qualquer servidor) exigem estar em `DONO`/`SUPER_ADMINS`.
 - **Arquitetura:** o bot conversa com um serviço de ferramentas embutido
   (`ia-servico/`, tool-calling: calcular, ler código do GitHub, buscar na web
   pelo SearXNG que sobe junto, RSS), e esse serviço fala com **qualquer LLM de
-  API OpenAI** — o llama.cpp embutido do modo `local`, uma plataforma no modo
-  `online`, ou o seu próprio servidor via `LLM_URL`.
-- **Memória com fronteiras:** memória curta por canal (~20 mensagens),
-  perfis de longo prazo por pessoa com data em cada fato, e `&chat esquecer`
-  que apaga **tudo** — o banco e o que está carregado no processo.
+  API OpenAI** — o llama.cpp embutido ou o seu próprio servidor via `LLM_URL`.
+- **Memória com fronteiras:** memória curta por canal (~20 mensagens, 30 min),
+  perfis de longo prazo por pessoa com data em cada fato — só de quem aceitou e
+  só do que a pessoa diz **à Judy** —, e `&chat esquecer` que apaga **tudo** — o
+  banco e o que está carregado no processo. `&chat esquecer tudo` vale só para
+  o servidor onde é usado.
+- **Busca de fundo sem pessoas:** nomes saem da consulta, e pergunta sobre
+  alguém não vira busca.
 - **Segurança de identidade:** o prompt separa em blocos o que é da IA, do
   lugar, da pessoa e do fio da conversa — ela não confunde a bio de alguém com
   os próprios dados, não obedece "ignore suas instruções" e resiste a
@@ -582,12 +587,31 @@ máquina onde ele roda **buscar** — e a trava de cada caminho.
 - **Webhooks**: o receptor é a única porta aberta. Token de 128 bits por
   gancho, tetos por gancho, total e de tentativas erradas, tempo curto para
   mandar o pedido, até 10 ganchos por servidor, canal sempre do servidor do
-  gancho. `WEBHOOK_BIND=127.0.0.1` tira a porta da rede de casa (o Tailscale
-  Funnel continua funcionando); `WEBHOOK_SERVIDORES` limita quem cria ganchos.
+  gancho. A URL do gancho vai por DM. Sem gancho nenhum, a porta nem abre.
+  `WEBHOOK_BIND` (padrão `127.0.0.1`) escolhe em que endereço da máquina a porta
+  fica: o Tailscale Funnel continua funcionando; `172.17.0.1` = só os containers
+  (Crafty) — com o Funnel, aponte-o para `http://172.17.0.1:8095`; `0.0.0.0` =
+  a rede de casa. Dentro do container o receptor escuta em `WEBHOOK_ESCUTA`
+  (o compose põe `0.0.0.0`; fora do Docker, o padrão é `127.0.0.1`).
+  `WEBHOOK_SERVIDORES` limita quem cria ganchos.
 - **Um servidor não mexe no outro**: nada publica em canal de outro servidor,
   e o que é de todos (a lista de bloqueio, o debug, a lista global de bans)
   só o dono do bot muda.
-- **Serviços internos** (IA, voz, modelo) ouvem só em `127.0.0.1`.
+- **Serviços internos** (IA, voz, modelo) ouvem só em `127.0.0.1` e não sobem
+  sem chave (`VOZ_CHAVE`; `IA_SERVICO_CHAVE` ou `IA_CHAVE`) — embutidos, o
+  `iniciar.js` gera as duas. Cada programa de fora (Piper, ffmpeg, yt-dlp,
+  sd.cpp, curl, llama) recebe só o ambiente de que precisa: o token do bot só
+  chega ao serviço de voz.
+- **O container**: sem privilégios do sistema (`cap_drop: ALL`,
+  `no-new-privileges`), código só leitura, teto de memória (`MEMORIA_LIMITE`)
+  e de processos; todo binário baixado no build tem versão e SHA256 fixos.
+- **Tetos por servidor**: `TICKET_MAX_ABERTOS` (20 tickets abertos),
+  `RSS_AGORA_MIN_MS` (`&rss agora` a cada 5 min), `IMAGEM_POR_DIA` (20 imagens
+  geradas por dia; 0 = sem teto). O yt-dlp tem teto de tempo
+  (`MUSICA_YTDLP_TIMEOUT_MS`, `MUSICA_YTDLP_PARADO_MS`).
+- **`.env` conferido no boot**: valor inválido (número, 0/1, modelo, flags do
+  llama, vozes, URL de modelo de imagem) impede a subida com a lista do que
+  corrigir; ID errado em `SUPER_ADMINS`/`*_SERVIDORES` só gera aviso.
 - **O que não dá para esconder sem VPN**: toda busca que o bot faz (feed,
   página, vídeo) sai pela conexão da máquina — o dono do site vê esse IP.
   Para escondê-lo, rode o container atrás de uma VPN.

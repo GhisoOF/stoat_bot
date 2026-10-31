@@ -112,7 +112,7 @@ export const padraoServidor = {
 
 // ── Config GLOBAL (compartilhada por todos os servidores) ──
 export const padraoGlobal = {
-  debug:                true,
+  debug:                false,   // (31 out 2026) o debug do automod grava o fluxo de toda mensagem: só ligado de propósito
   linkBlocklistSources: [],   // recurso pesado (milhões de domínios) — compartilhado
   linkBlocklistManual:  [],
 };
@@ -294,6 +294,14 @@ export function inicializar(configPathLegado, dbPath) {
 
   if (gSalvo && tplSalvo) {
     cfgGlobal        = { ...structuredClone(padraoGlobal), ...gSalvo };
+    // (31 out 2026, R9) o debug nasceu ligado e ficou gravado assim no banco: o log
+    // copiava trecho de toda mensagem. Uma vez só, volta ao padrão novo (desligado);
+    // quem quiser o liga de novo pelo &automod debug on.
+    if (!cfgGlobal.debugRevisto31out) {
+      cfgGlobal.debug = false;
+      cfgGlobal.debugRevisto31out = true;
+      db.gravarConfig("__global__", cfgGlobal);
+    }
     // O molde salvo pode trazer IDs do servidor da era antiga (cargo de
     // silêncio, canal de avisos…): servidor novo não herda ID nenhum.
     templateServidor = limparMolde(mesclarServidor(tplSalvo, padraoServidor));
@@ -325,6 +333,7 @@ export function inicializar(configPathLegado, dbPath) {
     console.info("[CONFIG] Sem config anterior — usando padrões.");
   }
 
+  cfgGlobal.debugRevisto31out = true;   // instalação nova já nasce no padrão novo
   db.gravarConfig("__global__", cfgGlobal);
   db.gravarConfig("__default__", templateServidor);
 }

@@ -23,26 +23,24 @@ sistema: se o bot está de pé, ele está de pé.
 | `POST /ferramenta` | executa uma direto: `{ nome, args }` |
 | `POST /chat` | a conversa, com tool calling: `{ messages, modelo, idioma }` |
 
-Se `IA_SERVICO_CHAVE` estiver definida, toda rota exige o header `x-chave`.
+Toda rota exige o header `x-chave` com a chave de `IA_SERVICO_CHAVE` (ou `IA_CHAVE`): sem chave, o serviço **não sobe**. Embutido, o `iniciar.js` gera uma por boot. Ele escuta em `127.0.0.1` (outro endereço: `SERVICO_HOST`).
 
 ```bash
-docker exec stoat-bot curl -s localhost:8090/saude
-docker exec stoat-bot curl -s localhost:8090/diagnostico
+docker exec stoat-bot sh -c 'curl -s -H "x-chave: $IA_SERVICO_CHAVE" localhost:8090/saude'
+docker exec stoat-bot sh -c 'curl -s -H "x-chave: $IA_SERVICO_CHAVE" localhost:8090/diagnostico'
 ```
 
 ## O LLM
 
-Serve qualquer servidor com a API de chat da OpenAI: o `llama-server` do
-llama.cpp (o padrão, embutido), o llama-swap na frente dele, ou uma plataforma
-online. O que muda é o `.env`:
+O modelo roda na máquina de quem hospeda: o `llama-server` do llama.cpp (o
+padrão, embutido) ou o llama-swap na frente dele. O modo online (plataforma
+externa com `TOKEN_IA`) foi **removido** em 31 out 2026 — nada da conversa, da
+memória, da moderação ou das imagens sai da máquina. O que muda é o `.env`:
 
 ```ini
 IA_MODO=local      # llama.cpp dentro do container; MODELO baixa no boot
 MODELO=usuario/repositorio:Q4_K_M
 MODELO_VISAO=...   # opcional: liga a ferramenta ver_imagem
-
-IA_MODO=online     # plataforma externa
-TOKEN_IA=...       # vira Authorization: Bearer
 ```
 
 O `.env` inteiro chega ao container (o compose usa `env_file`). Para conferir o
@@ -65,6 +63,12 @@ Quais aparecem depende do ambiente: `ver_imagem` exige `MODELO_VISAO`;
 `gerar_imagem` exige `IMAGEM≠0` e um backend (o sd.cpp embutido ou `SD_URL`);
 `FERRAMENTAS_OFF=calcular,buscar_rss` desliga por nome.
 
+`buscar_rss` lê só os feeds cadastrados (`RSS_FEEDS` e os do `&rss` do servidor
+da conversa) — URL pedida na conversa nunca é buscada. `gerar_imagem` tem teto
+diário por servidor (`IMAGEM_POR_DIA`, padrão 20; 0 = sem teto), e o download
+do modelo de imagem roda em segundo plano (enquanto baixa, o pedido ouve "ainda
+baixando"). Cada programa de fora (sd.cpp, curl) recebe só o ambiente mínimo.
+
 ## Coisas aprendidas doendo
 
 **O modelo precisa suportar tool calling.** Sem isso ele inventa a resposta em
@@ -72,8 +76,9 @@ vez de usar a ferramenta, e parece que o serviço está quebrado.
 
 **Chamada de ferramenta que chega como texto.** Alguns templates não convertem
 a chamada em `tool_calls` e o modelo escreve o JSON no meio da resposta. O
-servidor varre blocos ```` ```json ```` e objetos por chaves balanceadas
-(regex não fecha objeto aninhado), só executa nomes que existem e deduplica.
+servidor aceita a chamada só quando a resposta INTEIRA é ela (o JSON puro ou
+um bloco ```` ```json ```` só com ele), lê com um `JSON.parse` (uma passada),
+só executa nomes que existem e deduplica.
 
 **Um `system` só, no começo.** As mensagens são normalizadas antes de sair:
 vários `system`, ou um no meio, quebram o template de vários modelos.

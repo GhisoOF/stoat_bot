@@ -4,7 +4,9 @@
 #  O essencial aqui é `search.formats` incluir `json` — sem isso,
 #  /search?format=json devolve 403 Forbidden.
 #
-#  ⚠️ TROQUE o `secret_key` abaixo por um valor aleatório antes de subir:
+#  O `secret_key` NÃO fica aqui (31 out 2026): este arquivo é público e o
+#  segredo era o mesmo para todo mundo. Ele vem de SEARXNG_SECRET no .env
+#  (o SearXNG lê essa variável por cima do `server.secret_key`); gere com:
 #       openssl rand -hex 32
 # ══════════════════════════════════════════════════════════
 
@@ -16,8 +18,7 @@ general:
   enable_metrics: false
 
 server:
-  # TROQUE ISTO por um segredo aleatório (openssl rand -hex 32)
-  secret_key: "TROQUE_ESTE_SEGREDO_POR_UM_ALEATORIO"
+  # secret_key: vem de SEARXNG_SECRET (docker-compose.yml + .env)
   # POST reduz a chance de ser bloqueado por alguns motores
   method: "POST"
   limiter: false            # sem rate-limit interno (uso privado)
@@ -34,9 +35,8 @@ search:
   safe_search: 1
   autocomplete: ""
 
-# Cache no Redis (definido no compose como serviço 'redis')
-redis:
-  url: redis://redis:6379/0
+# (31 out 2026) sem `redis:` — o compose nunca teve esse serviço e o limiter
+# (o único que o usa) está desligado; o SearXNG só tentava conectar à toa.
 
 ui:
   static_use_hash: true

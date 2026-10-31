@@ -279,7 +279,7 @@ nenhuma ponte de compatibilidade**.
 | `ia-servico/llama-swap.example.yaml` | trazia o LFM (reprovado) e `--reasoning-budget 0` (rejeitado por causar erro de aritmética) |
 | `scripts/judy-diag.sh` | a função `diagnostico()` checava a cadeia morta (Ollama nativo → judy-ia container → judy-voz OpenRC) e mandava `rc-service ollama start`. Reescrita para o container único; `logs`, `erros` e `reiniciar` passaram a usar `docker logs`/`docker restart`, já que `/var/log/judy-*.log` não existe mais |
 | `ia-servico/README.md` | 481 → 108 linhas. Descrevia container separado + Ollama + OpenRC, e tinha 3 seções **duplicadas**. Reescrito, preservando as lições que continuam valendo (tool calling, chamada como texto, contexto que estoura, `EAI_AGAIN`, GitHub que responde 404) |
-| `scripts/openrc/judy-voz.confd`, `scripts/medir-modelos.sh` | sobras da personalização: usuário `ghiso`, caminho `/home/ghiso/...` e o IP `100.74.70.106` da Tailscale, que escaparam da universalização |
+| `scripts/openrc/judy-voz.confd`, `scripts/medir-modelos.sh` | sobras da personalização: usuário `ghiso`, caminho `/home/ghiso/...` e um IP da Tailscale, que escaparam da universalização |
 
 O `scripts/openrc/judy-voz` **ficou**: voz nativa ainda é um caminho válido
 (`VOZ_ATIVA=0` + `VOZ_SERVICO_URL`), não é código morto. E o trecho do
@@ -1726,7 +1726,7 @@ node testes.mjs compatibilidade arvore-comandos help-render dependencias ia veri
 git add -A && git commit -m "refatoracao: kiss, seguranca e remocao de legado" && git push
 
 # 3. No MiniPC — backup ANTES (o banco usa WAL: são 3 arquivos)
-ssh void@gmktec.tailaeddbe.ts.net
+ssh void@<minipc>
 cd /home/void/judy-repo
 docker compose stop stoat-bot
 B=~/backup-judy-$(date +%F-%H%M); mkdir -p "$B"

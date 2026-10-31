@@ -30,7 +30,7 @@ export const definicao = {
         urls: {
           type: "array",
           items: { type: "string" },
-          description: "URLs dos feeds. Se omitido, usa os feeds configurados no servidor.",
+          description: "Opcional: só para escolher ENTRE os feeds já cadastrados (endereço exato). Feed fora da lista não é lido. Se omitido, usa todos os cadastrados.",
         },
         maximo: { type: "number", description: `Quantos itens no total (padrão ${MAX_ITENS}).` },
       },
@@ -38,9 +38,21 @@ export const definicao = {
   },
 };
 
-export async function executar({ urls, maximo } = {}) {
-  const alvos = (Array.isArray(urls) && urls.length ? urls : feedsPadrao());
-  if (!alvos.length) return { erro: "Nenhum feed informado nem configurado (RSS_FEEDS)." };
+// (31 out 2026, P1) Só os feeds CADASTRADOS: os de RSS_FEEDS e os que o servidor da
+// conversa tem no `&rss` (o bot manda em `contexto.feeds`). Endereço pedido na
+// conversa nunca é lido — era o jeito de qualquer um fazer a máquina de casa buscar
+// a URL que quisesse (e entregar o IP dela).
+export function feedsPermitidos(contexto = {}) {
+  const doBot = Array.isArray(contexto?.feeds) ? contexto.feeds : [];
+  return [...new Set([...feedsPadrao(), ...doBot].map((u) => String(u).trim()).filter((u) => /^https?:\/\//i.test(u)))].slice(0, 50);
+}
+
+export async function executar({ urls, maximo } = {}, contexto = {}) {
+  const cadastrados = feedsPermitidos(contexto);
+  const pedidos = Array.isArray(urls) ? urls.map((u) => String(u).trim()).filter(Boolean) : [];
+  const alvos = pedidos.length ? cadastrados.filter((u) => pedidos.includes(u)) : cadastrados;
+  if (!cadastrados.length) return { erro: "Nenhum feed cadastrado neste servidor (o `&rss` cadastra)." };
+  if (!alvos.length) return { erro: "Só leio os feeds cadastrados neste servidor — esse endereço não está entre eles." };
 
   const limite = Math.min(Number(maximo) || MAX_ITENS, 30);
   const itens = [];

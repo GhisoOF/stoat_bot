@@ -44,6 +44,17 @@ avis() { printf '\033[33m! %s\033[0m\n' "$1"; }
 cd "$REPO"
 mkdir -p "$BACKUPS"
 
+# (31 out 2026) o docker-compose.yml exige SEARXNG_SECRET no .env: sem ele nem o
+# `docker compose stop` do backup roda. Melhor parar aqui, antes de tudo.
+if [ "$ACAO" != "lista" ] && ! grep -qE '^SEARXNG_SECRET=.' .env 2>/dev/null; then
+  erro "falta SEARXNG_SECRET no $REPO/.env — gere com: echo \"SEARXNG_SECRET=\$(openssl rand -hex 32)\" >> $REPO/.env"
+fi
+# (31 out 2026) o receptor de webhooks passou a ficar só em 127.0.0.1 por padrão.
+# Quem recebe pela rede de casa ou pela ponte do Docker (Crafty) precisa dizer.
+if [ "$ACAO" != "lista" ] && ! grep -qE '^WEBHOOK_BIND=' .env 2>/dev/null; then
+  printf '\033[33m! WEBHOOK_BIND não está no .env: o receptor de webhooks fica só em 127.0.0.1 (o Funnel funciona).\n  Crafty pela ponte do Docker: WEBHOOK_BIND=172.17.0.1 (e o Funnel para http://172.17.0.1:8095) ou 0.0.0.0.\033[0m\n'
+fi
+
 # O volume do /data: pergunta ao container (o nome depende da pasta do
 # compose — hoje judy-repo_stoat_data). Sem container, cai no nome padrão.
 volume() {

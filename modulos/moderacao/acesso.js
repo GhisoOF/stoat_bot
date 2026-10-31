@@ -1,5 +1,6 @@
 
 import { limparId, ULID } from "../core/ids.js";
+import { podeUsarCargo } from "../core/hierarquia.js";
 import { tr, lingua, idiomaDe } from "../core/i18n.js";
 import { idDoNome, nomeExibido, citar, citarInterno, subExibido } from "../core/aliases.js";
 
@@ -204,6 +205,13 @@ export async function cmdAcesso(message, args, ctx) {
           description: `Menciona el rol o pasa su ID.\nEj.: \`${citar("acesso.cargo.add", "es", P)} <%01ABC…>\``, colour: COR.erro }));
     }
     if (acao === "add" || acao === "adicionar") {
+      // (31 out 2026, R6) marcar um cargo como staff é dar poder a ele: só quem
+      // está ACIMA do cargo (senão o moderador promovia o próprio cargo, ou um acima)
+      const pode = await podeUsarCargo(server, message, alvo, ctx);
+      if (!pode.ok) return sendEmbed(message.channel, tr(ctx,
+        { title: "🚫 Acima de você", description: `${pode.pt}.`, colour: COR.erro },
+        { title: "🚫 Above you", description: `${pode.en}.`, colour: COR.erro },
+        { title: "🚫 Por encima de ti", description: `${pode.es ?? pode.en}.`, colour: COR.erro }));
       if (!a.cargosStaff.includes(alvo)) a.cargosStaff.push(alvo);
       salvarConfig?.();
       return sendEmbed(message.channel, tr(ctx,

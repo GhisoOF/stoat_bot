@@ -76,8 +76,19 @@ function cabecalhos() {
   return h;
 }
 
+// (31 out 2026, P1) O caminho vira URL segmento por segmento: `..` (ou `.`) não
+// passa — `contents/../../../../repos/X/Y/contents/a.js` lia OUTRO repositório com
+// o GITHUB_TOKEN — e cada segmento vai codificado (`?`, `#`, `%` não mudam a rota).
+export function caminhoParaApi(caminho) {
+  const partes = String(caminho ?? "").split("/").filter((p) => p !== "");
+  if (partes.some((p) => p === ".." || p === "." || p.includes("\\"))) return null;
+  return partes.map(encodeURIComponent).join("/");
+}
+
 async function api(caminho) {
-  const url = `https://api.github.com/repos/${REPO}/contents/${caminho}?ref=${BRANCH}`;
+  const seguro = caminhoParaApi(caminho);
+  if (seguro === null) throw Object.assign(new Error("Caminho fora do repositório — não posso ler."), { amigavel: true });
+  const url = `https://api.github.com/repos/${REPO}/contents/${seguro}?ref=${encodeURIComponent(BRANCH)}`;
   const r = await buscar(url, { headers: cabecalhos(), signal: AbortSignal.timeout(15000) });
   if (r.status === 403) throw new Error("limite de requisições do GitHub atingido (adicione GITHUB_TOKEN).");
   if (r.status === 404) throw erro404(caminho);

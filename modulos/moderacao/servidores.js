@@ -20,6 +20,7 @@ import * as store from "../core/config-store.js";
 import { pseudonimo } from "../core/pseudonimo.js";
 import { citar, citarInterno } from "../core/aliases.js";
 import { tr } from "../core/i18n.js";
+import { descreverErro } from "../core/erros.js";
 
 export async function cmdServidores(message, args, ctx) {
   const { sendEmbed, COR, client, ehSuperAdmin } = ctx;
@@ -30,14 +31,18 @@ export async function cmdServidores(message, args, ctx) {
       { title: "🚫 Restricted command", description: "Only the bot owner can see this.", colour: COR.erro },
       { title: "🚫 Comando restringido", description: "Solo el dueño del bot puede ver esto.", colour: COR.erro }));
   }
-  // Com RELATORIO_SERVIDOR, o painel só abre no servidor do dono: nos outros
-  // servidores da Judy ele não mostra (nem confirma) nada.
+  // (31 out 2026, R9) O painel só abre no servidor do relatório (RELATORIO_SERVIDOR)
+  // ou na DM do dono: num servidor qualquer, os números dos outros 75 ficavam
+  // à vista de quem estivesse no canal.
   const fixo = relatorio.servidorDoRelatorio();
   // (a Message da stoat.js NÃO tem `serverId` — o servidor vem do ctx ou do
   // canal; com `message.serverId` o painel dizia "Aqui não" até no servidor certo)
   const aqui = ctx.serverId ?? message.server?.id ?? message.channel?.serverId ?? null;
-  if (fixo && aqui !== fixo) {
-    return sendEmbed(message.channel, { title: "🚫 Aqui não", description: "Este painel só funciona no servidor configurado em `RELATORIO_SERVIDOR`.", colour: COR.erro });
+  if (aqui && aqui !== fixo) {
+    return sendEmbed(message.channel, tr(ctx,
+      { title: "🚫 Aqui não", description: "Este painel só abre na minha DM com você ou no servidor do relatório.", colour: COR.erro },
+      { title: "🚫 Not here", description: "This panel only opens in my DMs with you or in the report's server.", colour: COR.erro },
+      { title: "🚫 Aquí no", description: "Este panel solo se abre en mis DM contigo o en el servidor del informe.", colour: COR.erro }));
   }
   if (["relatorio", "relatório", "report"].includes(args[0]?.toLowerCase())) {
     return cmdRelatorio(message, args.slice(1), ctx);
@@ -58,7 +63,7 @@ export async function cmdServidores(message, args, ctx) {
 
   let lista = [];
   try { lista = listarServidores(client); } catch (e) {
-    return sendEmbed(message.channel, { title: "❌ Não consegui listar", description: String(e?.message ?? e), colour: COR.erro });
+    return sendEmbed(message.channel, { title: "❌ Não consegui listar", description: descreverErro(e), colour: COR.erro });
   }
   if (!lista.length) return sendEmbed(message.channel, { title: "🌐 Servidores", description: "Não enxerguei nenhum servidor pela API.", colour: COR.aviso });
 
@@ -66,13 +71,25 @@ export async function cmdServidores(message, args, ctx) {
     id: srv?.id, nome: srv?.name ?? srv?.id, membros: await contarMembros(srv).catch(() => null), mpm: porMinuto(srv?.id),
   })))).sort((a, b) => b.mpm - a.mpm || (b.membros ?? 0) - (a.membros ?? 0));
 
+  // (31 out 2026, R9) individualmente, só quem aderiu ao relatório: os do dono
+  // (completos) e os que ligaram `&log relatorio on` (por pseudônimo, sem nome).
+  // Os outros entram só na soma.
   let total = 0, mpmTotal = 0;
-  const linhas = dados.map((d) => {
+  const ritmoDe = (mpm) => (mpm >= 0.1 ? `${mpm.toFixed(1)} msg/min` : mpm > 0 ? "<0.1 msg/min" : "parado");
+  const outros = { n: 0, membros: 0, mpm: 0 };
+  const linhas = [];
+  for (const d of dados) {
     if (typeof d.membros === "number") total += d.membros;
     mpmTotal += d.mpm;
-    const ritmo = d.mpm >= 0.1 ? `${d.mpm.toFixed(1)} msg/min` : d.mpm > 0 ? "<0.1 msg/min" : "parado";
-    return `**${d.nome}** — ${typeof d.membros === "number" ? `${d.membros} membro(s)` : "membros: ?"} · ${ritmo}\n\`${d.id}\``;
-  });
+    const modo = relatorio.modoDe(d.id);
+    if (modo !== "completo" && modo !== "anonimo") {
+      outros.n++; outros.membros += typeof d.membros === "number" ? d.membros : 0; outros.mpm += d.mpm;
+      continue;
+    }
+    const quem = modo === "completo" ? `**${d.nome}** — ` : `🕶️ \`${pseudonimo(d.id)}\` — `;
+    linhas.push(`${quem}${typeof d.membros === "number" ? `${d.membros} membro(s)` : "membros: ?"} · ${ritmoDe(d.mpm)}${modo === "completo" ? `\n\`${d.id}\`` : ""}`);
+  }
+  if (outros.n) linhas.push(`_+ ${outros.n} servidor(es) que não aderiram ao relatório — juntos: ${outros.membros} membro(s) · ${ritmoDe(outros.mpm)}_`);
   return sendEmbed(message.channel, {
     title: `🌐 Servidores (${dados.length})`,
     description: [...linhas, "",

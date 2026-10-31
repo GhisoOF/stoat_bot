@@ -7,12 +7,15 @@ import { lingua, tr } from "../core/i18n.js";
 import { citar, citarInterno } from "../core/aliases.js";
 import { callParaMusica } from "./tts.js";
 import { nivelDePrioridade } from "../core/prioridade.js";
+import { registrarErro } from "../core/erros.js";
 
 const VOZ_URL   = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
 const VOZ_CHAVE = process.env.VOZ_CHAVE || "";
 
+// (31 out 2026, P1, R10) Os erros daqui são frases curtas, sem nome de variável nem a
+// mensagem crua da rede (o detalhe vai ao log). `codigo` escolhe a frase nos 3 idiomas.
 async function pedirVoz(rota, corpo = null) {
-  if (!VOZ_URL) return { erro: "serviço de voz desligado (VOZ_ATIVA=1 no .env liga tudo: TTS e música)." };
+  if (!VOZ_URL) return { erro: true, codigo: "sem-servico" };
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 60_000);   // resolver playlist demora
   try {
@@ -24,8 +27,15 @@ async function pedirVoz(rota, corpo = null) {
     });
     return await r.json();
   } catch (e) {
-    return { erro: e.name === "AbortError" ? "o serviço de voz demorou demais." : `serviço de voz fora do ar (${e.message}).` };
+    registrarErro("MUSICA", e);
+    return { erro: true, codigo: e.name === "AbortError" ? "demorou" : "fora" };
   } finally { clearTimeout(t); }
+}
+function erroDaVoz(r, ctx) {
+  if (r?.codigo === "sem-servico") return tr(ctx, "o serviço de voz não está ligado nesta instalação.", "the voice service isn't running on this install.", "el servicio de voz no está activo en esta instalación.");
+  if (r?.codigo === "demorou") return tr(ctx, "o serviço de voz demorou demais.", "the voice service took too long.", "el servicio de voz tardó demasiado.");
+  if (r?.codigo === "fora") return tr(ctx, "o serviço de voz está fora do ar agora.", "the voice service is down right now.", "el servicio de voz está caído ahora.");
+  return String(r?.erro ?? "");
 }
 
 function duracaoTxt(s) {
@@ -80,10 +90,11 @@ export async function cmdMusica(msg, args, ctx) {
   const alvo = await callParaMusica(msg, ctx);
   if (alvo.erro) {
     const txt = {
-      fora: tr(ctx, "A música não está liberada neste servidor (`TTS_SERVIDORES`).", "Music isn't enabled on this server (`TTS_SERVIDORES`).", "La música no está habilitada en este servidor (`TTS_SERVIDORES`)."),
+      fora: tr(ctx, "A música não está liberada neste servidor.", "Music isn't enabled on this server.", "La música no está habilitada en este servidor."),
       "sem-call": tr(ctx, "Não estou em nenhuma call deste servidor. Entre numa call e use `" + citarInterno("musica") + "` (ou `" + citarInterno("entrar") + "`) de qualquer canal — eu vou até você.", "I'm not in a call on this server. Join a call and use `" + citarInterno("musica") + "` (or `" + citarInterno("entrar") + "`) from any channel — I'll come to you.", "No estoy en ninguna llamada de este servidor. Entra en una llamada y usa `" + citar("musica", "es") + "` (o `" + citar("entrar", "es") + "`) desde cualquier canal — yo voy contigo."),
-      entrar: tr(ctx, `Não consegui entrar na sua call: \`${alvo.detalhe}\``, `I couldn't join your call: \`${alvo.detalhe}\``, `No pude entrar en tu llamada: \`${alvo.detalhe}\``),
+      entrar: tr(ctx, "Não consegui entrar na sua call — tente de novo daqui a pouco.", "I couldn't join your call — try again in a moment.", "No pude entrar en tu llamada — inténtalo de nuevo en un momento."),
     }[alvo.erro];
+    if (alvo.detalhe) registrarErro("MUSICA", alvo.detalhe);
     return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${txt}`, colour: ctx.COR.aviso });
   }
   const canal = alvo.canal;
@@ -91,7 +102,7 @@ export async function cmdMusica(msg, args, ctx) {
 
   if (sub === "fila") {
     const r = await pedirVoz(`/musica/fila?canal=${encodeURIComponent(canal)}`);
-    if (r.erro) return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${r.erro}`, colour: ctx.COR.aviso });
+    if (r.erro) return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${erroDaVoz(r, ctx)}`, colour: ctx.COR.aviso });
     if (!r.atual && !r.total && !r.ultimoAviso) {
       return ctx.sendEmbed(msg.channel, {
         title: tr(ctx, "🎵 Fila", "🎵 Queue", "🎵 Cola"),
@@ -129,6 +140,6 @@ export async function cmdMusica(msg, args, ctx) {
     r = await pedirVoz(`/musica/${sub}`, { canal });
   }
 
-  if (r.erro) return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${r.erro}`, colour: ctx.COR.aviso });
+  if (r.erro) return ctx.sendEmbed(msg.channel, { title: "🎵", description: `⚠️ ${erroDaVoz(r, ctx)}`, colour: ctx.COR.aviso });
   return ctx.sendEmbed(msg.channel, { title: "🎵", description: aviso + (r.mensagem ?? "ok"), colour: ctx.COR.sucesso });
 }

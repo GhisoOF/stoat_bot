@@ -1,6 +1,7 @@
 
 import { idEscrito, resolverUsuario } from "../core/ids.js";
 import * as log from "../core/log.js";
+import { descreverErro } from "../core/erros.js";
 import { tr, lingua } from "../core/i18n.js";
 import { citar, JA_TRADUZIDO, FIM_PRONTO } from "../core/aliases.js";
 
@@ -126,14 +127,13 @@ export async function cmdLimpar(message, args, ctx) {
       });
       console.log(`[LIMPAR][TUDO] ${message.authorId} esvaziou ${message.channelId}: ${total} msg`);
     } catch (err) {
-      console.error("[LIMPAR][TUDO]", err?.message ?? err);
       await sendEmbed(message.channel, tr(ctx,
         { title: "❌ A limpeza parou no meio",
-          description: `\`${err?.message ?? err}\`\n\nParte das mensagens pode ter sido apagada.`, colour: COR.erro },
+          description: `${descreverErro(err, "pt")}\n\nParte das mensagens pode ter sido apagada.`, colour: COR.erro },
         { title: "❌ The purge stopped midway",
-          description: `\`${err?.message ?? err}\`\n\nSome messages may already be gone.`, colour: COR.erro },
+          description: `${descreverErro(err, "en")}\n\nSome messages may already be gone.`, colour: COR.erro },
         { title: "❌ La limpieza se detuvo a medias",
-          description: `\`${err?.message ?? err}\`\n\nEs posible que parte de los mensajes ya se haya borrado.`, colour: COR.erro }));
+          description: `${descreverErro(err, "es")}\n\nEs posible que parte de los mensajes ya se haya borrado.`, colour: COR.erro }));
     } finally {
       try { await aviso?.delete?.(); } catch {}
     }
@@ -337,18 +337,17 @@ export async function cmdLimpar(message, args, ctx) {
       setTimeout(() => { conf.delete?.().catch(() => {}); }, 6000);
     }
   } catch (err) {
-    console.error("[LIMPAR]", err.message);
     await sendEmbed(message.channel, tr(ctx, {
       title: "❌ Não foi possível limpar",
-      description: `**Erro:** ${err.message}\n\n_Verifique se o bot tem **ManageMessages** neste canal._`,
+      description: `**Erro:** ${descreverErro(err, "pt")}\n\n_Verifique se o bot tem **ManageMessages** neste canal._`,
       colour: COR.erro,
     }, {
       title: "❌ Couldn't purge",
-      description: `**Error:** ${err.message}\n\n_Check that the bot has **ManageMessages** in this channel._`,
+      description: `**Error:** ${descreverErro(err, "en")}\n\n_Check that the bot has **ManageMessages** in this channel._`,
       colour: COR.erro,
     }, {
       title: "❌ No se pudo limpiar",
-      description: `**Error:** ${err.message}\n\n_Comprueba que el bot tenga **ManageMessages** en este canal._`,
+      description: `**Error:** ${descreverErro(err, "es")}\n\n_Comprueba que el bot tenga **ManageMessages** en este canal._`,
       colour: COR.erro,
     }));
   }

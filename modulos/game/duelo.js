@@ -1,7 +1,7 @@
 // Duelo entre jogadores (PvP) — pedido de Ghieh, 28 out 2026: "um player pode
 // abrir um duelo e apostar algo, caso queira".
 //
-//   &game duelo @pessoa [<qtd> <moeda>] [item <nome>]   desafia (sem @: aberto a qualquer um)
+//   &game duelo @pessoa [<qtd> <moeda>] [item <nome>]   desafia (sem @: aberto a qualquer um DESTE servidor)
 //   &game duelo aceitar [#] [item <nome>]               aceita — e a luta acontece na hora
 //   &game duelo recusar [#] · &game duelo cancelar      ninguém perde nada
 //   &game duelo                                         os duelos abertos
@@ -28,6 +28,8 @@ import * as R from "./regras.js";
 import * as CB from "./combate.js";
 import { MUNDO } from "./mundo.js";
 import { fmt } from "./ui.js";
+import { quantiaValida } from "../core/seguranca.js";
+import { registrarErro } from "../core/erros.js";
 
 export const SUBS = ["duelo", "duelar", "duel", "pvp", "desafiar", "desafio"];
 export const VALIDADE_MS = 10 * 60_000;
@@ -116,8 +118,9 @@ export function lerDesafio(args, mentionIds = []) {
   const antes = iItem >= 0 ? resto.slice(0, iItem) : resto;
   let qtd = 0, moedaTxt = null, sobra = [];
   for (let i = 0; i < antes.length; i++) {
-    const n = Number(String(antes[i]).replace(",", "."));
-    if (!qtd && Number.isFinite(n) && n > 0) { qtd = Math.round(n * 100) / 100; moedaTxt = antes[i + 1] ?? null; if (moedaTxt) i++; continue; }
+    // (31 out 2026) aposta só em inteiro ≥ 1 ("0.5", "1e3", "-2" não são aposta)
+    const n = /^\d+$/.test(String(antes[i])) ? Number(antes[i]) : NaN;
+    if (!qtd && quantiaValida(n)) { qtd = n; moedaTxt = antes[i + 1] ?? null; if (moedaTxt) i++; continue; }
     sobra.push(antes[i]);
   }
   return { alvoId, qtd, moedaTxt, itemNome, sobra, itemPedidoSemNome: iItem >= 0 && !itemNome };
@@ -132,6 +135,11 @@ function devolver(of, estado = "cancelada") {
   return true;
 }
 export function abertos() { return db.listarOfertas(MUNDO, { tipo: "duelo" }); }
+// (31 out 2026, R9) O mundo do RPG é um só, mas o duelo é de um SERVIDOR: o
+// desafio guarda o servidor de origem (na coluna `itemPedido`, que o duelo não
+// usa — sem mudar o esquema) e o desafio aberto só é visto e aceito de lá.
+export const servidorDoDuelo = (of) => of?.itemPedido ?? null;
+const daqui = (of, sid) => !!sid && servidorDoDuelo(of) === sid;
 // Os desafios vencidos devolvem a aposta (chamado a cada &game)
 export function expirar(agora = Date.now()) {
   let n = 0;
@@ -146,6 +154,7 @@ export async function cmdDuelo(message, args, ctx, { sendEmbed }) {
   const { COR, PREFIXO: P } = ctx;
   const ce = (ref) => citar(ref, "es", P);
   const eu = message.authorId;
+  const sid = ctx.serverId ?? message.serverId ?? null;   // o servidor de VERDADE (o do jogo é o MUNDO)
   const acao = String(args[1] ?? "").toLowerCase();
   const T = (pt, en, es) => tr(ctx, pt, en, es);
   const erro = (titulo, desc) => sendEmbed(message.channel, { title: titulo, description: desc, colour: COR.erro });
@@ -154,7 +163,7 @@ export async function cmdDuelo(message, args, ctx, { sendEmbed }) {
   const uso = () => [
     T(`\`${citarInterno("game.duelo", P)} @‹pessoa›\` — desafia, sem aposta`, `\`${citarInterno("game.duelo", P)} @‹person›\` — challenge, no bet`, `\`${ce("game.duelo")} @‹usuario›\` — desafía, sin apuesta`),
     T(`\`${citarInterno("game.duelo", P)} @‹pessoa› 100 ouro item <seu item>\` — com aposta (moeda, item ou os dois)`, `\`${citarInterno("game.duelo", P)} @‹person› 100 gold item <your item>\` — with a bet (currency, item or both)`, `\`${ce("game.duelo")} @‹usuario› 100 gold item <tu objeto>\` — con apuesta (moneda, objeto o los dos)`),
-    T(`\`${citarInterno("game.duelo", P)} ‹qtd› ouro\` — sem @: aberto a qualquer um`, `\`${citarInterno("game.duelo", P)} ‹qtd› gold\` — no @: open to anyone`, `\`${ce("game.duelo")} ‹qtd› gold\` — sin @: abierto a cualquiera`),
+    T(`\`${citarInterno("game.duelo", P)} ‹qtd› ouro\` — sem @: aberto a qualquer um deste servidor`, `\`${citarInterno("game.duelo", P)} ‹qtd› gold\` — no @: open to anyone on this server`, `\`${ce("game.duelo")} ‹qtd› gold\` — sin @: abierto a cualquiera de este servidor`),
     T(`\`${citarInterno("game.duelo.aceitar", P)} [#] [item <seu item>]\` · \`${citarInterno("game.duelo.recusar", P)} [#]\` · \`${citarInterno("game.duelo.cancelar", P)}\``,
       `\`${citarInterno("game.duelo.aceitar", P)} [#] [item <your item>]\` · \`${citarInterno("game.duelo.recusar", P)} [#]\` · \`${citarInterno("game.duelo.cancelar", P)}\``,
       `\`${ce("game.duelo.aceitar")} [#] [item <tu objeto>]\` · \`${ce("game.duelo.recusar")} [#]\` · \`${ce("game.duelo.cancelar")}\``),
@@ -172,7 +181,7 @@ export async function cmdDuelo(message, args, ctx, { sendEmbed }) {
     if (of.itemOferecido) partes.push(`**${db.getItem(of.itemOferecido)?.nome ?? of.itemOferecido}**`);
     return partes.length ? partes.join(" + ") : T("sem aposta", "no bet", "sin apuesta");
   };
-  const meusOuParaMim = () => abertos().filter((o) => o.autorId === eu || !o.alvoId || o.alvoId === eu);
+  const meusOuParaMim = () => abertos().filter((o) => o.autorId === eu || o.alvoId === eu || (!o.alvoId && daqui(o, sid)));
   const escolher = (lista) => {
     const n = parseInt(String(args[2] ?? "").replace("#", ""), 10);
     if (Number.isFinite(n)) return lista.find((o) => o.id === n) ?? null;
@@ -202,7 +211,7 @@ export async function cmdDuelo(message, args, ctx, { sendEmbed }) {
 
   // ── aceitar: a luta ──
   if (ACEITAR.includes(acao)) {
-    const lista = abertos().filter((o) => o.autorId !== eu && (!o.alvoId || o.alvoId === eu));
+    const lista = abertos().filter((o) => o.autorId !== eu && (o.alvoId === eu || (!o.alvoId && daqui(o, sid))));
     const paraMim = lista.filter((o) => o.alvoId === eu);
     let of = escolher(lista);
     if (!of && !Number.isFinite(parseInt(String(args[2] ?? "").replace("#", ""), 10)) && paraMim.length === 1) of = paraMim[0];
@@ -243,7 +252,7 @@ export async function cmdDuelo(message, args, ctx, { sendEmbed }) {
       if (of.itemOferecido) db.darItem(MUNDO, of.autorId, of.itemOferecido);
       if (meuItem) db.darItem(MUNDO, eu, meuItem.id);
       db.fecharOferta(of.id, "cancelada");
-      console.error("[DUELO]", e?.message ?? e);
+      registrarErro("DUELO", e);
       return erro(T("❌ O duelo não aconteceu", "❌ The duel didn't happen", "❌ El duelo no ocurrió"), T("Deu um erro na luta — as duas apostas voltaram.", "The fight hit an error — both bets came back.", "La pelea dio un error — las dos apuestas volvieron."));
     }
     if (r.vencedor === null) {
@@ -290,6 +299,13 @@ export async function cmdDuelo(message, args, ctx, { sendEmbed }) {
   const meu = lado(eu);
   if (!meu) return erro(T("🎭 Sem personagem", "🎭 No character", "🎭 Sin personaje"), T(`Crie com \`${citarInterno("game.criar", P)}\`.`, `Create one with \`${citarInterno("game.criar", P)}\`.`, `Crea uno con \`${ce("game.criar")}\`.`));
   if (desafio.alvoId === eu) return erro(T("❌ Contra você mesmo?", "❌ Against yourself?", "❌ ¿Contra ti mismo?"), T("Escolha outra pessoa.", "Pick someone else.", "Elige a otra persona."));
+  // o alvo tem de ser membro DESTE servidor (antes valia qualquer ID)
+  if (desafio.alvoId) {
+    const server = await Promise.resolve(ctx.getServer?.(message)).catch(() => null);
+    const membro = await Promise.resolve(server?.fetchMember?.(desafio.alvoId)).catch(() => null);
+    if (!membro) return erro(T("❌ Não está aqui", "❌ Not here", "❌ No está aquí"), T(`<@${desafio.alvoId}> não está neste servidor.`, `<@${desafio.alvoId}> isn't on this server.`, `<@${desafio.alvoId}> no está en este servidor.`));
+  }
+  if (!sid) return erro("❌", T("O duelo é dentro de um servidor.", "Duels happen inside a server.", "El duelo es dentro de un servidor."));
   const alvo = desafio.alvoId ? lado(desafio.alvoId) : null;
   if (desafio.alvoId && !alvo) return erro(T("❌ Sem personagem", "❌ No character", "❌ Sin personaje"), T(`<@${desafio.alvoId}> não tem personagem no RPG.`, `<@${desafio.alvoId}> has no RPG character.`, `<@${desafio.alvoId}> no tiene personaje en el RPG.`));
   if (abertos().some((o) => o.autorId === eu)) return erro(T("❌ Você já tem um desafio aberto", "❌ You already have an open challenge", "❌ Ya tienes un desafío abierto"),
@@ -312,11 +328,11 @@ export async function cmdDuelo(message, args, ctx, { sendEmbed }) {
   // a custódia
   if (moeda) db.debitar(MUNDO, eu, moeda.id, desafio.qtd);
   if (item) db.tirarItem(MUNDO, eu, item.id, 1);
-  const of = db.criarOferta({ serverId: MUNDO, tipo: "duelo", autorId: eu, alvoId: desafio.alvoId,
+  const of = db.criarOferta({ serverId: MUNDO, tipo: "duelo", autorId: eu, alvoId: desafio.alvoId, itemPedido: sid,
     itemOferecido: item?.id ?? null, moedaOferecida: moeda?.id ?? null, qtdOferecida: moeda ? desafio.qtd : 0 });
   const linhas = [
     alvo ? T(`<@${eu}> desafia <@${desafio.alvoId}> para um duelo!`, `<@${eu}> challenges <@${desafio.alvoId}> to a duel!`, `¡<@${eu}> desafía a <@${desafio.alvoId}> a un duelo!`)
-      : T(`<@${eu}> abriu um duelo — qualquer um pode aceitar.`, `<@${eu}> opened a duel — anyone can accept.`, `<@${eu}> abrió un duelo — cualquiera puede aceptar.`),
+      : T(`<@${eu}> abriu um duelo — qualquer um deste servidor pode aceitar.`, `<@${eu}> opened a duel — anyone on this server can accept.`, `<@${eu}> abrió un duelo — cualquiera de este servidor puede aceptar.`),
     `**${T("Aposta", "Bet", "Apuesta")}:** ${descreverAposta(of)}${(moeda || item) ? T(" _(a minha parte está em custódia)_", " _(mine is held in escrow)_", " _(la mía está en custodia)_") : ""}`,
     item ? T("_Quem aceitar põe um item seu na mesa; quem vencer leva os dois._", "_Whoever accepts puts one of their items on the table; the winner takes both._", "_Quien acepte pone un objeto suyo sobre la mesa; quien gane se lleva los dos._") : "",
     "",

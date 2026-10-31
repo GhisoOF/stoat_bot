@@ -45,11 +45,11 @@ export const TERMOS_ODIO = [
 ];
 const LEET = { 0: "o", 1: "i", 3: "e", 4: "a", 5: "s", 7: "t", 8: "b", "@": "a", "$": "s", "!": "i", "|": "i" };
 // Normaliza o TEXTO: minúsculas, sem acento, leet desfeito, menções fora,
-// letras soltas juntadas ("n i g g a", "n.i.g.g.a"). NÃO colapsa as letras
-// repetidas — quem faz isso é o padrão de cada termo (letra+), que aceita
-// "niiiigggaaa" sem transformar "coon" em "con".
+// letras soltas juntadas ("n i g g a", "n.i.g.g.a"). Corta em MAX_TEXTO_ODIO:
+// ofensa não precisa de 20 mil caracteres para ser achada.
+const MAX_TEXTO_ODIO = 4000;
 export function normalizarOdio(texto) {
-  return String(texto ?? "")
+  return String(texto ?? "").slice(0, MAX_TEXTO_ODIO)
     .toLowerCase()
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/<[@#%][^>]+>/g, " ")
@@ -63,28 +63,63 @@ export function normalizarOdio(texto) {
     .replace(/\s+/g, " ")
     .trim();
 }
-// "nigga" → /(?<![a-z])n+i+g+g+a+(?:s|z|es|inha|inho|ao)?(?![a-z])/ — cada letra
-// pode vir repetida, mas nenhuma pode SUMIR; palavra inteira, sufixo opcional.
-const cachePadrao = new Map();
+
+// ── Letra esticada sem regex por letra (31 out 2026, R10) ────────────────────
+// Antes cada letra do termo virava `c+` ("kkkkkk" → /k+k+k+k+k+k+/): um admin
+// punha esse termo no `antiodio add` e uma mensagem de 61 caracteres travava o
+// bot por 94 s em todos os servidores (ReDoS medido). Agora quem é "esticada"
+// é a MENSAGEM: cada sequência de letras iguais vira UMA letra, e guardamos
+// quantas eram. O termo passa pelo mesmo processo e vira um padrão LITERAL
+// escapado (sem quantificador nenhum). Casou no texto colapsado? Confere se
+// cada letra veio pelo menos tantas vezes quanto no termo: "niiiigga" pega
+// "nigga", mas "con" não pega "coon" (o "o" duplo do termo não pode sumir).
+export function colapsar(texto) {
+  const t = String(texto ?? "");
+  let letras = "";
+  const cont = [];
+  for (let i = 0; i < t.length; i++) {
+    if (i > 0 && t[i] === t[i - 1]) cont[cont.length - 1]++;
+    else { letras += t[i]; cont.push(1); }
+  }
+  return { letras, cont };
+}
+const escaparRegex = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// Um termo (já limpo) → o padrão literal sobre o texto colapsado + as contagens
+// mínimas. Palavra inteira, sufixo opcional (plural, diminutivo).
+const SUFIXOS = "(?:s|z|es|inha|inho|ao)?";
+const CACHE_MAX = 500;
+const cachePadrao = new Map();   // termo → { re, cont } | null   (com teto: R11)
+export const _tamanhoCachePadrao = () => cachePadrao.size;
 function padraoDoTermo(termo) {
   const chave = String(termo);
   if (cachePadrao.has(chave)) return cachePadrao.get(chave);
   const limpo = String(termo ?? "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim();
-  let re = null;
+    .replace(/[^a-z\s]/g, " ").replace(/\s+/g, " ").trim().slice(0, TERMO_MAX);
+  let p = null;
   if (limpo.length >= 3) {
-    const corpo = limpo.split(" ").map((p) => [...p].map((c) => `${c}+`).join("")).join(" +");
-    re = new RegExp(`(?<![a-z])${corpo}(?:s|z|es|inha|inho|ao)?(?![a-z])`);
+    const { letras, cont } = colapsar(limpo);
+    p = { re: new RegExp(`(?<![a-z])${escaparRegex(letras)}${SUFIXOS}(?![a-z])`, "g"), cont };
   }
-  cachePadrao.set(chave, re);
-  return re;
+  if (cachePadrao.size >= CACHE_MAX) cachePadrao.delete(cachePadrao.keys().next().value);
+  cachePadrao.set(chave, p);
+  return p;
 }
+function casaTermo(p, alvo) {
+  p.re.lastIndex = 0;
+  for (const m of alvo.letras.matchAll(p.re)) {
+    if (p.cont.every((n, i) => alvo.cont[m.index + i] >= n)) return true;
+  }
+  return false;
+}
+// Teto dos termos que a staff acrescenta (`&automod antiodio add`): 20 × 40.
+export const TERMOS_MAX = 20, TERMO_MAX = 40;
 export function acharOdio(texto, extras = []) {
-  const alvo = normalizarOdio(texto);
-  if (!alvo) return null;
-  for (const termo of [...TERMOS_ODIO, ...extras]) {
-    const re = padraoDoTermo(termo);
-    if (re && re.test(alvo)) return termo;
+  const norm = normalizarOdio(texto);
+  if (!norm) return null;
+  const alvo = colapsar(norm);
+  for (const termo of [...TERMOS_ODIO, ...(extras ?? []).slice(0, TERMOS_MAX)]) {
+    const p = padraoDoTermo(termo);
+    if (p && casaTermo(p, alvo)) return termo;
   }
   return null;
 }

@@ -1,5 +1,13 @@
 
 import * as db from "../core/db.js";
+import { registrarErro } from "../core/erros.js";
+
+// (31 out 2026, P1, R9) O que entra aqui são só as mensagens DIRIGIDAS à Judy (o
+// chat.observarMensagem filtra) e só fatos sobre QUEM escreveu: a categoria
+// "servidor" (piadas internas, apelidos, eventos — fatos sobre terceiros, que ninguém
+// consentiu) saiu da extração e do prompt. As linhas antigas de ia_fatos_servidor
+// ficam no banco (dado não se apaga daqui), mas não são mais lidas; o
+// `&chat esquecer tudo` as apaga.
 
 const DEBOUNCE_MS   = Number(process.env.MEMORIA_DEBOUNCE_MS || 8000);
 const MIN_CHARS     = Number(process.env.MEMORIA_MIN_CHARS || 12);   // ignora "kkk", "oi"
@@ -61,7 +69,7 @@ export function observar({ serverId, userId, nome, texto, ehBot }) {
 
 const PROMPT_EXTRACAO = `Você extrai fatos duráveis de mensagens de chat para a memória de um bot.
 Leia as mensagens de UM usuário e devolva SÓ um JSON:
-{"personalidade": [{"fato":"...","evidencia":"..."}], "gosto": [...], "info": [...], "servidor": [...]}
+{"personalidade": [{"fato":"...","evidencia":"..."}], "gosto": [...], "info": [...]}
 
 Cada item tem DOIS campos:
 - "fato": frase curta em 3ª pessoa, em português.
@@ -71,7 +79,7 @@ CATEGORIAS (sobre quem escreveu):
 - "personalidade": como a pessoa é ou se comunica.
 - "gosto": preferências e interesses concretos.
 - "info": fatos concretos e verificáveis da vida dela (onde mora, o que faz, o que tem).
-- "servidor": fatos da comunidade (piadas internas, eventos, apelidos). NÃO sobre a pessoa.
+- Nada sobre OUTRAS pessoas nem sobre o grupo: só sobre quem escreveu.
 
 REGRAS ABSOLUTAS:
 - NUNCA invente. Se a mensagem não disser, não existe. Preferir lista vazia a preencher.
@@ -129,13 +137,18 @@ async function processar(k) {
       { role: "system", content: PROMPT_EXTRACAO },
       { role: "user", content: conteudo },
     ]);
-  } catch (e) { log("LLM falhou:", e.message); return; }
+  } catch (e) {
+    // fila da IA cheia: a tarefa de fundo é descartada de propósito (ver chat.js)
+    if (e?.filaCheia) log("LLM ocupado — extração descartada");
+    else registrarErro("MEMÓRIA", e);   // (31 out 2026, P1, Reparo) antes só com CHAT_DEBUG
+    return;
+  }
 
   let obj;
   try {
     const limpo = String(raw).replace(/```json|```/g, "").trim();
     obj = JSON.parse(limpo);
-  } catch { log("JSON inválido do extrator; ignorando"); return; }
+  } catch { registrarErro("MEMÓRIA", "JSON inválido do extrator; extração ignorada"); return; }
 
   if (!consente()) return;   // e de novo: o modelo pode ter levado segundos
   const aceitar = (item) => filtrarFato(item, { msgs, nome, aoDescartar: (m) => log(m) });
@@ -149,21 +162,15 @@ async function processar(k) {
       if (fato) { db.addFatoPessoa(serverId, userId, fato, 0.5, categoria); total++; }
     }
   }
-  const servidor = (Array.isArray(obj?.servidor) ? obj.servidor : []).slice(0, 2)
-    .map(aceitar).filter(Boolean);
-  for (const f of servidor) db.addFatoServidor(serverId, f);
-  if (total || servidor.length) {
-    log(`extraiu p/ ${nome}: ${total} pessoais, ${servidor.length} de servidor`);
-  }
+  if (total) log(`extraiu p/ ${nome}: ${total} fato(s)`);
 }
 
 // Monta o bloco de memória para injetar no prompt da Judy ao conversar.
 export function contextoMemoria(serverId, userId) {
   if (!serverId) return "";
   const pessoa = db.getFatosPessoa(serverId, userId, { limite: 14, minConf: 0.4 });
-  const servidor = db.getFatosServidor(serverId, { limite: 12, minConf: 0.45 });
   const perfil = db.getPerfil?.(serverId, userId);
-  if (!pessoa.length && !servidor.length && !perfil) return "";
+  if (!pessoa.length && !perfil) return "";
 
   const dataCurta = (iso) => { try { return new Date(iso).toLocaleDateString("pt-BR"); } catch { return ""; } };
   const linhas = [];
@@ -194,11 +201,6 @@ export function contextoMemoria(serverId, userId) {
     }
   }
 
-  if (servidor.length) {
-    linhas.push("Sobre este servidor:");
-    for (const f of servidor) linhas.push(`- ${f.fato}`);
-  }
-
   // Sinal de acessibilidade (opt-in): orienta o tom, sem rótulos médicos.
   if (perfil?.cuidado) {
     linhas.push("IMPORTANTE: trate esta pessoa com gentileza e paciência extra, de forma clara e acolhedora. Sem ironia ácida com ela.");
@@ -213,15 +215,18 @@ export function contextoMemoria(serverId, userId) {
   return linhas.join("\n");
 }
 
-export function descartarPendentes(serverId = null) {
+// `serverId`: só os buffers daquele servidor; com `userId`, só os daquela pessoa lá.
+export function descartarPendentes(serverId = null, userId = null) {
   let n = 0;
-  for (const [chave, buf] of [...buffers.entries()]) {
-    if (serverId && !String(chave).startsWith(`${serverId}:`)) continue;
-    try { clearTimeout(buf.timer); } catch {}
-    buffers.delete(chave);
+  const alvo = serverId ? (userId ? `${serverId}:${userId}` : null) : null;
+  for (const [k, buf] of [...buffers.entries()]) {
+    if (alvo ? k !== alvo : serverId && !String(k).startsWith(`${serverId}:`)) continue;
+    clearTimeout(buf.timer);
+    buffers.delete(k);
+    adiados.delete(k);
     n++;
   }
-  adiados.clear();
+  if (!serverId) adiados.clear();
   return n;
 }
 

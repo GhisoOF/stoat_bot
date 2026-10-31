@@ -50,8 +50,28 @@ export function descreverErro(e, lang = "pt") {
     CannotTimeoutYourself: L("o bot não pode silenciar a si mesmo", "the bot can't time itself out", "el bot no puede silenciarse a sí mismo"),
   };
   if (tipo && TRADUCAO[tipo]) return TRADUCAO[tipo];
-  if (typeof e?.message === "string" && e.message) return e.message;
-  if (tipo) return String(tipo);
-  try { const j = JSON.stringify(e); if (j && j !== "{}") return j.slice(0, 120); } catch {}
-  return L("erro desconhecido", "unknown error", "error desconocido");
+  // (31 out 2026, R6/R10) o que vai para a tela nunca é o erro cru: nada de JSON
+  // da API, caminho, endereço ou nome de variável. Só passa a mensagem marcada
+  // como pública (`erroPublico`) ou um tipo simples do Stoat ("InSlowmode").
+  // O resto vira uma frase genérica, e o erro inteiro vai para o log.
+  if (e?.publico && typeof e?.message === "string" && e.message) return e.message;
+  if (typeof tipo === "string" && /^[A-Z][A-Za-z]{2,40}$/.test(tipo)) return tipo;
+  registrarErro("ERRO", e?._original ?? e);
+  return L("algo deu errado — tente de novo", "something went wrong — try again", "algo salió mal — inténtalo de nuevo");
+}
+
+// Um erro cuja mensagem foi escrita PARA o usuário (curta, sem detalhe interno).
+export function erroPublico(mensagem) {
+  const e = new Error(mensagem);
+  e.publico = true;
+  return e;
+}
+
+// O lugar único para registrar uma falha que não interrompe o fluxo (Regra do
+// Reparo: nada de `catch {}` calado). Vai para o log local com a etiqueta; o
+// relatório do dono recebe só a etiqueta (ver main.js).
+export function registrarErro(etiqueta, e) {
+  const o = normalizarErro(e);
+  const texto = typeof e === "string" ? e : (o?.message ?? o?.type ?? (() => { try { return JSON.stringify(o); } catch { return String(o); } })());
+  console.error(`[${etiqueta}]`, String(texto ?? "").slice(0, 500));
 }

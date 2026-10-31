@@ -1,7 +1,7 @@
-import { TERMOS_ODIO } from "./rajada.js";
+import { TERMOS_ODIO, TERMOS_MAX, TERMO_MAX } from "./rajada.js";
 import { citar, citarInterno } from "../core/aliases.js";
 import { descreverFiltro } from "./config-comando.js";
-import { rebuildBlocklist, DOMINIO_VALIDO, simularDeteccao, removerCargoSilence, MODULOS_AUTOMOD, GRUPOS_AUTOMOD, ROTULO_PARTE, estadoDoGrupo } from "./automod-engine.js";
+import { rebuildBlocklist, fonteValida, nuncaBloquear, DOMINIO_VALIDO, simularDeteccao, removerCargoSilence, MODULOS_AUTOMOD, GRUPOS_AUTOMOD, ROTULO_PARTE, estadoDoGrupo } from "./automod-engine.js";
 import { tirarTimeout } from "./timeout.js";
 import * as engine from "./automod-engine.js";
 import * as db  from "../core/db.js";
@@ -9,7 +9,8 @@ import * as log from "../core/log.js";
 import { analisarConteudo } from "./scorecard.js";
 import { tr, lingua } from "../core/i18n.js";
 import { hostDe } from "../core/config-store.js";
-import { resolverUsuario, resolverCanal } from "../core/ids.js";
+import { resolverUsuario, resolverCanal, idValido } from "../core/ids.js";
+import { podeAgirSobre } from "../core/hierarquia.js";
 import { banir } from "../core/banir.js";
 import { descreverErro as descreverErroBan } from "../core/erros.js";
 import * as assuntos from "./assuntos.js";
@@ -146,6 +147,47 @@ function maisParecido(digitado, nomes) {
 
 // Modos de punição: os nomes em inglês que a ajuda em inglês mostra também valem.
 const MODO_EN = { warn: "avisar", delete: "apagar", confirm: "confirmar", stack: "acumular", ban: "banir", inherit: "herdar" };
+
+// ── &automod … set: o tipo e a faixa de cada parâmetro (31 out 2026, R10) ──
+// Contagem = inteiro; `tempo` = duração legível ("8s", "1m"); limiar/zalgo =
+// fração (0,1–1) ou porcentagem (10–100). `1.5`, `Infinity`, `0`, negativo e
+// NaN são recusados — antes `repeticao 1.5` gerava regex inválida e cada
+// mensagem do servidor lançava exceção.
+const FAIXAS = {
+  maxMessages:  { min: 2, max: 100 },
+  maxMentions:  { min: 1, max: 100 },
+  minLength:    { min: 1, max: 2000 },
+  maxRepeticao: { min: 2, max: 200 },
+  maxEmojis:    { min: 1, max: 500 },
+  maxPorMinuto: { min: 1, max: 100 },
+  maxNovato:    { min: 1, max: 100 },
+  maxRepetidas: { min: 2, max: 50 },
+};
+const TEMPO_MIN = 1000, TEMPO_MAX = 10 * 60_000;
+export function valorDoParametro(chave, bruto) {
+  const t = String(bruto ?? "").trim().toLowerCase().replace(",", ".");
+  const erro = (pt, en, es) => ({ ok: false, pt, en, es });
+  if (chave === "windowMs") {
+    // número puro é ambíguo (segundos? ms? minutos?): pede a unidade
+    const ms = /^\d+\s*(s|m|min)$/.test(t) ? lerDuracao(t) : null;
+    if (!ms || ms < TEMPO_MIN || ms > TEMPO_MAX)
+      return erro("O tempo é uma duração entre **1s** e **10m** — ex.: `8s`, `30s`, `1m`.", "The time is a duration between **1s** and **10m** — e.g. `8s`, `30s`, `1m`.", "El tiempo es una duración entre **1s** y **10m** — ej.: `8s`, `30s`, `1m`.");
+    return { ok: true, valor: ms };
+  }
+  if (chave === "threshold" || chave === "limiteZalgo") {
+    if (!/^\d+(\.\d+)?%?$/.test(t)) return erro("Use uma porcentagem entre **10** e **100** (ex.: `70`).", "Use a percentage between **10** and **100** (e.g. `70`).", "Usa un porcentaje entre **10** y **100** (ej.: `70`).");
+    let v = Number(t.replace("%", ""));
+    if (v > 1) v = v / 100;
+    if (!Number.isFinite(v) || v < 0.1 || v > 1) return erro("Use uma porcentagem entre **10** e **100** (ex.: `70`).", "Use a percentage between **10** and **100** (e.g. `70`).", "Usa un porcentaje entre **10** y **100** (ej.: `70`).");
+    return { ok: true, valor: Math.round(v * 100) / 100 };
+  }
+  const f = FAIXAS[chave];
+  if (!f) return erro("Parâmetro desconhecido.", "Unknown parameter.", "Parámetro desconocido.");
+  const n = /^\d+$/.test(t) ? Number(t) : NaN;
+  if (!Number.isSafeInteger(n) || n < f.min || n > f.max)
+    return erro(`Use um número **inteiro** entre **${f.min}** e **${f.max}**.`, `Use a **whole** number between **${f.min}** and **${f.max}**.`, `Usa un número **entero** entre **${f.min}** y **${f.max}**.`);
+  return { ok: true, valor: n };
+}
 
 export async function cmdAutomod(message, args, ctx) {
   const { config, cfgGlobal, sendEmbed, COR, getServer, membroTemPermissao, salvarConfig, salvarGlobal, PREFIXO } = ctx;
@@ -347,9 +389,9 @@ export async function cmdAutomod(message, args, ctx) {
       `_Details of one group: \`${citarInterno("automod", PREFIXO)} antispam\` · turn one off: \`${citarInterno("automod", PREFIXO)} antispam off\` · everything: \`${citarInterno("automod", PREFIXO)} off\`_`,
       `_Detalles de un grupo: \`${citar("automod", "es", PREFIXO)} antispam\` · desactivar uno: \`${citar("automod", "es", PREFIXO)} antispam off\` · todo: \`${citar("automod", "es", PREFIXO)} off\`_`));
     linhas.push(tr(ctx,
-      `${cfgGlobal.debug !== false ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug !== false ? "ativado" : "desativado"}`,
-      `${cfgGlobal.debug !== false ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug !== false ? "enabled" : "disabled"}`,
-      `${cfgGlobal.debug !== false ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug !== false ? "activado" : "desactivado"}`));
+      `${cfgGlobal.debug === true ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug === true ? "ativado" : "desativado"}`,
+      `${cfgGlobal.debug === true ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug === true ? "enabled" : "disabled"}`,
+      `${cfgGlobal.debug === true ? "🟢" : "🔴"} **debug (global)** — ${cfgGlobal.debug === true ? "activado" : "desactivado"}`));
     return sendEmbed(message.channel, {
       title: tr(ctx, "🛡 Status do AutoMod", "🛡 AutoMod status", "🛡 Estado del AutoMod"),
       description: linhas.join("\n"), colour: COR.mod });
@@ -425,8 +467,17 @@ export async function cmdAutomod(message, args, ctx) {
   // ── &automod antiodio add|remover|lista <termo> — termos além dos de fábrica ──
   if (sub === "antiodio" && ["add", "adicionar", "remover", "remove", "tirar", "lista", "list"].includes(acao)) {
     mod.termos ??= [];
-    const termo = args.slice(2).join(" ").trim().toLowerCase().slice(0, 60);
-    if (["add", "adicionar"].includes(acao) && termo && !mod.termos.includes(termo)) mod.termos.push(termo);
+    const termo = args.slice(2).join(" ").trim().toLowerCase();
+    // (31 out 2026, R10) teto: 20 termos × 40 caracteres — o termo vira padrão
+    // que roda em toda mensagem do servidor
+    if (["add", "adicionar"].includes(acao) && termo && !mod.termos.includes(termo)) {
+      if (termo.length > TERMO_MAX || mod.termos.length >= TERMOS_MAX) {
+        return sendEmbed(message.channel, { title: "🛡 antiodio", colour: COR.erro, description: termo.length > TERMO_MAX
+          ? tr(ctx, `❌ Termo longo demais: no máximo **${TERMO_MAX}** caracteres.`, `❌ Term too long: at most **${TERMO_MAX}** characters.`, `❌ Término demasiado largo: como máximo **${TERMO_MAX}** caracteres.`)
+          : tr(ctx, `❌ Já há **${TERMOS_MAX}** termos (o máximo). Tire um antes de pôr outro.`, `❌ There are already **${TERMOS_MAX}** terms (the maximum). Remove one first.`, `❌ Ya hay **${TERMOS_MAX}** términos (el máximo). Quita uno antes de añadir otro.`) });
+      }
+      mod.termos.push(termo);
+    }
     if (["remover", "remove", "tirar"].includes(acao)) mod.termos = mod.termos.filter((x) => x !== termo);
     if (!["lista", "list"].includes(acao)) salvarConfig();
     return sendEmbed(message.channel, { title: "🛡 antiodio", colour: COR.mod, description: [
@@ -467,20 +518,19 @@ export async function cmdAutomod(message, args, ctx) {
         { title: "🛡 Parámetro actualizado",
           description: `\`${sub}.${nomeParam(nome, "en")}\` = **"${mod[ck]}"** (letras ignoradas en la repetición)`, colour: COR.sucesso }));
     }
-    let valor = Number(bruto);
-    if (Number.isNaN(valor) || valor < 0)
-      return sendEmbed(message.channel, tr(ctx,
-        { title: "❌ Valor inválido", description: "O valor precisa ser um número positivo.", colour: COR.erro },
-        { title: "❌ Invalid value", description: "The value must be a positive number.", colour: COR.erro },
-        { title: "❌ Valor no válido", description: "El valor tiene que ser un número positivo.", colour: COR.erro }));
-    // limiar/zalgo aceitam 0–1 (fração) ou 0–100 (porcentagem)
-    if ((ck === "threshold" || ck === "limiteZalgo") && valor > 1) valor = valor / 100;
-    mod[ck] = valor;
+    // (31 out 2026, R10) cada parâmetro com tipo e faixa: `repeticao 1.5` virava
+    // regex inválida e derrubava TODA mensagem do servidor; `mensagens 0` punia tudo.
+    const v = valorDoParametro(ck, bruto);
+    if (!v.ok)
+      return sendEmbed(message.channel, { title: tr(ctx, "❌ Valor inválido", "❌ Invalid value", "❌ Valor no válido"), colour: COR.erro,
+        description: tr(ctx, v.pt, v.en, v.es) });
+    mod[ck] = v.valor;
     salvarConfig();
+    const mostrado = ck === "windowMs" ? duracaoTexto(v.valor, lang) : (ck === "threshold" || ck === "limiteZalgo") ? `${Math.round(v.valor * 100)}%` : v.valor;
     return sendEmbed(message.channel, tr(ctx,
-      { title: "🛡 Parâmetro atualizado", description: `\`${sub}.${nome}\` = **${valor}**`, colour: COR.sucesso },
-      { title: "🛡 Parameter updated", description: `\`${sub}.${nomeParam(nome, "en")}\` = **${valor}**`, colour: COR.sucesso },
-      { title: "🛡 Parámetro actualizado", description: `\`${sub}.${nomeParam(nome, "en")}\` = **${valor}**`, colour: COR.sucesso }));
+      { title: "🛡 Parâmetro atualizado", description: `\`${sub}.${nome}\` = **${mostrado}**`, colour: COR.sucesso },
+      { title: "🛡 Parameter updated", description: `\`${sub}.${nomeParam(nome, "en")}\` = **${mostrado}**`, colour: COR.sucesso },
+      { title: "🛡 Parámetro actualizado", description: `\`${sub}.${nomeParam(nome, "en")}\` = **${mostrado}**`, colour: COR.sucesso }));
   }
 
   // ── punicao <modo|herdar> ──
@@ -682,7 +732,7 @@ export async function cmdAutomod(message, args, ctx) {
         "The picture of whoever **joins** or **changes** it goes through the vision model. It flags genitals, sex acts or porn described — or nudity, gore and hate symbols with the model's risk vote.",
         "La foto de quien **entra** y de quien la **cambia** pasa por el modelo de visión. Salta con genitales, actos sexuales o pornografía descritos — o con desnudez, gore y símbolos de odio con el voto de riesgo del modelo."),
       "",
-      `**${T("Estado", "State", "Estado")}:** ${mod.enabled !== false ? T("🟢 ligado", "🟢 on", "🟢 activado") : T("🔴 desligado", "🔴 off", "🔴 desactivado")}${process.env.IA_SERVICO_URL ? "" : T(" · ⚠️ sem IA_SERVICO_URL: não analisa", " · ⚠️ no IA_SERVICO_URL: nothing is analysed", " · ⚠️ sin IA_SERVICO_URL: no se analiza nada")}`,
+      `**${T("Estado", "State", "Estado")}:** ${mod.enabled !== false ? T("🟢 ligado", "🟢 on", "🟢 activado") : T("🔴 desligado", "🔴 off", "🔴 desactivado")}${process.env.IA_SERVICO_URL ? "" : T(" · ⚠️ sem o serviço de visão: não analisa (avise quem hospeda o bot)", " · ⚠️ no vision service: nothing is analysed (tell whoever hosts the bot)", " · ⚠️ sin el servicio de visión: no se analiza nada (avisa a quien aloja el bot)")}`,
       `**${T("Ação", "Action", "Acción")}:** \`${nomeAcaoAvatar(avatar.acaoDoAvatar(mod), lang)}\` — ${ROT[avatar.acaoDoAvatar(mod)]}`,
       avatar.acaoDoAvatar(mod) === "silenciar" ? `**${T("Tempo", "Time", "Tiempo")}:** ${duracaoTexto(avatar.tempoDoAvatar(mod), lang)}` : null,
       "",
@@ -716,9 +766,9 @@ export async function cmdAutomod(message, args, ctx) {
       const user = membro?.user ?? await ctx.client?.users?.fetch?.(uid).catch(() => null);
       const arq = avatar.arquivoDe(membro?.avatar) ?? avatar.arquivoDe(user?.avatar);
       if (!arq) return sendEmbed(message.channel, { title: T("🖼️ Sem foto", "🖼️ No picture", "🖼️ Sin foto"), colour: COR.mod, description: T(`<@${uid}> não tem foto de perfil.`, `<@${uid}> has no profile picture.`, `<@${uid}> no tiene foto de perfil.`) });
-      if (!process.env.IA_SERVICO_URL) return sendEmbed(message.channel, { title: T("⚠️ Sem modelo de visão", "⚠️ No vision model", "⚠️ Sin modelo de visión"), colour: COR.aviso, description: T("Falta `IA_SERVICO_URL` no `.env`.", "`IA_SERVICO_URL` is missing from `.env`.", "Falta `IA_SERVICO_URL` en el `.env`.") });
+      if (!process.env.IA_SERVICO_URL) return sendEmbed(message.channel, { title: T("⚠️ Sem modelo de visão", "⚠️ No vision model", "⚠️ Sin modelo de visión"), colour: COR.aviso, description: T("O serviço de visão não está configurado — avise quem hospeda o bot.", "The vision service isn't set up — tell whoever hosts the bot.", "El servicio de visión no está configurado — avisa a quien aloja el bot.") });
       const r = await avatar.analisarFoto(arq);
-      if (!r) return sendEmbed(message.channel, { title: T("⚠️ Não consegui analisar", "⚠️ Couldn't analyse it", "⚠️ No pude analizarla"), colour: COR.aviso, description: T("O modelo de visão não respondeu — veja o log do container.", "The vision model didn't answer — check the container log.", "El modelo de visión no respondió — revisa el log del contenedor.") });
+      if (!r) return sendEmbed(message.channel, { title: T("⚠️ Não consegui analisar", "⚠️ Couldn't analyse it", "⚠️ No pude analizarla"), colour: COR.aviso, description: T("O modelo de visão não respondeu — tente de novo mais tarde.", "The vision model didn't answer — try again later.", "El modelo de visión no respondió — inténtalo más tarde.") });
       return sendEmbed(message.channel, { title: r.apitou ? T("🖼️ Apitaria", "🖼️ Would flag", "🖼️ Saltaría") : T("🖼️ Passaria", "🖼️ Would pass", "🖼️ Pasaría"), colour: r.apitou ? COR.aviso : COR.sucesso, description: [
         `<@${uid}>${r.apitou ? ` · **${T("Sinais", "Signals", "Señales")}:** ${r.motivos.join(", ")}` : ""}`,
         `> ${r.descricao.replace(/\n+/g, " ").slice(0, 400)}`,
@@ -866,18 +916,18 @@ export async function cmdBlocklist(message, args, ctx) {
 
   // ── Adicionar uma FONTE (URL de lista Pi-hole) ──
   if (sub === "add") {
-    if (!arg || !/^https?:\/\//.test(arg))
+    if (!fonteValida(arg))   // (31 out 2026, R10) só https://
       return sendEmbed(message.channel, tr(ctx, {
         title: "❌ Uso incorreto",
-        description: `\`${citarInterno("automod", PREFIXO)} blocklist add <url>\`\nPara um único domínio use \`${citarInterno("automod", PREFIXO)} blocklist adddomain <domínio>\``,
+        description: `\`${citarInterno("automod", PREFIXO)} blocklist add <https://…>\` _(só https)_\nPara um único domínio use \`${citarInterno("automod", PREFIXO)} blocklist adddomain <domínio>\``,
         colour: COR.erro,
       }, {
         title: "❌ Wrong usage",
-        description: `\`${citarInterno("automod", PREFIXO)} blocklist add <url>\`\nFor a single domain use \`${citarInterno("automod", PREFIXO)} blocklist adddomain <domain>\``,
+        description: `\`${citarInterno("automod", PREFIXO)} blocklist add <https://…>\` _(https only)_\nFor a single domain use \`${citarInterno("automod", PREFIXO)} blocklist adddomain <domain>\``,
         colour: COR.erro,
       }, {
         title: "❌ Uso incorrecto",
-        description: `\`${citar("automod", "es", PREFIXO)} blocklist add <url>\`\nPara un solo dominio usa \`${citar("automod", "es", PREFIXO)} blocklist adddomain <dominio>\``,
+        description: `\`${citar("automod", "es", PREFIXO)} blocklist add <https://…>\` _(solo https)_\nPara un solo dominio usa \`${citar("automod", "es", PREFIXO)} blocklist adddomain <dominio>\``,
         colour: COR.erro,
       }));
     if (cfgGlobal.linkBlocklistSources.includes(arg))
@@ -892,7 +942,16 @@ export async function cmdBlocklist(message, args, ctx) {
       { description: "⏳ Descargando la lista, espera…", colour: COR.info }));
     cfgGlobal.linkBlocklistSources.push(arg);
     salvarGlobal();
-    await rebuildBlocklist(ctx);
+    const r = await rebuildBlocklist(ctx, { forcar: true });
+    // (31 out 2026, Reparo) "fonte adicionada" só se baixou: senão ela sai da config
+    if (r?.falharam?.includes(arg)) {
+      cfgGlobal.linkBlocklistSources = cfgGlobal.linkBlocklistSources.filter((u) => u !== arg);
+      salvarGlobal();
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Não consegui baixar a lista", description: "A fonte **não foi adicionada**. Confira o endereço (precisa ser `https://` e responder com uma lista de domínios) e tente de novo.", colour: COR.erro },
+        { title: "❌ Couldn't download the list", description: "The source **wasn't added**. Check the address (it must be `https://` and return a list of domains) and try again.", colour: COR.erro },
+        { title: "❌ No pude descargar la lista", description: "La fuente **no se añadió**. Revisa la dirección (tiene que ser `https://` y devolver una lista de dominios) e inténtalo de nuevo.", colour: COR.erro }));
+    }
     return sendEmbed(message.channel, tr(ctx,
       { title: "✅ Lista adicionada",
         description: `Fonte adicionada. Total de domínios bloqueados: **${estado.blockedDomains.size}**.`, colour: COR.sucesso },
@@ -911,10 +970,15 @@ export async function cmdBlocklist(message, args, ctx) {
         { title: "❌ Domínio inválido", description: `Ex.: \`${citarInterno("automod", PREFIXO)} blocklist adddomain 02giga.link\``, colour: COR.erro },
         { title: "❌ Invalid domain", description: `E.g.: \`${citarInterno("automod", PREFIXO)} blocklist adddomain 02giga.link\``, colour: COR.erro },
         { title: "❌ Dominio no válido", description: `Ej.: \`${citar("automod", "es", PREFIXO)} blocklist adddomain 02giga.link\``, colour: COR.erro }));
+    if (nuncaBloquear(dominio))
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "❌ Domínio protegido", description: `\`${dominio}\` está na lista "nunca bloquear" (o Stoat, os CDNs dele e sites básicos).`, colour: COR.erro },
+        { title: "❌ Protected domain", description: `\`${dominio}\` is on the "never block" list (Stoat, its CDNs and basic sites).`, colour: COR.erro },
+        { title: "❌ Dominio protegido", description: `\`${dominio}\` está en la lista "nunca bloquear" (Stoat, sus CDN y sitios básicos).`, colour: COR.erro }));
     if (!cfgGlobal.linkBlocklistManual.includes(dominio)) {
       cfgGlobal.linkBlocklistManual.push(dominio);
       salvarGlobal();
-      await rebuildBlocklist(ctx);
+      await rebuildBlocklist(ctx, { forcar: true });
     }
     return sendEmbed(message.channel, tr(ctx,
       { title: "✅ Domínio bloqueado",
@@ -930,7 +994,7 @@ export async function cmdBlocklist(message, args, ctx) {
     const dominio = (arg ?? "").toLowerCase();
     cfgGlobal.linkBlocklistManual = cfgGlobal.linkBlocklistManual.filter((d) => d !== dominio);
     salvarGlobal();
-    await rebuildBlocklist(ctx);
+    await rebuildBlocklist(ctx, { forcar: true });
     return sendEmbed(message.channel, tr(ctx,
       { title: "✅ Domínio removido",
         description: `\`${dominio}\` foi removido. Total: **${estado.blockedDomains.size}** domínio(s).`, colour: COR.sucesso },
@@ -949,7 +1013,7 @@ export async function cmdBlocklist(message, args, ctx) {
         { title: "❌ Uso incorrecto", description: `\`${citar("automod", "es", PREFIXO)} blocklist remove <url>\``, colour: COR.erro }));
     cfgGlobal.linkBlocklistSources = cfgGlobal.linkBlocklistSources.filter((u) => u !== arg);
     salvarGlobal();
-    await rebuildBlocklist(ctx);
+    await rebuildBlocklist(ctx, { forcar: true });
     return sendEmbed(message.channel, tr(ctx,
       { title: "✅ Lista removida",
         description: `Total de domínios bloqueados agora: **${estado.blockedDomains.size}**.`, colour: COR.sucesso },
@@ -997,7 +1061,7 @@ export async function cmdBlocklist(message, args, ctx) {
       { description: "⏳ Recarregando listas…", colour: COR.info },
       { description: "⏳ Reloading the lists…", colour: COR.info },
       { description: "⏳ Recargando las listas…", colour: COR.info }));
-    await rebuildBlocklist(ctx);
+    await rebuildBlocklist(ctx, { forcar: true });
     return sendEmbed(message.channel, tr(ctx,
       { title: "🔄 Listas recarregadas",
         description: `Total de domínios bloqueados: **${estado.blockedDomains.size}**.`, colour: COR.sucesso },
@@ -1083,7 +1147,7 @@ export async function cmdScam(message, args, ctx) {
         `**Sensibilidade:** ${cfg.sensitivity}  (limiar base: ${limiarDe(cfg.sensitivity)}/10)`,
         `**Mais rígido com quem chegou agora:** ${cfg.porAntiguidade !== false ? "🟢 ligado" : "🔴 desligado"} — o limiar acompanha o nível do membro`,
         `**Avisar a staff:** ${cfg.alertarAdmin !== false ? "🟢 ligado" : "🔴 desligado"} — marca a staff diante de um *padrão* suspeito, antes de punir`,
-        `**Canal de aviso:** ${cfg.alertChannelId ? `\`${cfg.alertChannelId}\`` : "_(usa o canal da mensagem)_"}`,
+        `**Canal de aviso:** ${cfg.alertChannelId ? `\`${cfg.alertChannelId}\`` : "_(nenhum: vai ao canal de logs; sem ele, os alertas não são enviados)_"}`,
         `**Punição:** definida em \`${citarInterno("automod.punicao", PREFIXO)}\` (modo atual: **${pol.modo}**) — vale para todos os automods`,
         "",
         "**Comandos:**",
@@ -1105,7 +1169,7 @@ export async function cmdScam(message, args, ctx) {
         `**Sensitivity:** ${nomeSens(cfg.sensitivity, "en")}  (base threshold: ${limiarDe(cfg.sensitivity)}/10)`,
         `**Stricter with newcomers:** ${cfg.porAntiguidade !== false ? "🟢 on" : "🔴 off"} — threshold moves with the member's level`,
         `**Alert the staff:** ${cfg.alertarAdmin !== false ? "🟢 on" : "🔴 off"} — pings staff on a suspicious *pattern*, before punishing`,
-        `**Alert channel:** ${cfg.alertChannelId ? `\`${cfg.alertChannelId}\`` : "_(uses the message's channel)_"}`,
+        `**Alert channel:** ${cfg.alertChannelId ? `\`${cfg.alertChannelId}\`` : "_(none: goes to the log channel; without one, alerts aren't sent)_"}`,
         `**Punishment:** set with \`${citarInterno("automod.punicao", PREFIXO)}\` (current mode: **${nomeModo(pol.modo, "en")}**) — applies to all automods`,
         "",
         "**Commands:**",
@@ -1127,7 +1191,7 @@ export async function cmdScam(message, args, ctx) {
         `**Sensibilidad:** ${nomeSens(cfg.sensitivity, "en")}  (umbral base: ${limiarDe(cfg.sensitivity)}/10)`,
         `**Más estricto con los recién llegados:** ${cfg.porAntiguidade !== false ? "🟢 activado" : "🔴 desactivado"} — el umbral sigue el nivel del miembro`,
         `**Avisar al staff:** ${cfg.alertarAdmin !== false ? "🟢 activado" : "🔴 desactivado"} — menciona al staff ante un *patrón* sospechoso, antes de castigar`,
-        `**Canal de aviso:** ${cfg.alertChannelId ? `\`${cfg.alertChannelId}\`` : "_(usa el canal del mensaje)_"}`,
+        `**Canal de aviso:** ${cfg.alertChannelId ? `\`${cfg.alertChannelId}\`` : "_(ninguno: va al canal de registro; sin él, las alertas no se envían)_"}`,
         `**Castigo:** se define en \`${citar("automod.punicao", "es", PREFIXO)}\` (modo actual: **${nomeModo(pol.modo, "es")}**) — vale para todos los automods`,
         "",
         "**Comandos:**",
@@ -1237,9 +1301,9 @@ export async function cmdScam(message, args, ctx) {
     if (["off", "nenhum", "none", "limpar", "clear"].includes(val.toLowerCase())) {
       cfg.alertChannelId = null; salvarConfig();
       return sendEmbed(message.channel, tr(ctx,
-        { title: "✅ Canal de aviso", description: "Sem canal próprio: os avisos vão para o canal de logs (ou o da mensagem).", colour: COR.sucesso },
-        { title: "✅ Alert channel", description: "No channel of its own: alerts go to the log channel (or the message's channel).", colour: COR.sucesso },
-        { title: "✅ Canal de aviso", description: "Sin canal propio: los avisos van al canal de registro (o al del mensaje).", colour: COR.sucesso }));
+        { title: "✅ Canal de aviso", description: "Sem canal próprio: os avisos vão para o canal de logs (sem ele, não são enviados).", colour: COR.sucesso },
+        { title: "✅ Alert channel", description: "No channel of its own: alerts go to the log channel (without one, they aren't sent).", colour: COR.sucesso },
+        { title: "✅ Canal de aviso", description: "Sin canal propio: los avisos van al canal de registro (sin él, no se envían).", colour: COR.sucesso }));
     }
     const alvo = resolverCanal(val, { message, server });
     const deOutro = alvo && server?.channelIds?.size && !server.channelIds.has(alvo);
@@ -1256,13 +1320,25 @@ export async function cmdScam(message, args, ctx) {
   }
 
   if (sub === "ban") {
-    const uid = (val ?? "").replace(/[<@>]/g, "") || message.mentionIds?.[0];
+    // (31 out 2026, R6/R9) banía com só ManagePermissions, sem hierarquia e sem
+    // validar o ID. Agora: BanMembers de quem pede + estar acima do alvo + ID
+    // escrito (responder a uma mensagem não troca o alvo).
+    if (!membroTemPermissao(message, server, "BanMembers")) return negarPermissao(ctx, message.channel, "BanMembers");
+    const uid = idValido(val ?? "");
+    if (uid) {
+      const pode = await podeAgirSobre(server, message, uid, ctx);
+      if (!pode.ok) return sendEmbed(message.channel, tr(ctx,
+        { title: "🚫 Acima de você", description: `${pode.pt}.`, colour: COR.erro },
+        { title: "🚫 Above you", description: `${pode.en}.`, colour: COR.erro },
+        { title: "🚫 Por encima de ti", description: `${pode.es ?? pode.en}.`, colour: COR.erro }));
+    }
     if (!uid) return sendEmbed(message.channel, tr(ctx,
       { title: "❌ Uso", description: `\`${citarInterno("automod.sentinela.banir", PREFIXO)} <@pessoa|id>\``, colour: COR.erro },
       { title: "❌ Usage", description: `\`${citarInterno("automod.sentinela.banir", PREFIXO)} <@user|id>\``, colour: COR.erro },
       { title: "❌ Uso", description: `\`${citar("automod.sentinela.banir", "es", PREFIXO)} <@usuario|id>\``, colour: COR.erro }));
     try {
-      await banir(server, uid, { reason: "[AutoMod] Confirmado por moderador" });
+      // decisão humana: não leva a marca "[AutoMod]" (essa só alerta na lista global)
+      await banir(server, uid, { reason: `[Sentinela] confirmado por moderador (${message.authorId})` });
       return sendEmbed(message.channel, tr(ctx,
         { title: "🔨 Banido", description: `<@${uid}> foi banido (confirmado).`, colour: COR.erro },
         { title: "🔨 Banned", description: `<@${uid}> was banned (confirmed).`, colour: COR.erro },

@@ -5,31 +5,73 @@ on:
     branches: [ main ]      # constrói a cada push no main
   workflow_dispatch:         # e permite rodar manualmente pelo botão "Run workflow"
 
+# (31 out 2026) As actions vão fixadas pelo COMMIT (o comentário diz a versão):
+# uma tag pode ser movida para outro código; o commit não. Para atualizar:
+#   git ls-remote https://github.com/actions/checkout refs/tags/v4
+permissions:
+  contents: read
+
 jobs:
+  # Antes, cada push publicava :latest sem rodar teste nenhum. Agora a imagem
+  # só sai se os testes, o verificador do build e o npm audit passarem.
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Node 22
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Dependências (exatamente as do package-lock.json)
+        run: |
+          npm ci --no-fund
+          (cd ia-servico && npm ci --ignore-scripts --no-fund)
+          (cd voz-servico && npm ci --ignore-scripts --no-fund)
+
+      - name: Verificador do build
+        run: node scripts/verificar-build.js
+
+      - name: Testes
+        run: node testes.mjs -j 4
+
+      - name: npm audit (aviso moderado ou mais grave derruba)
+        run: |
+          npm audit --audit-level=moderate
+          (cd ia-servico && npm audit --audit-level=moderate)
+          (cd voz-servico && npm audit --audit-level=moderate)
+
   build:
+    needs: testes
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write        # necessário para publicar a imagem no GHCR
     steps:
       - name: Checkout do código
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Preparar QEMU (para construir também para ARM)
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
 
       - name: Preparar Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
 
       - name: Login no GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build e push (amd64 + arm64)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
           platforms: linux/amd64,linux/arm64

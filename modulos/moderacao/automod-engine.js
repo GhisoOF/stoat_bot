@@ -3,12 +3,12 @@ import * as rajada from "./rajada.js";
 import { citar, citarInterno } from "../core/aliases.js";
 import { analisarConteudo, normalizarParaAnalise } from "./scorecard.js";
 import * as db  from "../core/db.js";
-import { descreverErro, tipoDoErro } from "../core/erros.js";
+import { descreverErro, tipoDoErro, registrarErro } from "../core/erros.js";
 import { banir } from "../core/banir.js";
 import * as log from "../core/log.js";
 import * as banGlobal from "./ban-global.js";
 import * as confianca from "./confianca.js";
-import { curarIds } from "./pertence.js";
+import { curarIds, canalDaStaff } from "./pertence.js";
 import { buscarSeguro } from "../core/seguranca.js";
 import { aplicarTimeout, CONFIRMAR_MS } from "./timeout.js";
 import { editarCargos } from "../core/hierarquia.js";
@@ -17,7 +17,7 @@ import * as assuntos from "./assuntos.js";
 import { analisarCaracteres, analisarRepeticao, analisarDuplicata, digital, textoHumano, razaoDeCaixaAlta } from "./caracteres.js";
 import { lingua, tr } from "../core/i18n.js";
 import {
-  ConstrutorIndice, criarIndiceVazio, carregarCache, salvarCache,
+  ConstrutorIndice, criarIndiceVazio, carregarCache, salvarCache, idadeDoCache,
 } from "./indice-dominios.js";
 
 export { criarIndiceVazio };   // usado pelo main (estado inicial) e pelo &automod blocklist clear
@@ -83,6 +83,25 @@ export function parseBlocklist(text) {
   return domains;
 }
 
+// ── Nunca bloquear (31 out 2026, R10) ─────────────────────────────────────────
+// Uma lista de terceiros com um erro (ou maldosa) não pode tirar do ar o próprio
+// Stoat, os CDNs dele nem os sites que todo mundo usa. Vale para o domínio e os
+// subdomínios, ao montar o índice E na hora de conferir (o cache do disco pode
+// ter sido montado antes).
+export const NUNCA_BLOQUEAR = new Set([
+  "stoat.chat", "stt.gg", "stoatusercontent.com", "revolt.chat", "rvlt.gg", "revoltusercontent.com", "autumn.revolt.chat",
+  "youtube.com", "youtu.be", "github.com", "githubusercontent.com", "google.com", "wikipedia.org", "wikimedia.org",
+]);
+export function nuncaBloquear(dominio) {
+  const partes = String(dominio ?? "").toLowerCase().split(".");
+  for (let i = 0; i < partes.length - 1; i++) if (NUNCA_BLOQUEAR.has(partes.slice(i).join("."))) return true;
+  return false;
+}
+// Fonte de lista: só https (R10) — http deixa qualquer um no caminho trocar a lista.
+export const fonteValida = (url) => /^https:\/\/[^\s/]+\.[^\s]+$/i.test(String(url ?? ""));
+// O índice do disco com menos de 24 h não é baixado de novo no boot (R11).
+const CACHE_FRESCO_MS = 24 * 3600_000;
+
 // A fonte é uma URL: busca pela trava anti-SSRF (IP conferido na conexão) e
 // com teto de tamanho — antes era um fetch cru, sem limite (12 out 2026).
 const MAX_LISTA_BYTES = Number(process.env.BLOCKLIST_MAX_MB || 200) * 1024 * 1024;
@@ -98,13 +117,13 @@ async function baixarParaIndice(url, construtor, { buscar = buscarSeguro } = {})
     resto = linhas.pop();
     for (const l of linhas) {
       const d = normalizarLinha(l);
-      if (d) { construtor.adicionar(d); n++; }
+      if (d && !nuncaBloquear(d)) { construtor.adicionar(d); n++; }
     }
   }
   resto += dec.decode();
   if (resto) {
     const d = normalizarLinha(resto);
-    if (d) { construtor.adicionar(d); n++; }
+    if (d && !nuncaBloquear(d)) { construtor.adicionar(d); n++; }
   }
   return n;
 }
@@ -114,6 +133,7 @@ export function carregarBlocklistCache(ctx) {
   const idx = carregarCache(cfgGlobal);
   if (idx) {
     estado.blockedDomains = idx;
+    estado.blocklistDoCache = true;
     console.info(`[BLOCKLIST] Cache do disco: ${idx.size.toLocaleString("pt-BR")} domínios prontos no boot.`);
     return true;
   }
@@ -121,22 +141,34 @@ export function carregarBlocklistCache(ctx) {
 }
 
 // Reconstrói o índice de domínios bloqueados a partir das fontes + manuais.
-export async function rebuildBlocklist(ctx) {
+// Devolve { pulou, falharam: [url…], total }. `forcar`: os comandos que mudam a
+// lista; sem ele (o boot), um cache do disco com menos de 24 h basta.
+export async function rebuildBlocklist(ctx, { forcar = false } = {}) {
   const { cfgGlobal, estado } = ctx;
+  if (!forcar && estado.blocklistDoCache && idadeDoCache() < CACHE_FRESCO_MS) {
+    console.info("[BLOCKLIST] cache do disco com menos de 24 h — sem baixar as listas de novo");
+    return { pulou: true, falharam: [], total: estado.blockedDomains?.size ?? 0 };
+  }
   const construtor = new ConstrutorIndice();
   let falhas = 0;
+  const falharam = [];
 
-  for (const d of cfgGlobal.linkBlocklistManual) construtor.adicionar(d.toLowerCase());
+  for (const d of cfgGlobal.linkBlocklistManual) if (!nuncaBloquear(d)) construtor.adicionar(d.toLowerCase());
   dbg(ctx, `[BLOCKLIST] ${cfgGlobal.linkBlocklistManual.length} domínio(s) manual(is) carregado(s)`);
 
   for (const url of cfgGlobal.linkBlocklistSources) {
+    if (!fonteValida(url)) {
+      falhas++; falharam.push(url);
+      console.warn(`[BLOCKLIST] fonte ignorada (só https): ${String(url).slice(0, 120)}`);
+      continue;
+    }
     try {
       dbg(ctx, `[BLOCKLIST] Baixando ${url} …`);
       const n = await baixarParaIndice(url, construtor, ctx?.buscarLista ? { buscar: ctx.buscarLista } : {});   // buscarLista: só teste (servidor local)
       console.info(`[BLOCKLIST] ${n.toLocaleString("pt-BR")} domínios de ${url}`);
     } catch (err) {
-      falhas++;
-      console.error(`[BLOCKLIST] Falha ao buscar ${url}:`, err.message);
+      falhas++; falharam.push(url);
+      registrarErro("BLOCKLIST", `falha ao buscar ${url}: ${err?.message ?? err}`);
     }
   }
 
@@ -148,12 +180,14 @@ export async function rebuildBlocklist(ctx) {
       `[BLOCKLIST] ${falhas} fonte(s) falharam e o novo índice (${novo.size.toLocaleString("pt-BR")}) ` +
       `é menor que o atual (${atual.toLocaleString("pt-BR")}). Mantendo o índice atual.`
     );
-    return;
+    return { pulou: false, falharam, total: atual };
   }
 
   estado.blockedDomains = novo;
+  estado.blocklistDoCache = false;
   console.info(`[BLOCKLIST] Total de domínios bloqueados: ${novo.size.toLocaleString("pt-BR")} (~${Math.round(novo.size * 8 / 1024 / 1024)} MB no índice)`);
   salvarCache(novo, cfgGlobal);   // grava em background; boot seguinte carrega na hora
+  return { pulou: false, falharam, total: novo.size };
 }
 
 function extrairDominios(content) {
@@ -242,18 +276,24 @@ function modoEfetivo(config, pol) {
 }
 async function darToque(ctx, { server, channel, message, userId, motivo }) {
   const { sendEmbed, COR } = ctx;
-  if (message) { try { await message.delete(); } catch {} }
+  // (31 out 2026, Reparo) "a mensagem foi apagada" só se foi mesmo
+  let apagou = false;
+  if (message) { try { await message.delete(); apagou = true; } catch (e) { registrarErro("AUTOMOD:toque", e); } }
   let aviso = null;
   try {
     aviso = await sendEmbed(channel, {
       title: tr(ctx, "🙂 Só um toque", "🙂 Just a heads-up", "🙂 Solo un toque de atención"),
-      description: tr(ctx,
+      description: apagou ? tr(ctx,
         `<@${userId}> — ${motivo}.\n_A mensagem foi apagada, **sem contar aviso**. Se repetir nos próximos 10 min, aí conta._`,
         `<@${userId}> — ${motivo}.\n_Message removed, **no warning counted**. If it happens again in the next 10 min, it counts._`,
-        `<@${userId}> — ${motivo}.\n_Se borró el mensaje, **sin contar aviso**. Si se repite en los próximos 10 min, ahí sí cuenta._`),
+        `<@${userId}> — ${motivo}.\n_Se borró el mensaje, **sin contar aviso**. Si se repite en los próximos 10 min, ahí sí cuenta._`)
+        : tr(ctx,
+        `<@${userId}> — ${motivo}.\n_**Sem contar aviso** desta vez. Se repetir nos próximos 10 min, aí conta._`,
+        `<@${userId}> — ${motivo}.\n_**No warning counted** this time. If it happens again in the next 10 min, it counts._`,
+        `<@${userId}> — ${motivo}.\n_**Sin contar aviso** esta vez. Si se repite en los próximos 10 min, ahí sí cuenta._`),
       colour: COR.aviso,
     });
-  } catch {}
+  } catch (e) { registrarErro("AUTOMOD:toque", e); }
   // some sozinho: é um lembrete, não um registro público
   if (aviso?.delete) setTimeout(() => aviso.delete().catch?.(() => {}), 20_000).unref?.();
   await log.registrar(ctx, "punicoes", { titulo: "🙂 Toque do AutoMod (sem aviso)",
@@ -315,16 +355,21 @@ async function aplicarPunicao(ctx, opts) {
   }
 
   // demais modos removem a mensagem ofensora
-  if (apagar && message) { try { await message.delete(); } catch (e) { console.error("[PUNIÇÃO][DEL]", e.message); } }
+  let apagou = false;
+  if (apagar && message) { try { await message.delete(); apagou = true; } catch (e) { registrarErro("PUNIÇÃO:DEL", e); } }
 
   // ── apagar: só remove a mensagem, sem punir o usuário ──
   if (pol.modo === "apagar") {
     await sendEmbed(channel, {
       title: tr(ctx, "🧹 Mensagem removida", "🧹 Message removed", "🧹 Mensaje eliminado"),
       description: [`<@${userId}> — ${motivo}${linhaNota}`,
-        tr(ctx, "_A mensagem foi apagada. Nenhuma punição aplicada ao usuário._",
+        apagou
+          ? tr(ctx, "_A mensagem foi apagada. Nenhuma punição aplicada ao usuário._",
                 "_The message was deleted. No punishment applied to the user._",
-                "_Se borró el mensaje. No se aplicó ningún castigo al usuario._"),
+                "_Se borró el mensaje. No se aplicó ningún castigo al usuario._")
+          : tr(ctx, "_Não consegui apagar a mensagem (falta **ManageMessages** ao bot?). Nenhuma punição aplicada._",
+                "_I couldn't delete the message (does the bot lack **ManageMessages**?). No punishment applied._",
+                "_No pude borrar el mensaje (¿le falta **ManageMessages** al bot?). No se aplicó ningún castigo._"),
         ...blocoGrave].join("\n"),
       colour: COR.mod,
     });
@@ -493,17 +538,15 @@ async function aplicarPunicao(ctx, opts) {
 // Padrão de dano (desafios, humilhação, doxxing): nada foi punido, mas a
 // soma das mensagens de uma pessoa merece olho humano. Mostra os trechos,
 // porque é a conversa inteira — não uma frase — que conta a história.
-async function alertarPadraoDano(ctx, { canal, userId, p }) {
+async function alertarPadraoDano(ctx, { server = null, userId, p }) {
   const { config, sendEmbed, COR, PREFIXO } = ctx;
-  const destinoId = config.automod?.antiScam?.alertChannelId || config.log?.canalId || null;
-  let destino = canal;
-  if (destinoId) {
-    try { destino = await ctx.client.channels.fetch(destinoId); } catch { destino = canal; }
-  }
+  // (31 out 2026, R9) sem canal da staff, o alerta NÃO cai no canal público
+  const destino = await canalDaStaff(ctx, server);
   const cargos = config.acesso?.cargosStaff ?? [];
   const mencao = cargos.length ? cargos.map((id) => `<%${id}>`).join(" ") : "";
   const trechos = p.trechos.map((t) => `> ${t}`).join("\n");
-  try {
+  if (!destino) console.warn(`[SENTINELA][dano] alerta NÃO entregue: servidor ${ctx.serverId ?? server?.id} sem canal de alerta do sentinela nem de log`);
+  else try {
     await sendEmbed(destino, {
       title: tr(ctx, "🚩 Padrão de dano", "🚩 Harmful pattern", "🚩 Patrón de daño"),
       description: [
@@ -527,7 +570,7 @@ async function alertarPadraoDano(ctx, { canal, userId, p }) {
       ].filter((l) => l !== null && l !== undefined).join("\n"),
       colour: COR.erro,
     });
-  } catch (e) { console.error("[SENTINELA][dano]", e.message); }
+  } catch (e) { registrarErro("SENTINELA:dano", e); }
   await log.registrar(ctx, "punicoes", {
     titulo: "🚩 Padrão de dano",
     descricao: `<@${userId}> — ${p.soma.toFixed(1)} em ${p.mensagens} mensagem(ns): ${p.categorias.join(", ")}`,
@@ -543,12 +586,9 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
   const { config, sendEmbed, COR, PREFIXO } = ctx;
   const am = config.automod ?? {};
 
-  // Onde avisar: o canal do sentinela, senão o de logs, senão o próprio canal.
-  const destinoId = am.antiScam?.alertChannelId || config.log?.canalId || null;
-  let destino = canal;
-  if (destinoId) {
-    try { destino = await ctx.client.channels.fetch(destinoId); } catch { destino = canal; }
-  }
+  // Onde avisar: o canal do sentinela, senão o de logs. Nunca o canal público
+  // da mensagem (31 out 2026, R9): sem destino, fica só no log local.
+  const destino = await canalDaStaff(ctx, server);
 
   const cargos = config.acesso?.cargosStaff ?? [];
   const mencao = cargos.length ? cargos.map((id) => `<%${id}>`).join(" ") : "";
@@ -579,13 +619,14 @@ async function alertarAdministracao(ctx, { server, canal, userId, sinal, faixa, 
     `\`${citar("automod.sentinela.banir", "es", PREFIXO)} ${userId}\` · \`${citar("automod.sentinela.liberar", "es", PREFIXO)} ${userId}\` · \`${citar("warn.lista", "es", PREFIXO)} ${userId}\``,
   ]);
 
-  try {
+  if (!destino) console.warn(`[SENTINELA][alerta] alerta NÃO entregue: servidor ${ctx.serverId ?? server?.id} sem canal de alerta do sentinela nem de log`);
+  else try {
     await sendEmbed(destino, {
       title: tr(ctx, "🚨 Possível ameaça", "🚨 Possible threat", "🚨 Posible amenaza"),
       description: linhas.filter(Boolean).join("\n"),
       colour: COR.erro,
     });
-  } catch (e) { console.error("[SENTINELA][alerta]", e.message); }
+  } catch (e) { registrarErro("SENTINELA:alerta", e); }
 
   await log.registrar(ctx, "punicoes", {
     titulo: "🚨 Possível ameaça",
@@ -752,10 +793,15 @@ export async function liberarSilenciosVencidos(ctx) {
 }
 
 export function escadaDePunicao(pol = {}, { estrito = false } = {}) {
-  const bruto = String(pol.escada || ESCADA_PADRAO).split(",").map((x) => x.trim()).filter(Boolean);
+  const bruto = String(pol?.escada || ESCADA_PADRAO).split(",").map((x) => x.trim()).filter(Boolean);
   const degraus = bruto.map(interpretarDegrau).filter(Boolean);
   if (estrito && degraus.length !== bruto.length) return [];
-  if (!degraus.length) return [{ tipo: "aviso" }, { tipo: "ban" }];
+  // (31 out 2026, Reparo) escada estragada no banco virava "aviso → ban" (ban no
+  // 2º aviso!) ou perdia degraus calada. Agora: a escada padrão, e o log diz.
+  if (!degraus.length || degraus.length !== bruto.length) {
+    registrarErro("AUTOMOD:escada", `escada inválida na config ("${String(pol?.escada).slice(0, 60)}") — usando a padrão (${ESCADA_PADRAO})`);
+    return ESCADA_PADRAO.split(",").map(interpretarDegrau);
+  }
   if (degraus[degraus.length - 1].tipo !== "ban") degraus.push({ tipo: "ban" });
   return degraus;
 }
@@ -764,9 +810,10 @@ function interpretarDegrau(txt) {
   const t = String(txt).toLowerCase();
   if (/^(aviso|warn|warning)$/.test(t)) return { tipo: "aviso" };
   if (/^(ban|banir)$/.test(t)) return { tipo: "ban" };
-  const m = t.match(/^(\d+)\s*(s|seg|m|min|h|hora|d|dia)/);
+  const m = t.match(/^(\d+)\s*(s|seg|segundos?|m|min|minutos?|h|horas?|d|dias?)$/);
   if (!m) return null;
   const n = Number(m[1]);
+  if (!(n > 0)) return null;
   const unidade = m[2][0];
   const ms = unidade === "s" ? n * 1000
     : unidade === "m" ? n * 60_000
@@ -794,7 +841,19 @@ export function rotuloDegrau(degrau, lang = "pt") {
 // por fora do automod, e editar uma mensagem inocente para um golpe também.
 // Os filtros de ritmo (spam, rajada de mídia, repetição) ficam de fora: dez
 // comandos seguidos não são flood, e uma edição não é mensagem nova.
+// (31 out 2026, R10) uma falha aqui dentro (config ruim vinda do banco, API fora)
+// não pode derrubar o processamento da mensagem — antes, `repeticao 1.5` lançava
+// exceção em TODA mensagem e os comandos de quem não é staff morriam junto.
 export async function runAutomod(message, ctx, opts = {}) {
+  try {
+    return await analisarMensagem(message, ctx, opts);
+  } catch (e) {
+    registrarErro("AUTOMOD", e);
+    return false;
+  }
+}
+
+async function analisarMensagem(message, ctx, opts = {}) {
   const soConteudo = opts.soConteudo === true;
   const { config, estado, getServer } = ctx;
   const userId  = message.authorId;
@@ -802,13 +861,13 @@ export async function runAutomod(message, ctx, opts = {}) {
   const am = config.automod;
 
   dbg(ctx, "────────────────────────────────────────────");
-  dbg(ctx, `▶ Analisando mensagem de ${userId}`);
-  dbg(ctx, `  conteúdo: ${JSON.stringify(content)}`);
+  // (31 out 2026, R9) o conteúdo da mensagem NUNCA vai para o log
+  dbg(ctx, `▶ Analisando mensagem de ${userId} (${content.length} caractere(s))`);
 
   // O fio do canal para o juiz dos temas proibidos (inclui a fala da staff,
   // que sai do automod logo abaixo — ela também faz parte da conversa).
   if (!soConteudo && assuntos.temasAtivos(am?.antiAssuntos).length) {
-    assuntos.anotar(message.channelId, { id: message.id, autor: userId, nome: message.author?.username ?? message.member?.nickname ?? userId, texto: content });
+    assuntos.anotar(message.channelId, { id: message.id, autor: userId, texto: content });
   }
 
   let server;
@@ -934,10 +993,10 @@ export async function runAutomod(message, ctx, opts = {}) {
     dbg(ctx, "  [anti-invite] canal liberado para convites — não se aplica aqui");
   } else if (am.antiInvite.enabled) {
     const codigos = codigosDeConvite(content);
-    dbg(ctx, `  [anti-invite] ON → convites encontrados: [${codigos.join(", ") || "nenhum"}]`);
+    dbg(ctx, `  [anti-invite] ON → ${codigos.length} convite(s)`);
     if (codigos.length > 0) {
       const naoPermitidos = codigos.filter((c) => !config.inviteWhitelist.includes(c.toLowerCase()));
-      dbg(ctx, `  [anti-invite] não permitidos: [${naoPermitidos.join(", ") || "nenhum"}]`);
+      dbg(ctx, `  [anti-invite] ${naoPermitidos.length} fora da lista de permitidos`);
       if (naoPermitidos.length > 0) {
         return punirRuido(am.antiInvite.punicao, "não é permitido enviar convites neste servidor", "anti-invite");
       }
@@ -967,7 +1026,7 @@ export async function runAutomod(message, ctx, opts = {}) {
     if (r.dano?.soma > 0 && am.antiScam.alertarAdmin !== false) {
       const p = confianca.registrarDano(ctx.serverId ?? server?.id, userId, r.dano, content);
       dbg(ctx, `  [sentinela/dano] +${r.dano.soma} (${r.dano.categorias.join(",")}) → acumulado ${p.soma?.toFixed?.(1) ?? "?"}`);
-      if (p.alertar) await alertarPadraoDano(ctx, { canal, userId, p });
+      if (p.alertar) await alertarPadraoDano(ctx, { server, userId, p });
     }
 
     if (r.nota >= Math.max(3, limiar - 2) && am.antiScam.alertarAdmin !== false) {
@@ -994,7 +1053,7 @@ export async function runAutomod(message, ctx, opts = {}) {
   if (am.antiLink.enabled) {
     const dominios = extrairDominios(content);
     dbg(ctx, `  [anti-link] ON → lista tem ${estado.blockedDomains.size} domínio(s)`);
-    dbg(ctx, `  [anti-link] domínios extraídos da mensagem: [${dominios.join(", ") || "nenhum"}]`);
+    dbg(ctx, `  [anti-link] ${dominios.length} domínio(s) na mensagem`);
 
     if (estado.blockedDomains.size === 0) {
       dbg(ctx, "  [anti-link] ⚠️ lista VAZIA — adicione com " + citarInterno("automod") + " blocklist add <url> ou " + citarInterno("automod") + " blocklist adddomain <domínio>");
@@ -1003,9 +1062,9 @@ export async function runAutomod(message, ctx, opts = {}) {
     const permitidos = new Set(config.dominiosPermitidos ?? []);
     // Permitido vence a lista (vale para o domínio e seus subdomínios).
     const bloqueado = dominios.find((d) =>
-      !dominioBloqueado(d, permitidos) && dominioBloqueado(d, estado.blockedDomains));
+      !nuncaBloquear(d) && !dominioBloqueado(d, permitidos) && dominioBloqueado(d, estado.blockedDomains));
     if (bloqueado) {
-      dbg(ctx, `  ✗ BLOQUEADA por anti-link (domínio: ${bloqueado})`);
+      dbg(ctx, "  ✗ BLOQUEADA por anti-link");
       await aplicarPunicao(ctx, { server, channel: canal, message, userId, regraFixa: true,
         pol: am.antiLink.punicao, motivo: "este link está em uma lista de bloqueio do servidor" });
       return true;
@@ -1033,7 +1092,7 @@ export async function runAutomod(message, ctx, opts = {}) {
     // Siglas curtas ficam fora da conta; `null` = texto insuficiente.
     const ratio = razaoDeCaixaAlta(textoEstilo);
     if (ratio !== null) {
-      dbg(ctx, `  [anti-caps] ON → ${(ratio * 100).toFixed(0)}% maiúsculas em "${textoEstilo.slice(0, 60)}" (limite ${(am.antiCaps.threshold * 100).toFixed(0)}%)`);
+      dbg(ctx, `  [anti-caps] ON → ${(ratio * 100).toFixed(0)}% maiúsculas (limite ${(am.antiCaps.threshold * 100).toFixed(0)}%)`);
       if (ratio >= am.antiCaps.threshold) {
         return punirRuido(am.antiCaps.punicao, "evite escrever em CAIXA ALTA em excesso", "anti-caps");
       }
@@ -1211,27 +1270,13 @@ export async function removerCargoSilence(server, userId, roleId, ctx) {
   return { removido: true };
 }
 
-// Resolve o canal de aviso configurado (ou usa o canal atual como fallback)
-async function canalDeAviso(ctx, canalAtual) {
-  const id = ctx.config.automod.antiScam.alertChannelId;
-  if (!id) return canalAtual;
-  try {
-    const ch = ctx.client?.channels;
-    if (ch?.get) { const c = ch.get(id); if (c) return c; }
-    if (ch?.fetch) return await ch.fetch(id);
-  } catch (e) {
-    console.error("[ANTI-GOLPE] Falha ao resolver canal de aviso:", e.message);
-  }
-  return canalAtual;
-}
-
 export async function simularDeteccao(texto, ctx, canalAtual) {
   const { sendEmbed, COR, config } = ctx;
   const t = texto ?? "";
   const r = analisarConteudo(t, { rate: 1 });
   const limiar = limiarBase(config.automod.antiScam.sensitivity);
   const flag = r.nota >= limiar;
-  const canalAviso = await canalDeAviso(ctx, canalAtual);
+  const canalAviso = (await canalDaStaff(ctx)) ?? canalAtual;   // a simulação foi pedida pela staff, no canal dela
   const resumoSeguro = r.grave ? "[conteúdo não exibido por segurança]"
                               : (t.length > 200 ? t.slice(0, 200) + "…" : t);
 

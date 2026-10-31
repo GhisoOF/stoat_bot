@@ -4,10 +4,11 @@
 //   DONO       → SUPER_ADMINS        (ID do perfil do dono)
 //   SERVIDOR   → CHAT_SERVIDORES     (onde a IA roda; "*" = em todos)
 //   IA         → 0/1                 (liga/desliga todos os módulos de IA)
-//   IA_MODO    → local | online      (llama.cpp embutido | plataforma com token)
-//   MODELO     → -hf do llama (local) ou LLM_MODEL (online)
+//   IA_MODO    → local                (llama.cpp embutido). O modo online foi
+//                REMOVIDO em 31 out 2026 (R9: nada da conversa, da moderação, da
+//                memória ou das imagens sai da máquina). Sem GPU, use IA=0.
+//   MODELO     → -hf do llama (local)
 //   MODELO_VISAO → LLM_MODEL_VISAO    (liga a ferramenta de visão)
-//   TOKEN_IA   → Authorization no LLM online
 //   PROMPT     → personalidade padrão da IA (o &personalidade por servidor vence)
 //   CONVERSA   → 0 = modo enxuto: a IA fica SÓ para moderação, relatório do
 //                log e RSS (sem chat, sem gerar imagem, sem memória/comentários)
@@ -36,7 +37,57 @@ export function conversaLigada() {
 
 export function modoIA() {
   const m = (e.IA_MODO || "").trim().toLowerCase();
-  return m === "local" || m === "online" ? m : "";
+  return m === "local" ? m : "";
+}
+
+// Liga/desliga lido do jeito que o .env escreve ("0", "off", "false", "não"…).
+// Antes, seis lugares testavam `!== "0"` e IMAGEM=off deixava a imagem ligada.
+export function ligado(nome, padrao = true) {
+  const v = (e[nome] ?? "").trim().toLowerCase();
+  if (!v) return padrao;
+  return !DESLIGADO.has(v);
+}
+export const imagemLigada = () => iaLigada() && conversaLigada() && ligado("IMAGEM", true);
+
+// Número do .env: vazio → padrão; inválido ou fora da faixa → erro (o boot para,
+// Regra do Reparo). Antes, `Number("30/min")` virava NaN e desligava tetos calado.
+export function numero(nome, padrao, { min = -Infinity, max = Infinity, inteiro = false } = {}) {
+  const bruto = (e[nome] ?? "").trim();
+  if (!bruto) return padrao;
+  const n = Number(bruto);
+  if (!Number.isFinite(n) || n < min || n > max || (inteiro && !Number.isInteger(n))) {
+    throw new Error(`.env: ${nome}=${JSON.stringify(bruto)} é inválido (esperado ${inteiro ? "inteiro" : "número"} entre ${min} e ${max})`);
+  }
+  return n;
+}
+
+// Conferência do .env no boot (main.js e iniciar.js). Devolve a lista de
+// problemas; quem chama para o boot se ela não estiver vazia.
+const BOOLEANOS = ["IA", "CONVERSA", "IMAGEM", "VOZ_ATIVA", "BUSCA_SEMPRE", "IMAGEM_LIBERAR_GPU", "IMAGEM_TE_GPU"];
+const VALIDOS = new Set([...DESLIGADO, "1", "true", "sim", "on", "yes", "si", "sí"]);
+export function problemasDoEnv() {
+  const p = [];
+  const modo = (e.IA_MODO || "").trim().toLowerCase();
+  if (modo === "online") p.push("IA_MODO=online foi removido (31 out 2026): use IA_MODO=local, ou IA=0 sem GPU");
+  else if (modo && modo !== "local") p.push(`IA_MODO=${JSON.stringify(e.IA_MODO)} é inválido (use local, ou deixe vazio)`);
+  for (const b of BOOLEANOS) {
+    const v = (e[b] ?? "").trim().toLowerCase();
+    if (v && !VALIDOS.has(v)) p.push(`${b}=${JSON.stringify(e[b])} é inválido (use 0 ou 1)`);
+  }
+  return p;
+}
+
+// Avisos que não param o boot: um ID errado numa lista só faz aquela entrada não
+// valer para ninguém (falha fechada), então basta avisar no log.
+const LISTAS_DE_ID = ["SUPER_ADMINS", "CHAT_SERVIDORES", "TTS_SERVIDORES", "RSS_SERVIDORES", "WEBHOOK_SERVIDORES"];
+export function avisosDoEnv() {
+  const p = [];
+  for (const v of LISTAS_DE_ID) {
+    const itens = (e[v] || "").split(",").map((x) => x.trim()).filter(Boolean);
+    const ruins = itens.filter((x) => x !== "*" && !/^[0-9A-HJKMNP-TV-Z]{26}$/i.test(x));
+    if (ruins.length) p.push(`${v}: ${ruins.length} item(ns) não é ID do Stoat (26 caracteres) nem "*" — ignorado(s)`);
+  }
+  return p;
 }
 
 // Modelo padrão do modo local: pequeno o bastante para CPU, bom o bastante
@@ -47,17 +98,9 @@ if (iaLigada()) {
   if (modoIA() === "local") {
     // O llama-server embutido (iniciar.js) escuta em 8082.
     if (!e.LLM_URL) e.LLM_URL = "http://127.0.0.1:8082";
-  } else if (modoIA() === "online") {
-    if (!e.LLM_URL) e.LLM_URL = "https://openrouter.ai/api";
-    if (e.MODELO && !e.LLM_MODEL) e.LLM_MODEL = e.MODELO;
-    // o juiz da moderação (no modo local, o iniciar.js aponta para "moderacao")
-    if (e.MODELO_MODERACAO && !e.LLM_MODEL_JUIZ) e.LLM_MODEL_JUIZ = e.MODELO_MODERACAO;
   }
   // A ferramenta de visão (ver_imagem) só é registrada quando LLM_MODEL_VISAO
-  // existe. No modo online e com LLM_URL externo, ninguém definia essa
-  // variável: o README prometia visão "de fábrica com um modelo multimodal" e
-  // a ferramenta simplesmente não aparecia. (No modo local com llama-swap o
-  // iniciar.js já define "visao"; este mapeamento não atrapalha.)
+  // existe (no modo local com llama-swap o iniciar.js já define "visao").
   if (e.MODELO_VISAO && !e.LLM_MODEL_VISAO) e.LLM_MODEL_VISAO = e.MODELO_VISAO;
 
   // Modo enxuto: menos processamento. Sem gerador de imagem (nem o download

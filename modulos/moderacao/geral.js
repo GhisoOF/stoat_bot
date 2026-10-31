@@ -14,7 +14,7 @@ import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 import { escadaDePunicao, rotuloDegrau, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
 import { MUNDO } from "../game/mundo.js";
 import { servidorNaLista } from "../core/env.js";
-import { idEscrito } from "../core/ids.js";
+import { idEscrito, resolverUsuario } from "../core/ids.js";
 
 // Comandos que só existem onde a IA roda (espelha a lista do main.js).
 const COMANDOS_SO_IA = new Set(["chat", "modia"]);
@@ -25,7 +25,7 @@ import { tr, lingua, idiomaDe } from "../core/i18n.js";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { descreverErro } from "../core/erros.js";
+import { descreverErro, registrarErro } from "../core/erros.js";
 import { banir } from "../core/banir.js";
 
 // Conta as linhas de código do projeto (uma vez, com cache).
@@ -56,19 +56,16 @@ import * as banGlobal from "./ban-global.js";
 import { nomeModo } from "../core/nomes-automod.js";
 import { podeAgirSobre } from "../core/hierarquia.js";
 
-function extrairAlvo(message, args) {
-  // 1) primeiro argumento: <@ID>, <ID> ou ID puro (ULID de 26 chars). Vem
-  //    ANTES do mentionIds: numa resposta, o mentionIds pode trazer o autor da
-  //    mensagem respondida — "&ban @Fulano" banía outra pessoa.
-  const bruto = (args[0] ?? "").replace(/[<@#>!]/g, "");
-  const ehUlid = /^[0-9A-HJKMNP-TV-Z]{26}$/i.test(bruto);
-  // 2) senão, a menção resolvida pela plataforma
-  const id = ehUlid ? bruto.toUpperCase() : (message.mentionIds?.[0] ?? null);
-
-  // Se o 1º arg era o alvo (menção ou ID), o motivo é o resto
-  const primeiroEraAlvo = ehUlid || (args[0] ?? "").includes("@");
-  const resto = primeiroEraAlvo ? args.slice(1) : args;
-  return { id, motivo: resto.join(" ").trim() };
+// O alvo de `&kick`/`&ban` é SEMPRE o primeiro argumento (menção, ID, link ou
+// nome) — e só ele (31 out 2026, R6). Antes, sem um ID no 1º argumento, valia
+// o `mentionIds[0]`: `&ban Fulano spam` respondendo a uma mensagem banía o
+// AUTOR DA MENSAGEM RESPONDIDA. Aqui a resolução não olha as menções da
+// mensagem (o `message` não vai junto), então responder nunca troca o alvo.
+async function extrairAlvo(message, args, server, ctx) {
+  const entrada = String(args[0] ?? "").trim();
+  if (!entrada) return { id: null, motivo: "" };
+  const id = await resolverUsuario(entrada, { server }).catch(() => null);   // só membros e banidos DESTE servidor
+  return { id: id ? String(id).toUpperCase() : null, motivo: args.slice(1).join(" ").trim() };
 }
 
 export function construirDetalhes(P, lang = "pt", idioma = lang) {
@@ -139,11 +136,11 @@ function construirSubtopicos(P, lang) {
           `**Usage:** \`${citarInterno("automod", P)} <group> set <parameter> <value>\``,
           "",
           "Adjusts a module's parameter. Parameters per module:",
-          "• `antispam`: `mensagens`, `tempo` (ms) — velocidade · `vezes` — repetição · `minuto`, `novato` — mídia · `mencoes`",
+          "• `antispam`: `mensagens`, `tempo` (duration: `8s`, `1m`) — velocidade · `vezes` — repetição · `minuto`, `novato` — mídia · `mencoes`",
           "• `antiruido`: `tamanho`, `limiar` (0–1 or %) — caps · `zalgo` — caracteres · `repeticao`, `ignorar` — letras · `emojis` — emoji",
           "  _Measurement ignores mentions, links, named emojis and code — only typed text counts._",
           "",
-          `E.g.: \`${citarInterno("automod", P)} antispam set mensagens 3\` · \`${citarInterno("automod", P)} antispam set tempo 10000\``,
+          `E.g.: \`${citarInterno("automod", P)} antispam set mensagens 3\` · \`${citarInterno("automod", P)} antispam set tempo 10s\``,
         ].join("\n"),
       },
       punicao: {
@@ -222,11 +219,11 @@ function construirSubtopicos(P, lang) {
           `**Uso:** \`${citarInterno("automod", P)} <grupo> set <parâmetro> <valor>\``,
           "",
           "Ajusta um parâmetro de um módulo. Parâmetros por módulo:",
-          "• `antispam`: `mensagens`, `tempo` (ms) — velocidade · `vezes` — repetição · `minuto`, `novato` — mídia · `mencoes`",
+          "• `antispam`: `mensagens`, `tempo` (duração: `8s`, `1m`) — velocidade · `vezes` — repetição · `minuto`, `novato` — mídia · `mencoes`",
           "• `antiruido`: `tamanho`, `limiar` (0–1 ou %) — caps · `zalgo` — caracteres · `repeticao`, `ignorar` — letras · `emojis` — emoji",
           "  _A medição ignora menções, links, emojis nomeados e código — só conta o texto digitado._",
           "",
-          `Ex.: \`${citarInterno("automod", P)} antispam set mensagens 3\` · \`${citarInterno("automod", P)} antispam set tempo 10000\``,
+          `Ex.: \`${citarInterno("automod", P)} antispam set mensagens 3\` · \`${citarInterno("automod", P)} antispam set tempo 10s\``,
         ].join("\n"),
       },
       punicao: {
@@ -914,7 +911,11 @@ export async function cmdUserinfo(message, args, ctx) {
       `**Roles:** ${roles}`,
     ]);
 
-    try {
+    // (31 out 2026, R9) o histórico de moderação é da STAFF: avisos e silêncio de
+    // um membro não ficam à vista de todos. E da lista global só a contagem —
+    // nada do ID nem do motivo que a staff de OUTRO servidor escreveu.
+    const ehStaff = !!ctx.membroTemPermissao?.(message, server, "ManageMessages");
+    if (ehStaff) try {
       const avisos     = db.contarAvisos(serverId, targetId, { validadeMs: validadeDosAvisos(ctx.config?.automod?.punicao) });
       const silenciado = db.estaSilenciado(serverId, targetId);
       const hist       = db.historicoBans(targetId);
@@ -935,24 +936,18 @@ export async function cmdUserinfo(message, args, ctx) {
       }
 
       if (outros.length) {
+        const n = new Set(outros.map((b) => b.serverId)).size;
         linhas.push(
           "",
           T(
-            `🌐 **Lista global:** banido em **${outros.length}** outro(s) servidor(es).`,
-            `🌐 **Global list:** banned on **${outros.length}** other server(s).`,
-            `🌐 **Lista global:** baneado en **${outros.length}** servidor(es) más.`),
-          ...outros.slice(0, 3).map((b) =>
-            `• \`${b.serverId}\` — ${b.motivo ?? T("_sem motivo_", "_no reason_", "_sin motivo_")} _(${new Date(b.criadoEm).toLocaleDateString(locale)})_`),
-        );
-        if (outros.length > 3) linhas.push(T(
-          `_… e mais ${outros.length - 3}. Veja \`${citarInterno("banglobal.historico", PREFIXO)} ${targetId}\`._`,
-          `_… and ${outros.length - 3} more. See \`${citarInterno("banglobal.historico", PREFIXO)} ${targetId}\`._`,
-          `_… y ${outros.length - 3} más. Mira \`${citar("banglobal.historico", "es", PREFIXO)} ${targetId}\`._`));
+            `🌐 **Lista global:** banido em **${n}** outro(s) servidor(es).`,
+            `🌐 **Global list:** banned on **${n}** other server(s).`,
+            `🌐 **Lista global:** baneado en **${n}** servidor(es) más.`));
       } else {
         linhas.push("", T("🌐 **Lista global:** não consta. ✅", "🌐 **Global list:** not listed. ✅", "🌐 **Lista global:** no figura. ✅"));
       }
     } catch (e) {
-      console.error("[USERINFO][HIST]", e?.message);
+      registrarErro("USERINFO:hist", e);
     }
 
     await sendEmbed(message.channel, {
@@ -977,7 +972,7 @@ export async function cmdKick(message, args, ctx) {
   if (!membroTemPermissao(message, server, "KickMembers"))
     return negarPermissao(ctx, message.channel, "KickMembers");
 
-  const { id: targetId, motivo } = extrairAlvo(message, args);
+  const { id: targetId, motivo } = await extrairAlvo(message, args, server, ctx);
   const reason = motivo || (lang === "en" ? "No reason given" : "Sem motivo especificado");
   if (!targetId)
     return sendEmbed(message.channel, tr(ctx, {
@@ -1066,7 +1061,7 @@ export async function cmdBan(message, args, ctx) {
   if (!membroTemPermissao(message, server, "BanMembers"))
     return negarPermissao(ctx, message.channel, "BanMembers");
 
-  const { id: targetId, motivo } = extrairAlvo(message, args);
+  const { id: targetId, motivo } = await extrairAlvo(message, args, server, ctx);
   const reason = motivo || (lang === "en" ? "No reason given" : "Sem motivo especificado");
   if (!targetId)
     return sendEmbed(message.channel, tr(ctx, {

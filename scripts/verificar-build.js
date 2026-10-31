@@ -33,6 +33,7 @@ function listarJs(dir) {
   const out = [];
   if (!existsSync(dir)) return out;
   for (const item of readdirSync(dir)) {
+    if (item === "node_modules" || item.startsWith(".")) continue;
     const p = join(dir, item);
     if (statSync(p).isDirectory()) out.push(...listarJs(p));
     else if (item.endsWith(".js")) out.push(p);
@@ -59,6 +60,21 @@ if (!existsSync(modulosDir)) {
     }
   }
   console.log(`  ✓ ${arquivos.length} módulos verificados`);
+}
+
+// 2b) o iniciar.js e os serviços embutidos (ia-servico, voz-servico): sintaxe
+//     (31 out 2026). Antes só modulos/ era conferido, e um erro de sintaxe no
+//     iniciar.js ou num serviço passava pelo build e derrubava o container.
+{
+  const arquivos = [join(RAIZ, "iniciar.js"), ...listarJs(join(RAIZ, "ia-servico")), ...listarJs(join(RAIZ, "voz-servico"))];
+  for (const s of ["ia-servico/servidor.js", "voz-servico/servidor.js"]) if (!existsSync(join(RAIZ, s))) falha(`${s} não existe`);
+  let n = 0;
+  for (const f of arquivos) {
+    if (!existsSync(f)) { falha(`${f.slice(RAIZ.length + 1)} não existe`); continue; }
+    try { execFileSync(process.execPath, ["--check", f], { stdio: "pipe" }); n++; }
+    catch (e) { falha(`sintaxe inválida em ${f.slice(RAIZ.length + 1)}: ${e.stderr?.toString().split("\n")[0] ?? e.message}`); }
+  }
+  console.log(`  ✓ iniciar.js e serviços: ${n} arquivo(s) com sintaxe válida`);
 }
 
 // 3) o registro de comandos: cada entrada aponta (`modulo` + `funcao`) para um
@@ -116,8 +132,36 @@ if (!existsSync(modulosDir)) {
   if (!ruins.length) console.log(`  ✓ citações por referência resolvem (${n} no código, mais as da ajuda do registro)`);
 }
 
+// 5) (31 out 2026, Regra do Reparo/Silêncio) `catch {}` vazio engole erro sem
+//    rastro. Quem precisa ignorar um erro escreve o motivo: `catch { /* motivo */ }`.
+//    scripts/catch-vazio.json guarda quantos vazios cada arquivo ainda tem; a lista
+//    só encolhe — arquivo novo começa com zero, e nenhum arquivo ganha um a mais.
+//    `node scripts/verificar-build.js --catch-atualizar` regrava a lista (só para baixo).
+{
+  const LISTA = join(RAIZ, "scripts", "catch-vazio.json");
+  const VAZIO = /catch\s*(?:\([^)]*\))?\s*\{\s*\}/g;
+  const arquivos = [join(RAIZ, "main.js"), join(RAIZ, "iniciar.js"),
+    ...["modulos", "ia-servico", "voz-servico", "scripts"].flatMap((d) => listarJs(join(RAIZ, d)))].filter(existsSync);
+  const agora = {};
+  for (const a of arquivos) {
+    const n = (readFileSync(a, "utf8").match(VAZIO) || []).length;
+    if (n) agora[a.slice(RAIZ.length + 1)] = n;
+  }
+  const atualizar = process.argv.includes("--catch-atualizar");
+  // primeira vez (sem a lista): --catch-atualizar fotografa o estado atual como teto
+  const teto = existsSync(LISTA) ? JSON.parse(readFileSync(LISTA, "utf8")) : atualizar ? agora : {};
+  const piores = Object.entries(agora).filter(([f, n]) => n > (teto[f] ?? 0));
+  for (const [f, n] of piores) falha(`${f}: ${n} catch vazio(s), o teto é ${teto[f] ?? 0} — escreva o motivo: catch { /* motivo */ }`);
+  if (atualizar && !piores.length) {
+    const { writeFileSync } = await import("node:fs");
+    const ordenado = Object.fromEntries(Object.keys(agora).sort().map((f) => [f, agora[f]]));
+    writeFileSync(LISTA, JSON.stringify(ordenado, null, 2) + "\n");
+  }
+  if (!piores.length) console.log(`  ✓ catch vazio: ${Object.values(agora).reduce((x, y) => x + y, 0)} no total, nenhum arquivo acima do teto`);
+}
+
 if (erros) {
   console.error(`\nBUILD ABORTADO: ${erros} problema(s) de integridade. O repositório está incompleto ou inconsistente.`);
   process.exit(1);
 }
-console.log("✓ Build íntegro: main.js e modulos/ consistentes.");
+console.log("✓ Build íntegro: main.js, iniciar.js, modulos/ e serviços consistentes.");

@@ -68,7 +68,7 @@ export const ARVORE_ES = {
     },
     "set": {
       "titulo": "automod set",
-      "texto": "**Uso:** `{&automod} <grupo> set <parámetro> <valor>`\n\nAjusta un parámetro de un módulo. Parámetros por módulo:\n• `antispam`: `messages`, `time` (ms) — velocidad · `times` — repetición · `minute`, `newcomer` — multimedia · `mentions`\n• `antinoise`: `size`, `threshold` (0–1 o %) — mayúsculas · `zalgo` — caracteres · `repetition`, `ignore` — letras · `emojis` — emoji\n  _La medición ignora menciones, enlaces, emojis con nombre y código: solo cuenta el texto escrito._\n\nEj.: `{&automod} antispam set messages 3` · `{&automod} antispam set time 10000`"
+      "texto": "**Uso:** `{&automod} <grupo> set <parámetro> <valor>`\n\nAjusta un parámetro de un módulo. Parámetros por módulo:\n• `antispam`: `messages`, `time` (duración: `8s`, `1m`) — velocidad · `times` — repetición · `minute`, `newcomer` — multimedia · `mentions`\n• `antinoise`: `size`, `threshold` (0–1 o %) — mayúsculas · `zalgo` — caracteres · `repetition`, `ignore` — letras · `emojis` — emoji\n  _La medición ignora menciones, enlaces, emojis con nombre y código: solo cuenta el texto escrito._\n\nEj.: `{&automod} antispam set messages 3` · `{&automod} antispam set time 10s`"
     },
     "antirepeticao": {
       "titulo": "automod antirepeticao",

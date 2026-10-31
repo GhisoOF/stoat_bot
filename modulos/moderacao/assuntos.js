@@ -23,6 +23,7 @@ import * as log from "../core/log.js";
 import { citar, citarInterno } from "../core/aliases.js";
 import { textoDoIdioma, idiomaDe, tr } from "../core/i18n.js";
 import { normalizarParaAnalise } from "./scorecard.js";
+import { canalDaStaff } from "./pertence.js";
 
 export const ACOES = ["off", "alertar", "apagar", "punir"];
 const ACAO_EN = { alert: "alertar", delete: "apagar", punish: "punir", desligar: "off", desligado: "off", nada: "off", remover: "apagar", excluir: "apagar" };
@@ -306,18 +307,30 @@ export function analisarAssuntos(texto, cfg, { canalId = null, excluirId = null,
 // Próprio, e não o cache da conversa da IA: aquele só existe nos servidores
 // com a IA ligada, e este módulo vale em qualquer servidor.
 const FIO_MAX = 12, FIO_MS = 15 * 60_000;
-const fios = new Map();   // canalId → [{ id, autor, nome, texto, t }]
-export function anotar(canalId, { id = null, autor = null, nome = "alguém", texto = "" } = {}, agora = Date.now()) {
+const fios = new Map();   // canalId → [{ id, autor, texto, t }]
+// (o nome de quem escreveu não é guardado: o fio só precisa saber QUEM é quem — o id)
+export function anotar(canalId, { id = null, autor = null, texto = "" } = {}, agora = Date.now()) {
   if (!canalId || !String(texto).trim()) return;
   const arr = (fios.get(canalId) ?? []).filter((m) => agora - m.t < FIO_MS);
   if (id && arr.some((m) => m.id === id)) return;
-  arr.push({ id, autor, nome: String(nome).slice(0, 40), texto: String(texto).slice(0, 300), t: agora });
+  arr.push({ id, autor, texto: String(texto).slice(0, 300), t: agora });
   fios.set(canalId, arr.slice(-FIO_MAX));
   if (fios.size > 2000) fios.delete(fios.keys().next().value);
 }
-export function fioDoCanal(canalId, { excluirId = null, limite = 8 } = {}) {
-  return (fios.get(canalId) ?? []).filter((m) => !excluirId || m.id !== excluirId).slice(-limite)
-    .map((m) => `${m.nome}: ${m.texto}`).join("\n");
+// (31 out 2026, R9) o que vai ao MODELO não leva nome de ninguém: cada pessoa do
+// fio vira um rótulo (A:, B:, …) — o modelo só precisa saber quem é quem na
+// conversa. `autor` (opcional) é quem escreveu a mensagem avaliada: devolve o
+// rótulo dela também (o mesmo, se ela já falou no fio).
+export function fioDoCanal(canalId, { excluirId = null, limite = 8, autor = null } = {}) {
+  const msgs = (fios.get(canalId) ?? []).filter((m) => !excluirId || m.id !== excluirId).slice(-limite);
+  const rotulos = new Map();
+  const rotular = (quem) => {
+    const k = quem ?? "?";
+    if (!rotulos.has(k)) { const i = rotulos.size; rotulos.set(k, i < 26 ? String.fromCharCode(65 + i) : `P${i + 1}`); }
+    return rotulos.get(k);
+  };
+  const texto = msgs.map((m) => `${rotular(m.autor)}: ${m.texto}`).join("\n");
+  return autor === null ? texto : { texto, rotulo: rotular(autor) };
 }
 
 // ── O juiz: o modelo pequeno, em JSON, sem raciocínio ───────────────────────
@@ -356,24 +369,25 @@ export function lerVeredito(raw) {
   } catch { return null; }
 }
 
-// Um julgamento por canal e tema a cada 20 s: numa discussão quente, as
-// mensagens seguintes usam o mesmo veredito em vez de encher a fila do modelo.
-const JULGAR_MS = 20_000;
-const vereditos = new Map();   // `${canal}:${tema}` → { t, discussao, motivo }
+// O veredito vale por MENSAGEM (31 out 2026, R9): antes valia por canal e tema
+// por 20 s, e a mensagem de OUTRA pessoa era apagada/punida pelo veredito da
+// anterior, sem o modelo ter lido o que ela escreveu. (Com teto: R11.)
+const JULGAR_MS = 10 * 60_000;
+const vereditos = new Map();   // `${mensagem}:${tema}` → { t, discussao, motivo }
 let ultimoAvisoSemIA = 0;
 
-async function julgar({ tema, canalId, messageId, nome, texto, lang, serverId = null }, agora = Date.now()) {
-  const chave = `${canalId}:${tema}`;
-  const v = vereditos.get(chave);
+async function julgar({ tema, canalId, messageId, autor = null, texto, lang, serverId = null }, agora = Date.now()) {
+  const chave = messageId ? `${messageId}:${tema}` : null;
+  const v = chave ? vereditos.get(chave) : null;
   if (v && agora - v.t < JULGAR_MS) return { ...v, cache: true };
   if (!avaliarLLM) {
     if (agora - ultimoAvisoSemIA > 3600_000) { ultimoAvisoSemIA = agora; console.warn("[ASSUNTOS] nota passou do limiar, mas a IA não está ligada — sem o modelo para confirmar, nada é feito (`" + citarInterno("automod.sentinela.assuntos.ia") + " off` deixa a nota decidir sozinha)"); }
     return null;
   }
-  const fio = fioDoCanal(canalId, { excluirId: messageId });
+  const { texto: fio, rotulo } = fioDoCanal(canalId, { excluirId: messageId, autor: autor ?? "?" });
   const corpo = lang === "en"
-    ? `RECENT CONVERSATION:\n${fio || "(nothing before)"}\n\nMESSAGE BEING JUDGED (${nome}): ${texto.slice(0, 500)}`
-    : `CONVERSA RECENTE:\n${fio || "(nada antes)"}\n\nMENSAGEM AVALIADA (${nome}): ${texto.slice(0, 500)}`;
+    ? `RECENT CONVERSATION:\n${fio || "(nothing before)"}\n\nMESSAGE BEING JUDGED (${rotulo}): ${texto.slice(0, 500)}`
+    : `CONVERSA RECENTE:\n${fio || "(nada antes)"}\n\nMENSAGEM AVALIADA (${rotulo}): ${texto.slice(0, 500)}`;
   let r = null;
   try {
     r = lerVeredito(await avaliarLLM([{ role: "system", content: promptDoTema(tema, lang) }, { role: "user", content: corpo }], { etiqueta: `assunto:${tema}`, serverId }));
@@ -382,8 +396,10 @@ async function julgar({ tema, canalId, messageId, nome, texto, lang, serverId = 
     return null;   // fail-safe: erro nunca vira punição
   }
   if (!r) return null;
-  vereditos.set(chave, { t: agora, ...r });
-  if (vereditos.size > 2000) vereditos.delete(vereditos.keys().next().value);
+  if (chave) {
+    vereditos.set(chave, { t: agora, ...r });
+    if (vereditos.size > 2000) vereditos.delete(vereditos.keys().next().value);
+  }
   return r;
 }
 
@@ -411,11 +427,10 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
   const acao = acaoDoTema(cfg, tema);
   const lang = textoDoIdioma(ctx.config?.language);
   const es = idiomaDe(ctx) === "es";
-  const nome = message.author?.username ?? message.member?.nickname ?? userId;
   // `ia off`: a nota decide sozinha
   const v = cfg.ia === false
     ? { discussao: true, motivo: es ? `nota ${nota} ≥ ${limiar}` : lang === "en" ? `score ${nota} ≥ ${limiar}` : `nota ${nota} ≥ ${limiar}`, semIA: true }
-    : await julgar({ tema, canalId: message.channelId, messageId: message.id, nome, texto, lang, serverId: ctx?.serverId ?? null });
+    : await julgar({ tema, canalId: message.channelId, messageId: message.id, autor: userId, texto, lang, serverId: ctx?.serverId ?? null });
   const T = TEMAS[tema];
   console.log(`[ASSUNTOS] ${tema} nota ${nota}/${limiar} [${sinais.join(", ")}] em ${message.channelId} por ${userId} → ${v ? (v.discussao ? "DISCUSSÃO" : "brincadeira/menção") : "sem veredito"}${v?.cache ? " (veredito recente)" : ""}${v?.semIA ? " (sem IA: só a nota)" : ""}${v?.motivo ? ` — ${v.motivo}` : ""}`);
   if (!v?.discussao) return { tema, nota, acao: "nada", veredito: v };
@@ -463,8 +478,7 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
 async function alertarStaff(ctx, { userId, canalId, messageId, tema, texto, motivoIA, nota, sinais, lang }) {
   const T = TEMAS[tema];
   const en = lang === "en";
-  const destinoId = ctx.config?.automod?.antiScam?.alertChannelId || ctx.config?.log?.canalId || null;
-  const destino = destinoId ? await Promise.resolve(ctx.client?.channels?.get?.(destinoId) ?? ctx.client?.channels?.fetch?.(destinoId)).catch(() => null) : null;
+  const destino = await canalDaStaff(ctx);   // só canal da staff DESTE servidor
   if (!destino) { console.warn(`[ASSUNTOS] alerta NÃO entregue: servidor ${ctx.serverId} sem canal de alerta do sentinela nem de log`); return; }
   const staff = (ctx.config?.acesso?.cargosStaff ?? []).map((id) => `<%${id}>`).join(" ");
   const cabeca = [

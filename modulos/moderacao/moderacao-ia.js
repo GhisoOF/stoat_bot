@@ -1,6 +1,7 @@
 
 import * as log from "../core/log.js";
 import { citar } from "../core/aliases.js";
+import { registrarErro } from "../core/erros.js";
 
 const CRIADOR_ID = process.env.SUPER_ADMINS?.split(",")[0]?.trim() || "";
 const MIN_CHARS  = Number(process.env.MODIA_MIN_CHARS || 3);
@@ -69,13 +70,15 @@ export async function moderar(message, ctx) {
   // ── APAGA ──
   let apagou = false;
   try { await message.delete(); apagou = true; }
-  catch (e) { dlog("falha ao apagar:", e.message); }
+  catch (e) { registrarErro("MOD-IA:apagar", e); }
 
-  // ── Marca o criador no log com as opções ──
+  // ── O log da staff DESTE servidor, com as opções ──
+  // (31 out 2026, R9) não marca mais o dono do bot: num servidor alheio, a menção
+  // expunha o ID dele e o chamava para um log que não é dele.
   const nome = message.author?.username ?? autorId;
   const trecho = texto.length > 300 ? texto.slice(0, 300) + "…" : texto;
   const descricao = [
-    `<@${CRIADOR_ID}> — a Judy sinalizou uma mensagem por critério de moderação.`,
+    "A Judy sinalizou uma mensagem por critério de moderação.",
     "",
     `**Autor:** ${nome} (\`${autorId}\`)`,
     `**Canal:** <#${canalId}>`,
@@ -92,7 +95,7 @@ export async function moderar(message, ctx) {
     `• Banir — \`${citar("ban", "pt")} ${autorId} <motivo>\``,
   ].join("\n");
   const descricaoEn = [
-    `<@${CRIADOR_ID}> — Judy flagged a message on moderation grounds.`,
+    "Judy flagged a message on moderation grounds.",
     "",
     `**Author:** ${nome} (\`${autorId}\`)`,
     `**Channel:** <#${canalId}>`,
@@ -109,10 +112,29 @@ export async function moderar(message, ctx) {
     `• Ban — \`${citar("ban", "en")} ${autorId} <reason>\``,
   ].join("\n");
 
+  const descricaoEs = [
+    "Judy marcó un mensaje por un criterio de moderación.",
+    "",
+    `**Autor:** ${nome} (\`${autorId}\`)`,
+    `**Canal:** <#${canalId}>`,
+    `**Motivo:** ${veredito.motivo || "(sin detalle)"}`,
+    `**Acción:** ${apagou ? "mensaje borrado" : "⚠️ no pude borrarlo (¿falta permiso?)"}`,
+    "",
+    "**Contenido borrado:**",
+    `> ${trecho.replace(/\n/g, "\n> ")}`,
+    "",
+    "**Qué puedes hacer** (copia el comando):",
+    "• Ignorar — no hagas nada.",
+    `• Advertir — \`${citar("warn", "es")} ${autorId} <motivo>\``,
+    `• Silenciar — \`${citar("silenciar", "es")} ${autorId} <tiempo>\``,
+    `• Banear — \`${citar("ban", "es")} ${autorId} <motivo>\``,
+  ].join("\n");
+
   try {
     await log.registrar(ctx, "punicoes", { titulo: "🤖 Moderação por IA — sinalizado", descricao,
-      en: { titulo: "🤖 AI moderation — flagged", descricao: descricaoEn } });
-  } catch (e) { dlog("falha ao logar:", e.message); }
+      en: { titulo: "🤖 AI moderation — flagged", descricao: descricaoEn },
+      es: { titulo: "🤖 Moderación por IA — marcado", descricao: descricaoEs } });
+  } catch (e) { registrarErro("MOD-IA:log", e); }
 
   dlog(`sinalizou msg de ${nome}: ${veredito.motivo}`);
   return apagou;

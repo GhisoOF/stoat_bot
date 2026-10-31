@@ -31,7 +31,7 @@ export default {
     ex: { pt: "{&webhook.criar} github #avisos", en: "{&webhook.criar} github #alerts", es: "{&webhook.criar} github #avisos" },
     parametros: [
       { nome: { pt: "criar", en: "create", es: "crear" }, valor: { pt: "<nome> [#canal]", en: "<name> [#channel]", es: "<nombre> [#canal]" },
-        desc: { pt: "novo gancho; a URL secreta aparece uma vez (padrão: publica no canal do comando)", en: "new hook; the secret URL shows once (default: posts to the command's channel)", es: "gancho nuevo; la URL secreta aparece una sola vez (predeterminado: publica en el canal del comando)" } },
+        desc: { pt: "novo gancho; a URL secreta vai por DM (padrão: publica no canal do comando; o canal tem de ser daqui e você precisa poder escrever nele)", en: "new hook; the secret URL goes by DM (default: posts to the command's channel; the channel must be on this server and you must be able to post there)", es: "gancho nuevo; la URL secreta va por DM (predeterminado: publica en el canal del comando; el canal tiene que ser de aquí y tienes que poder escribir en él)" } },
       { nome: { pt: "lista", en: "list", es: "lista" },
         desc: { pt: "os ganchos do servidor, com canal, filtro e usos", en: "the server's hooks, with channel, filter and usage count", es: "los ganchos del servidor, con canal, filtro y usos" } },
       { nome: { pt: "canal", en: "channel", es: "canal" }, valor: { pt: "<nome> <#canal>", en: "<name> <#channel>", es: "<nombre> <#canal>" },
@@ -39,7 +39,7 @@ export default {
       { nome: { pt: "eventos", en: "events", es: "eventos" }, valor: { pt: "<nome> <lista|todos>", en: "<name> <list|all>", es: "<nombre> <lista|todos>" },
         desc: { pt: "filtra: `push,issues,workflow_run`… (nomes dos eventos do GitHub; `discord` e `generico` para as outras fontes)", en: "filters: `push,issues,workflow_run`… (GitHub event names; `discord` and `generico` for the other sources)", es: "filtra: `push,issues,workflow_run`… (nombres de eventos de GitHub; `discord` y `generico` para las otras fuentes)" } },
       { nome: "url", valor: { pt: "<nome>", en: "<name>", es: "<nombre>" },
-        desc: { pt: "mostra a URL secreta de novo", en: "shows the secret URL again", es: "muestra la URL secreta otra vez" } },
+        desc: { pt: "manda a URL secreta de novo por DM", en: "DMs you the secret URL again", es: "te manda la URL secreta otra vez por DM" } },
       { nome: { pt: "testar", en: "test", es: "probar" }, valor: { pt: "<nome>", en: "<name>", es: "<nombre>" },
         desc: { pt: "publica um embed de teste no canal do gancho", en: "posts a test embed to the hook's channel", es: "publica un embed de prueba en el canal del gancho" } },
       { nome: { pt: "remover", en: "remove", es: "eliminar" }, valor: { pt: "<nome>", en: "<name>", es: "<nombre>" },

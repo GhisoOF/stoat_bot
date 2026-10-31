@@ -15,6 +15,13 @@ export const log = (...a) => console.log(new Date().toISOString(), "[VOZ]", ...a
 export const dbg = (...a) => { if (DEBUG) console.log(new Date().toISOString(), "[VOZ][debug]", ...a); };
 const erro = (...a) => console.error(new Date().toISOString(), "[VOZ][erro]", ...a);
 
+// (31 out 2026, P1) Sem chave, o serviço não sobe: qualquer processo que alcançasse a
+// porta fazia o bot falar nas calls. Embutido, o iniciar.js gera uma por boot.
+if (!CHAVE) {
+  erro("sem VOZ_CHAVE no ambiente: o serviço de voz não sobe sem chave (qualquer coisa na rede faria o bot falar). Defina a mesma VOZ_CHAVE no .env do bot e do serviço.");
+  process.exit(1);
+}
+
 function responder(res, status, corpo) {
   const txt = JSON.stringify(corpo);
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
@@ -37,14 +44,19 @@ const servidor = createServer(async (req, res) => {
   const url = new URL(req.url, "http://x");
   const rota = url.pathname;
 
-  if (CHAVE && rota !== "/saude" && rota !== "/efeitos" && req.headers["x-chave"] !== CHAVE) {
+  // (31 out 2026, P1) toda rota exige a chave — o /saude também (ele dizia em quais
+  // calls o bot está e rodava uma síntese a cada pedido)
+  if (req.headers["x-chave"] !== CHAVE) {
     dbg(`recusado ${rota}: chave inválida`);
     return responder(res, 401, { erro: "chave inválida" });
   }
 
   try {
     if (rota === "/saude") {
-      const [piper, conexoes] = await Promise.all([tts.diagnostico(), voz.estado()]);
+      // o diagnóstico do Piper é o do boot (ou o refeito por `?forcar=1`, que o
+      // `&tts estado` pede) — o /saude comum não roda síntese nenhuma
+      const forcar = url.searchParams.get("forcar") === "1";
+      const [piper, conexoes] = await Promise.all([tts.diagnostico({ forcar }), voz.estado()]);
       const ok = piper.ok;
       return responder(res, ok ? 200 : 503, {
         ok,
@@ -142,26 +154,27 @@ const servidor = createServer(async (req, res) => {
     return responder(res, 404, { erro: "rota desconhecida" });
   } catch (e) {
     erro(rota, e?.message ?? e);
-    return responder(res, 500, { erro: e?.message ?? String(e) });
+    // só a frase escrita para o usuário (e.publico) sai; o resto fica no log
+    return responder(res, 500, { erro: e?.publico ? e.message : "erro interno do serviço de voz" });
   }
 });
 
-servidor.listen(PORTA, process.env.SERVICO_HOST || undefined, () => {
-  log(`judy-voz ouvindo na porta ${PORTA}`);
-  log(`chave exigida: ${CHAVE ? "sim" : "NÃO (defina VOZ_CHAVE!)"}`);
-  if (!CHAVE) {
-    erro("sem VOZ_CHAVE: qualquer coisa na rede pode fazer o bot falar. Defina no .env.");
-  }
-  tts.diagnostico().then((d) => {
+// 127.0.0.1 por padrão; a voz noutra máquina diz o endereço em SERVICO_HOST
+servidor.listen(PORTA, process.env.SERVICO_HOST || "127.0.0.1", () => {
+  log(`judy-voz ouvindo na porta ${PORTA} (chave exigida)`);
+  tts.diagnostico({ forcar: true }).then((d) => {
     log(`Piper: ${d.ok ? `ok — voz ${d.vozAtual}` : `INDISPONÍVEL — ${d.erro}`}`);
     if (!d.ok) log("   rode: bash scripts/instalar-piper.sh");
   });
   voz.iniciar().then((r) => log(`revoice: ${r.ok ? "pronto" : `INDISPONÍVEL — ${r.erro}`}`));
 });
 
+// (31 out 2026, P1, Regra do Reparo) Exceção não tratada deixa o processo num estado
+// que ninguém conhece (uma call meio aberta, um player sem dono): registra e SAI — o
+// iniciar.js (ou o systemd, na máquina de fora) relança limpo.
 process.on("uncaughtException", (e) => {
-  erro("exceção não tratada (o serviço CONTINUA de pé):", e?.message ?? e);
-  if (DEBUG) console.error(e);
+  erro("exceção não tratada — saindo para o iniciar.js relançar:", e?.stack ?? e?.message ?? e);
+  process.exit(1);
 });
 process.on("unhandledRejection", (e) => {
   erro("promessa rejeitada sem tratamento (o serviço CONTINUA de pé):", e?.message ?? e);

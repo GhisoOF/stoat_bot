@@ -20,20 +20,29 @@ import { citar, trechoPronto } from "../core/aliases.js";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import * as db from "../core/db.js";
 import { tr, lingua, idiomaDe } from "../core/i18n.js";
-import { canalDeOutroServidor, canalDoServidor } from "../moderacao/pertence.js";
+import { canalDeOutroServidor, canalDesteServidor, podeEscreverNoCanal } from "../moderacao/pertence.js";
+import { numero } from "../core/env.js";
+import { textoDeFora } from "../core/seguranca.js";
+import { registrarErro } from "../core/erros.js";
 
-const PORTA = Number(process.env.WEBHOOK_PORTA || 8095);
+const PORTA = numero("WEBHOOK_PORTA", 8095, { min: 1, max: 65535, inteiro: true });
+// (31 out 2026, R10) fora de container, o receptor escuta só na própria máquina.
+// Dentro do container o compose define WEBHOOK_ESCUTA=0.0.0.0 (a rede do container
+// é isolada) e quem decide a exposição na máquina é o WEBHOOK_BIND da porta
+// publicada no compose (padrão 127.0.0.1). Duas variáveis porque são dois lados.
+const BIND = (process.env.WEBHOOK_ESCUTA || "127.0.0.1").trim();
 const URL_BASE = (process.env.WEBHOOK_URL_BASE || "").replace(/\/$/, "");
 const MAX_CORPO = 256 * 1024;
-const TETO_POR_MIN = Number(process.env.WEBHOOK_TETO_MIN || 30);
+const TETO_POR_MIN = numero("WEBHOOK_TETO_MIN", 30, { min: 1, inteiro: true });
 // ── Exposição (12 out 2026) ──
 // O receptor fica na internet (Tailscale Funnel) e, com o bot global, qualquer
 // admin de qualquer servidor criava ganchos nele. Tetos que não dependem de
 // quem pede: total por minuto (todos os ganchos somados), tentativas com token
 // errado, conexões abertas, tempo para mandar o pedido, ganchos por servidor.
-const TETO_GLOBAL_MIN = Number(process.env.WEBHOOK_TETO_GLOBAL_MIN || 240);
-const TETO_ERROS_MIN = Number(process.env.WEBHOOK_TETO_ERROS_MIN || 60);
-const MAX_GANCHOS_SERVIDOR = Number(process.env.WEBHOOK_MAX_POR_SERVIDOR || 10);
+const TETO_GLOBAL_MIN = numero("WEBHOOK_TETO_GLOBAL_MIN", 240, { min: 1, inteiro: true });
+const TETO_ERROS_MIN = numero("WEBHOOK_TETO_ERROS_MIN", 60, { min: 1, inteiro: true });
+const MAX_GANCHOS_SERVIDOR = numero("WEBHOOK_MAX_POR_SERVIDOR", 10, { min: 1, inteiro: true });
+const MAX_CONEXOES = numero("WEBHOOK_MAX_CONEXOES", 64, { min: 1, inteiro: true });
 // Quem pode criar ganchos: ids de servidor separados por vírgula, ou `*` (padrão: todos)
 const SERVIDORES_PERMITIDOS = (process.env.WEBHOOK_SERVIDORES || "*").split(",").map((x) => x.trim()).filter(Boolean);
 export function servidorPodeTerWebhook(serverId) {
@@ -188,14 +197,33 @@ async function canalPorId(ctx, canalId) {
     ?? null;
 }
 
-export function iniciarReceptor(ctx) {
+// (31 out 2026, R11) O receptor só sobe se existir pelo menos um gancho: sem
+// gancho, nenhuma porta aberta à toa. O main.js chama `iniciarReceptor(ctx)` no
+// boot (a função lembra o ctx); o `&webhook criar` sobe o receptor na hora, e o
+// `&webhook remover` do último gancho o desliga.
+let receptor = null, ctxDoReceptor = null;
+export const temGanchos = () => (db.getDb().prepare("SELECT COUNT(*) AS n FROM ganchos").get()?.n ?? 0) > 0;
+export function iniciarReceptor(ctx = null) {
+  if (ctx) ctxDoReceptor = ctx;
+  if (receptor || !ctxDoReceptor || !temGanchos()) return receptor;
+  receptor = criarReceptor(ctxDoReceptor);
+  return receptor;
+}
+export function pararReceptorSeVazio() {
+  if (!receptor || temGanchos()) return false;
+  receptor.close(); receptor = null;
+  console.log("[WEBHOOK] receptor desligado (nenhum gancho)");
+  return true;
+}
+export const receptorLigado = () => !!receptor;
+
+function criarReceptor(ctx) {
   const srv = createServer((req, res) => {
     const fim = (codigo, obj) => { res.writeHead(codigo, { "Content-Type": "application/json", "X-Content-Type-Options": "nosniff" }); res.end(JSON.stringify(obj)); };
     const m = req.url?.match(/^\/gancho\/(\d+)\/([A-Za-z0-9_-]+)$/);
     if (!m || req.method !== "POST") return fim(404, { erro: "use POST /gancho/<id>/<token>" });
     // quem erra o token demais (varredura) leva 429 antes de tocar no banco
     if ((usoRecente.get("__erros__") ?? []).filter((t) => Date.now() - t < 60_000).length >= TETO_ERROS_MIN) return fim(429, { erro: "tentativas demais" });
-    if (estourou("__todos__", TETO_GLOBAL_MIN)) return fim(429, { erro: "calma: teto de publicações por minuto atingido" });
     if (Number(req.headers["content-length"] || 0) > MAX_CORPO) { res.setHeader("Connection", "close"); return fim(413, { erro: "corpo grande demais" }); }
 
     let corpo = "", estourouCorpo = false;
@@ -205,6 +233,9 @@ export function iniciarReceptor(ctx) {
       try {
         const gancho = db.ganchoPorId(Number(m[1]));
         if (!gancho || !tokenConfere(gancho.token, m[2])) { estourou("__erros__", Infinity); return fim(401, { erro: "gancho ou token inválido" }); }
+        // (31 out 2026) o teto global só conta DEPOIS do token: antes, uma
+        // varredura com token errado gastava o teto de todos e travava os ganchos de verdade
+        if (estourou("__todos__", TETO_GLOBAL_MIN)) return fim(429, { erro: "calma: teto de publicações por minuto atingido" });
         if (estourou(gancho.id)) return fim(429, { erro: "calma: teto de publicações por minuto atingido" });
 
         const json = desembrulharCorpo(corpo);
@@ -218,22 +249,25 @@ export function iniciarReceptor(ctx) {
 
         db.registrarUsoGancho(gancho.id);
         const canal = await canalPorId(ctx, gancho.canalId);
-        if (!canal) { console.error(`[WEBHOOK] canal ${gancho.canalId} não encontrado — o bot está nesse servidor?`); return fim(200, { ok: true, aviso: "canal não encontrado" }); }
+        // canal sumido: 410 (o serviço de fora entende que a URL morreu, em vez de "ok")
+        if (!canal) { registrarErro("WEBHOOK", "o canal de um gancho não existe mais (ou o bot perdeu o acesso)"); return fim(410, { erro: "o canal deste gancho não existe mais" }); }
         // o gancho é do servidor que o criou: nunca publica em canal de outro
         if (canalDeOutroServidor(canal, gancho.serverId)) {
           console.warn(`[SEGURANCA] gancho ${gancho.id} (servidor ${gancho.serverId}) aponta para canal de outro servidor (${canal.serverId}) — bloqueado`);
           return fim(403, { erro: "o canal deste gancho não é do servidor dele" });
         }
+        // título e texto vêm de fora: sem ping em massa, sem link mascarado (textoDeFora)
         const link = linkSeguro(embed.url);
+        const descricao = textoDeFora(embed.descricao, { max: 1700 });
         await ctx.sendEmbed(canal, {
-          title: embed.titulo,
-          description: (link ? `${embed.descricao}\n[abrir ↗](${link})` : embed.descricao).slice(0, 1900),
+          title: textoDeFora(embed.titulo, { max: 100 }),
+          description: link ? `${descricao}\n[abrir ↗](${link})` : descricao,
           colour: embed.cor,
         });
         console.log(`[WEBHOOK] gancho "${gancho.nome}" publicou "${evento}" em ${gancho.canalId}`);
         return fim(200, { ok: true });
       } catch (e) {
-        console.error(`[WEBHOOK] erro: ${e?.message ?? e}`);
+        registrarErro("WEBHOOK", e);
         return fim(500, { erro: "falha ao publicar" });
       }
     });
@@ -243,9 +277,9 @@ export function iniciarReceptor(ctx) {
   srv.requestTimeout = 15_000;
   srv.keepAliveTimeout = 5_000;
   srv.maxHeadersCount = 50;
-  srv.maxConnections = Number(process.env.WEBHOOK_MAX_CONEXOES || 64);
-  srv.on("error", (e) => console.error(`[WEBHOOK] receptor não subiu na porta ${PORTA}: ${e.message}`));
-  srv.listen(PORTA, () => console.log(`[WEBHOOK] receptor de pé na porta ${PORTA} (POST /gancho/<id>/<token>)`));
+  srv.maxConnections = MAX_CONEXOES;
+  srv.on("error", (e) => { registrarErro("WEBHOOK", `o receptor não subiu: ${e?.code ?? e?.message}`); if (receptor === srv) receptor = null; });
+  srv.listen(PORTA, BIND, () => console.log(`[WEBHOOK] receptor de pé em ${BIND}:${PORTA} (POST /gancho/<id>/<token>)`));
   return srv;
 }
 
@@ -282,6 +316,22 @@ function blocoDeUrl(g, en, l = null) {
   return linhas.join("\n");
 }
 
+// (31 out 2026, R6) A URL tem o token secreto: vai por DM a quem pediu, nunca
+// para o canal. Direto pela DM (sem o `sendEmbed` do bot, que copia o texto no
+// log local). Devolve true se a DM saiu.
+async function urlPorDM(message, embed) {
+  try {
+    const dm = await message.author?.openDM?.();
+    if (typeof dm?.sendMessage !== "function") return false;
+    const limpo = (t) => String(t ?? "").replace(/[\u2063\u2064]/g, "");
+    await dm.sendMessage({ embeds: [{ title: limpo(embed.title), description: limpo(embed.description), colour: embed.colour }] });
+    return true;
+  } catch (e) {
+    registrarErro("WEBHOOK", "a DM com a URL do gancho não foi entregue");
+    return false;
+  }
+}
+
 export async function cmdWebhook(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, serverId, membroTemPermissao, getServer } = ctx;
   const en = lingua(ctx) === "en";
@@ -296,11 +346,11 @@ export async function cmdWebhook(message, args, ctx) {
       description: [
         "Serviços externos publicam aqui: **GitHub** (push, issues, PR, releases, Actions…), **Crafty/Minecraft** e qualquer ferramenta que fale o formato Discord (Uptime Kuma, Grafana…).",
         "",
-        `\`${citar("webhook.criar", "pt", P)} <nome> [#canal]\` — novo gancho (a URL secreta aparece uma vez)`,
+        `\`${citar("webhook.criar", "pt", P)} <nome> [#canal]\` — novo gancho (a URL secreta vai por DM)`,
         `\`${citar("webhook.lista", "pt", P)}\` — os ganchos deste servidor`,
         `\`${citar("webhook.canal", "pt", P)} <nome> <#canal>\` — muda o destino`,
         `\`${citar("webhook.eventos", "pt", P)} <nome> <push,issues,…|todos>\` — filtra o que este gancho publica`,
-        `\`${citar("webhook", "pt", P)} url <nome>\` — mostra a URL de novo · \`${citar("webhook.testar", "pt", P)} <nome>\` — publica um teste`,
+        `\`${citar("webhook", "pt", P)} url <nome>\` — manda a URL de novo por DM · \`${citar("webhook.testar", "pt", P)} <nome>\` — publica um teste`,
         `\`${citar("webhook.remover", "pt", P)} <nome>\` — apaga (a URL morre na hora)`,
         "",
         "_Separar por chats = um gancho por assunto: `issues` → #issues, `workflow_run` → #ci, o Crafty → #minecraft._",
@@ -311,11 +361,11 @@ export async function cmdWebhook(message, args, ctx) {
       description: [
         "External services post here: **GitHub** (push, issues, PRs, releases, Actions…), **Crafty/Minecraft** and anything that speaks the Discord format (Uptime Kuma, Grafana…).",
         "",
-        `\`${citar("webhook.criar", "en", P)} <name> [#channel]\` — new hook (the secret URL shows once)`,
+        `\`${citar("webhook.criar", "en", P)} <name> [#channel]\` — new hook (the secret URL goes by DM)`,
         `\`${citar("webhook.lista", "en", P)}\` — this server's hooks`,
         `\`${citar("webhook.canal", "en", P)} <name> <#channel>\` — change destination`,
         `\`${citar("webhook.eventos", "en", P)} <name> <push,issues,…|all>\` — filter what this hook posts`,
-        `\`${citar("webhook", "en", P)} url <name>\` — show the URL again · \`${citar("webhook.testar", "en", P)} <name>\` — post a test`,
+        `\`${citar("webhook", "en", P)} url <name>\` — DMs you the URL again · \`${citar("webhook.testar", "en", P)} <name>\` — post a test`,
         `\`${citar("webhook.remover", "en", P)} <name>\` — delete (the URL dies instantly)`,
         "",
         "_Per-chat separation = one hook per subject: `issues` → #issues, `workflow_run` → #ci, Crafty → #minecraft._",
@@ -326,11 +376,11 @@ export async function cmdWebhook(message, args, ctx) {
       description: [
         "Los servicios externos publican aquí: **GitHub** (push, issues, PR, releases, Actions…), **Crafty/Minecraft** y cualquier herramienta que hable el formato de Discord (Uptime Kuma, Grafana…).",
         "",
-        `\`${citar("webhook.criar", "es", P)} <nombre> [#canal]\` — nuevo gancho (la URL secreta aparece una sola vez)`,
+        `\`${citar("webhook.criar", "es", P)} <nombre> [#canal]\` — nuevo gancho (la URL secreta va por DM)`,
         `\`${citar("webhook.lista", "es", P)}\` — los ganchos de este servidor`,
         `\`${citar("webhook.canal", "es", P)} <nombre> <#canal>\` — cambia el destino`,
         `\`${citar("webhook.eventos", "es", P)} <nombre> <push,issues,…|all>\` — filtra lo que publica este gancho`,
-        `\`${citar("webhook", "es", P)} url <nombre>\` — muestra la URL de nuevo · \`${citar("webhook.testar", "es", P)} <nombre>\` — publica una prueba`,
+        `\`${citar("webhook", "es", P)} url <nombre>\` — te manda la URL de nuevo por DM · \`${citar("webhook.testar", "es", P)} <nombre>\` — publica una prueba`,
         `\`${citar("webhook.remover", "es", P)} <nombre>\` — lo borra (la URL deja de funcionar al instante)`,
         "",
         "_Separar por chats = un gancho por tema: `issues` → #issues, `workflow_run` → #ci, Crafty → #minecraft._",
@@ -365,27 +415,38 @@ export async function cmdWebhook(message, args, ctx) {
   const acharGancho = () => db.listarGanchos(serverId).find((g) => g.nome === nome);
 
   // O canal precisa ser DESTE servidor (antes dava para apontar um gancho para
-  // o canal de outro servidor e publicar lá pela Judy).
+  // o canal de outro servidor e publicar lá pela Judy) e quem pede precisa poder
+  // escrever nele (31 out 2026: senão o gancho virava um jeito de falar onde a
+  // pessoa não fala). → { id } ou { erro: "fora" | "mudo" }
   const servidor = await getServer(message).catch(() => null);
-  const canalValido = async (canalId) => {
-    if (!canalId) return false;
-    if (canalDoServidor(servidor, canalId)) return true;
-    const c = ctx.client?.channels?.get?.(canalId) ?? await ctx.client?.channels?.fetch?.(canalId).catch(() => null);
-    return !!c && !canalDeOutroServidor(c, serverId) && (c.serverId ?? c.server?.id) === serverId;
+  const escolherCanal = (entrada) => {
+    if (!entrada) return { id: message.channelId };
+    const c = canalDesteServidor(servidor, entrada);
+    if (!c) return { erro: "fora" };
+    const obj = ctx.client?.channels?.get?.(c.id) ?? c;
+    if (!podeEscreverNoCanal(message, obj, servidor, ctx)) return { erro: "mudo" };
+    return { id: c.id };
   };
-  const canalDeOutro = () => sendEmbed(message.channel, tr(ctx,
+  const canalRecusado = (erro) => sendEmbed(message.channel, erro === "mudo" ? tr(ctx,
+    { title: "🪝", description: "Você não pode escrever nesse canal — um gancho só publica onde quem o cria pode falar.", colour: COR.aviso },
+    { title: "🪝", description: "You can't send messages in that channel — a hook only posts where its creator can talk.", colour: COR.aviso },
+    { title: "🪝", description: "No puedes escribir en ese canal — un gancho solo publica donde quien lo crea puede hablar.", colour: COR.aviso }) : tr(ctx,
     { title: "🪝", description: "Esse canal não é **deste servidor** — um gancho só publica nos canais daqui.", colour: COR.aviso },
     { title: "🪝", description: "That channel isn't **on this server** — a hook can only post to channels here.", colour: COR.aviso },
     { title: "🪝", description: "Ese canal no es **de este servidor** — un gancho solo publica en los canales de aquí.", colour: COR.aviso }));
+  const semDM = (g) => tr(ctx,
+    `⚠️ Não consegui te mandar a DM com a URL — abra as DMs e use \`${citar("webhook", "pt", P)} url ${g.nome}\`.`,
+    `⚠️ I couldn't DM you the URL — open your DMs and use \`${citar("webhook", "en", P)} url ${g.nome}\`.`,
+    `⚠️ No pude mandarte la URL por DM — abre tus DMs y usa \`${citar("webhook", "es", P)} url ${g.nome}\`.`);
 
   if (sub === "criar" || sub === "novo" || sub === "add") {
     if (!nome) return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `Dê um nome: \`${citar("webhook.criar", "pt", P)} github\``, `Give it a name: \`${citar("webhook.criar", "en", P)} github\``, `Ponle un nombre: \`${citar("webhook.criar", "es", P)} github\``), colour: COR.aviso });
     if (acharGancho()) return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `**${nome}** já existe — \`${citar("webhook", "pt", P)} url ${nome}\`.`, `**${nome}** already exists — \`${citar("webhook", "pt", P)} url ${nome}\`.`, `**${nome}** ya existe — \`${citar("webhook", "es", P)} url ${nome}\`.`), colour: COR.aviso });
     if (!servidorPodeTerWebhook(serverId)) {
       return sendEmbed(message.channel, tr(ctx,
-        { title: "🪝", description: "Webhooks não estão liberados neste servidor (`WEBHOOK_SERVIDORES`).", colour: COR.aviso },
-        { title: "🪝", description: "Webhooks aren't enabled on this server (`WEBHOOK_SERVIDORES`).", colour: COR.aviso },
-        { title: "🪝", description: "Los webhooks no están habilitados en este servidor (`WEBHOOK_SERVIDORES`).", colour: COR.aviso }));
+        { title: "🪝", description: "Webhooks não estão liberados neste servidor.", colour: COR.aviso },
+        { title: "🪝", description: "Webhooks aren't enabled on this server.", colour: COR.aviso },
+        { title: "🪝", description: "Los webhooks no están habilitados en este servidor.", colour: COR.aviso }));
     }
     if (db.listarGanchos(serverId).length >= MAX_GANCHOS_SERVIDOR) {
       return sendEmbed(message.channel, tr(ctx,
@@ -393,35 +454,47 @@ export async function cmdWebhook(message, args, ctx) {
         { title: "🪝", description: `This server already has **${MAX_GANCHOS_SERVIDOR}** hooks — the maximum. Delete one with \`${citar("webhook.remover", "en", P)} <name>\`.`, colour: COR.aviso },
         { title: "🪝", description: `Este servidor ya tiene **${MAX_GANCHOS_SERVIDOR}** ganchos — el máximo. Borra uno con \`${citar("webhook.remover", "es", P)} <nombre>\`.`, colour: COR.aviso }));
     }
-    const canalId = ctx.limparId?.(args[2]) || args[2]?.replace(/[<#>]/g, "") || message.channelId;
-    if (canalId !== message.channelId && !(await canalValido(canalId))) return canalDeOutro();
+    const escolhido = escolherCanal(args[2]);
+    if (escolhido.erro) return canalRecusado(escolhido.erro);
+    const canalId = escolhido.id;
     const token = randomBytes(16).toString("base64url");
     const g = db.criarGancho(serverId, nome, canalId, token);
-    return sendEmbed(message.channel, tr(ctx, {
-      title: `🪝 Gancho "${nome}" criado`,
+    iniciarReceptor();   // o primeiro gancho sobe o receptor
+    const naDM = await urlPorDM(message, tr(ctx, {
+      title: `🪝 Gancho "${nome}"`,
       description: `Publica em <#${canalId}>. Quem tem a URL publica no canal — trate como senha.\n\n${blocoDeUrl(g, false)}\n\nGitHub: Settings → Webhooks → Add, content type \`application/json\`.\nCrafty: Config do servidor → Webhooks → provider **Discord**, cole a URL.`,
-      colour: COR.sucesso,
+      colour: COR.info,
     }, {
-      title: `🪝 Hook "${nome}" created`,
+      title: `🪝 Hook "${nome}"`,
       description: `Posts to <#${canalId}>. Whoever holds the URL can post — treat it like a password.\n\n${blocoDeUrl(g, true)}\n\nGitHub: Settings → Webhooks → Add, content type \`application/json\`.\nCrafty: server config → Webhooks → provider **Discord**, paste the URL.`,
-      colour: COR.sucesso,
+      colour: COR.info,
     }, {
-      title: `🪝 Gancho "${nome}" creado`,
+      title: `🪝 Gancho "${nome}"`,
       description: `Publica en <#${canalId}>. Quien tenga la URL puede publicar en el canal — trátala como una contraseña.\n\n${blocoDeUrl(g, true, "es")}\n\nGitHub: Settings → Webhooks → Add, content type \`application/json\`.\nCrafty: configuración del servidor → Webhooks → provider **Discord**, pega la URL.`,
-      colour: COR.sucesso,
+      colour: COR.info,
     }));
+    return sendEmbed(message.channel, {
+      title: tr(ctx, `🪝 Gancho "${nome}" criado`, `🪝 Hook "${nome}" created`, `🪝 Gancho "${nome}" creado`),
+      description: tr(ctx, `Publica em <#${canalId}>.`, `Posts to <#${canalId}>.`, `Publica en <#${canalId}>.`) + "\n"
+        + (naDM ? tr(ctx, "📬 Enviei a URL secreta por DM.", "📬 I sent you the secret URL by DM.", "📬 Te mandé la URL secreta por DM.") : semDM(g)),
+      colour: naDM ? COR.sucesso : COR.aviso,
+    });
   }
 
   const g = acharGancho();
   if (!g) return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `Não conheço **${nome || "?"}** — \`${citar("webhook.lista", "pt", P)}\`.`, `I don't know **${nome || "?"}** — \`${citar("webhook.lista", "pt", P)}\`.`, `No conozco **${nome || "?"}** — \`${citar("webhook.lista", "es", P)}\`.`), colour: COR.aviso });
 
   if (sub === "url") {
-    return sendEmbed(message.channel, { title: `🪝 ${g.nome}`, description: blocoDeUrl(g, en, idiomaDe(ctx)), colour: COR.info });
+    const naDM = await urlPorDM(message, { title: `🪝 ${g.nome}`, description: blocoDeUrl(g, en, idiomaDe(ctx)), colour: COR.info });
+    return sendEmbed(message.channel, { title: `🪝 ${g.nome}`, colour: naDM ? COR.sucesso : COR.aviso,
+      description: naDM ? tr(ctx, "📬 Enviei a URL secreta por DM.", "📬 I sent you the secret URL by DM.", "📬 Te mandé la URL secreta por DM.")
+        : tr(ctx, "⚠️ Não consegui te mandar a DM — abra as DMs e tente de novo.", "⚠️ I couldn't DM you — open your DMs and try again.", "⚠️ No pude mandarte el DM — abre tus DMs y vuelve a intentarlo.") });
   }
   if (sub === "canal") {
-    const canalId = ctx.limparId?.(args[2]) || args[2]?.replace(/[<#>]/g, "");
-    if (!canalId) return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, "Qual canal?", "Which channel?", "¿Qué canal?"), colour: COR.aviso });
-    if (canalId !== message.channelId && !(await canalValido(canalId))) return canalDeOutro();
+    if (!args[2]) return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, "Qual canal?", "Which channel?", "¿Qué canal?"), colour: COR.aviso });
+    const escolhido = escolherCanal(args[2]);
+    if (escolhido.erro) return canalRecusado(escolhido.erro);
+    const canalId = escolhido.id;
     db.atualizarGancho(g.id, { canalId });
     return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `**${g.nome}** agora publica em <#${canalId}>.`, `**${g.nome}** now posts to <#${canalId}>.`, `**${g.nome}** ahora publica en <#${canalId}>.`), colour: COR.sucesso });
   }
@@ -433,6 +506,7 @@ export async function cmdWebhook(message, args, ctx) {
   }
   if (sub === "remover" || sub === "apagar") {
     db.removerGancho(g.id);
+    pararReceptorSeVazio();
     return sendEmbed(message.channel, { title: "🪝", description: tr(ctx, `**${g.nome}** apagado — a URL dele morreu.`, `**${g.nome}** deleted — its URL is dead.`, `**${g.nome}** borrado — su URL ya no funciona.`), colour: COR.sucesso });
   }
   if (sub === "testar" || sub === "teste") {

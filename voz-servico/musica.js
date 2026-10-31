@@ -24,6 +24,10 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import * as voz from "./voz.js";
+import { ambienteMinimo } from "./tts.js";
+
+// Erro com frase escrita PARA quem pediu a música (o servidor.js repassa só estes).
+const publico = (msg) => Object.assign(new Error(msg), { publico: true });
 
 const YTDLP = process.env.YTDLP_BIN || "yt-dlp";
 // O YouTube devolve 403 para o cliente web do yt-dlp; os clientes android/tv
@@ -36,8 +40,16 @@ const SEM_GENERICO = ["--ies", "default,-generic"];
 // confirm your age". Com um cookies.txt de uma conta (de preferência uma
 // conta só para isso) em MUSICA_COOKIES, o yt-dlp entra logado. Sem ele, a
 // Judy procura outra versão da mesma música (12 out 2026).
+// (31 out 2026, P1, R9) Os cookies vão SÓ na nova tentativa de um vídeo que pediu
+// idade — antes TODA busca e todo stream iam logados na conta de quem hospeda.
 const COOKIES = process.env.MUSICA_COOKIES || "";
-const comCookies = () => (COOKIES && fs.existsSync(COOKIES) ? ["--cookies", COOKIES] : []);
+const temCookies = () => !!(COOKIES && fs.existsSync(COOKIES));
+const comCookies = (usar) => (usar && temCookies() ? ["--cookies", COOKIES] : []);
+// yt-dlp que não termina (rede presa, site lento) é morto: os metadados têm um teto
+// de tempo; o stream, um teto de tempo SEM dados (a música toca enquanto chega áudio).
+const YTDLP_TIMEOUT_MS = () => Number(process.env.MUSICA_YTDLP_TIMEOUT_MS || 60_000);
+const YTDLP_PARADO_MS = () => Number(process.env.MUSICA_YTDLP_PARADO_MS || 120_000);
+const SPOTIFY_TIMEOUT_MS = 15_000;
 const DUCK = Math.min(1, Math.max(0.05, Number(process.env.MUSICA_DUCK || 0.2)));
 const MAX_FILA = Number(process.env.MUSICA_MAX_FILA || 200);
 const SPOTIFY_ID = process.env.SPOTIFY_ID || "";
@@ -109,19 +121,42 @@ export function montarBusca(nome, artistas) {
 }
 
 // ── yt-dlp: metadados e stream ──────────────────────────────────────────────
-function ytdlpJson(alvo, { playlistOk = true } = {}) {
+// `--` antes do alvo: o que a pessoa digitou nunca vira opção do yt-dlp.
+function ytdlpJsonUmaVez(alvo, { playlistOk = true, cookies = false } = {}) {
   return new Promise((res, rej) => {
-    const args = ["-J", "--no-warnings", ...SEM_GENERICO, ...comCookies(), ...CLIENTES_YT, playlistOk ? "--flat-playlist" : "--no-playlist", alvo];
-    const p = deps.spawn(YTDLP, args, { stdio: ["ignore", "pipe", "pipe"] });
-    let fora = "", erro = "";
-    p.stdout.on("data", (d) => (fora += d));
-    p.stderr.on("data", (d) => (erro += d));
-    p.on("error", (e) => rej(new Error(`yt-dlp indisponível (${e.message}) — a imagem tem o binário; confira YTDLP_BIN`)));
+    const args = ["-J", "--no-warnings", ...SEM_GENERICO, ...comCookies(cookies), ...CLIENTES_YT, playlistOk ? "--flat-playlist" : "--no-playlist", "--", alvo];
+    const p = deps.spawn(YTDLP, args, { stdio: ["ignore", "pipe", "pipe"], env: ambienteMinimo() });
+    let fora = "", erro = "", acabou = false;
+    const timer = setTimeout(() => {
+      if (acabou) return;
+      acabou = true;
+      try { p.kill?.("SIGKILL"); } catch {}
+      rej(publico("o YouTube demorou demais para responder — tente de novo."));
+    }, YTDLP_TIMEOUT_MS());
+    p.stdout.on("data", (d) => { if (fora.length < 20_000_000) fora += d; });
+    p.stderr.on("data", (d) => { if (erro.length < 100_000) erro += d; });
+    p.on("error", (e) => {
+      if (acabou) return;
+      acabou = true; clearTimeout(timer);
+      log(`yt-dlp indisponível (${e.message}) — confira YTDLP_BIN`);
+      rej(publico("o tocador de música não está disponível nesta máquina."));
+    });
     p.on("close", (c) => {
-      if (c !== 0) return rej(new Error(erro.trim().split("\n").pop() || `yt-dlp saiu com ${c}`));
+      if (acabou) return;
+      acabou = true; clearTimeout(timer);
+      if (c !== 0) return rej(Object.assign(new Error(erro.trim().split("\n").pop() || `yt-dlp saiu com ${c}`), { stderr: erro }));
       try { res(JSON.parse(fora)); } catch { rej(new Error("resposta do yt-dlp não é JSON")); }
     });
   });
+}
+// Restrição de idade nos metadados: uma nova tentativa, logada (se houver cookies)
+async function ytdlpJson(alvo, opcoes = {}) {
+  try { return await ytdlpJsonUmaVez(alvo, opcoes); }
+  catch (e) {
+    if (!temCookies() || motivoDaFalha(e?.stderr ?? e?.message).id !== "idade") throw e;
+    log("metadados pediram idade — nova tentativa com os cookies");
+    return ytdlpJsonUmaVez(alvo, { ...opcoes, cookies: true });
+  }
 }
 
 function itemDeEntrada(e) {
@@ -135,14 +170,14 @@ function itemDeEntrada(e) {
 
 async function resolverParaItens(consulta) {
   const c = classificar(consulta);
-  if (c.tipo === "vazio") throw new Error("me diga um link (YouTube, SoundCloud, Spotify) ou o nome da música.");
-  if (c.tipo === "bloqueado") throw new Error("só toco links do YouTube, SoundCloud e Spotify — para o resto, escreva o nome da música.");
+  if (c.tipo === "vazio") throw publico("me diga um link (YouTube, SoundCloud, Spotify) ou o nome da música.");
+  if (c.tipo === "bloqueado") throw publico("só toco links do YouTube, SoundCloud e Spotify — para o resto, escreva o nome da música.");
 
   if (c.tipo === "spotify-track") {
     const busca = await spotifyFaixaSemChave(consulta);
     const j = await ytdlpJson(`ytsearch1:${busca}`);
     const e = j.entries?.[0];
-    if (!e) throw new Error(`não achei "${busca}" no YouTube.`);
+    if (!e) throw publico(`não achei "${busca}" no YouTube.`);
     return { itens: [{ ...itemDeEntrada(e), origem: "spotify" }], rotulo: null };
   }
 
@@ -163,25 +198,26 @@ async function resolverParaItens(consulta) {
 
   const j = await ytdlpJson(`ytsearch1:${c.busca}`);
   const e = j.entries?.[0];
-  if (!e) throw new Error(`não achei nada para "${c.busca}".`);
+  if (!e) throw publico(`não achei nada para "${c.busca}".`);
   return { itens: [itemDeEntrada(e)], rotulo: null };
 }
 
 // ── Spotify ─────────────────────────────────────────────────────────────────
 async function spotifyFaixaSemChave(url) {
   // oEmbed é público e dispensa chave: devolve "Nome da faixa" + autor.
-  const r = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`);
-  if (!r.ok) throw new Error(`o Spotify não respondeu pelo link (HTTP ${r.status}).`);
+  const r = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`, { signal: AbortSignal.timeout(SPOTIFY_TIMEOUT_MS) });
+  if (!r.ok) throw publico(`o Spotify não respondeu pelo link (HTTP ${r.status}).`);
   const j = await r.json();
   const busca = montarBusca(j.title, j.author_name);
-  if (!busca) throw new Error("não consegui ler o título dessa faixa do Spotify.");
+  if (!busca) throw publico("não consegui ler o título dessa faixa do Spotify.");
   return busca;
 }
 
 let tokenSpotify = { valor: null, expira: 0 };
 async function spotifyToken() {
   if (!SPOTIFY_ID || !SPOTIFY_SECRET) {
-    throw new Error("playlists/álbuns do Spotify precisam de SPOTIFY_ID e SPOTIFY_SECRET no .env (app grátis em developer.spotify.com). Faixas avulsas funcionam sem chave.");
+    log("playlist/álbum do Spotify pedido, mas sem SPOTIFY_ID/SPOTIFY_SECRET no .env (app grátis em developer.spotify.com)");
+    throw publico("playlists e álbuns do Spotify não estão ligados nesta instalação — faixas avulsas funcionam.");
   }
   if (tokenSpotify.valor && Date.now() < tokenSpotify.expira - 30_000) return tokenSpotify.valor;
   const r = await fetch("https://accounts.spotify.com/api/token", {
@@ -191,8 +227,12 @@ async function spotifyToken() {
       Authorization: "Basic " + Buffer.from(`${SPOTIFY_ID}:${SPOTIFY_SECRET}`).toString("base64"),
     },
     body: "grant_type=client_credentials",
+    signal: AbortSignal.timeout(SPOTIFY_TIMEOUT_MS),
   });
-  if (!r.ok) throw new Error(`o Spotify recusou as credenciais (HTTP ${r.status}) — confira SPOTIFY_ID/SPOTIFY_SECRET.`);
+  if (!r.ok) {
+    log(`o Spotify recusou as credenciais (HTTP ${r.status}) — confira SPOTIFY_ID/SPOTIFY_SECRET`);
+    throw publico("o Spotify recusou a conexão desta instalação agora — faixas avulsas funcionam.");
+  }
   const j = await r.json();
   tokenSpotify = { valor: j.access_token, expira: Date.now() + (j.expires_in ?? 3600) * 1000 };
   return tokenSpotify.valor;
@@ -202,13 +242,15 @@ async function spotifyColecao(tipo, id) {
   const token = await spotifyToken();
   const cab = { Authorization: `Bearer ${token}` };
   const base = "https://api.spotify.com/v1";
-  const meta = await (await fetch(`${base}/${tipo}s/${id}`, { headers: cab })).json();
+  const rMeta = await fetch(`${base}/${tipo}s/${id}`, { headers: cab, signal: AbortSignal.timeout(SPOTIFY_TIMEOUT_MS) });
+  if (!rMeta.ok) throw publico(`o Spotify recusou a leitura da ${tipo} (HTTP ${rMeta.status}).`);
+  const meta = await rMeta.json();
   const nome = meta.name || tipo;
   const faixas = [];
   let prox = `${base}/${tipo}s/${id}/tracks?limit=100`;
   while (prox && faixas.length < MAX_FILA) {
-    const r = await fetch(prox, { headers: cab });
-    if (!r.ok) throw new Error(`o Spotify recusou a leitura da ${tipo} (HTTP ${r.status}).`);
+    const r = await fetch(prox, { headers: cab, signal: AbortSignal.timeout(SPOTIFY_TIMEOUT_MS) });
+    if (!r.ok) throw publico(`o Spotify recusou a leitura da ${tipo} (HTTP ${r.status}).`);
     const j = await r.json();
     for (const it of j.items ?? []) {
       const f = tipo === "playlist" ? it.track : it;   // playlist embrulha em .track
@@ -220,7 +262,7 @@ async function spotifyColecao(tipo, id) {
     }
     prox = j.next;
   }
-  if (!faixas.length) throw new Error(`a ${tipo} veio vazia (privada?).`);
+  if (!faixas.length) throw publico(`a ${tipo} veio vazia (privada?).`);
   return { nome, faixas };
 }
 
@@ -288,14 +330,27 @@ async function alternativas(item) {
 // ou o yt-dlp morrer. Antes a Judy dizia "▶ Tocando" assim que o processo
 // nascia; quando o YouTube recusava o vídeo, ela pulava calada e a call
 // ficava muda.
-function tentarTocar(canalVoz, st, g, media, item) {
+function tentarTocar(canalVoz, st, g, media, item, { cookies = false } = {}) {
   return new Promise((resolver) => {
     let fase = "esperando";   // → "tocando" | "acabou"
     let fimDisparado = false;
     let erroTxt = "";
-    const proc = deps.spawn(YTDLP, ["-f", "bestaudio/best", ...SEM_GENERICO, ...comCookies(), ...CLIENTES_YT, "--no-playlist", "-o", "-", "--quiet", "--no-warnings", item.url],
-      { stdio: ["ignore", "pipe", "pipe"] });
+    const proc = deps.spawn(YTDLP, ["-f", "bestaudio/best", ...SEM_GENERICO, ...comCookies(cookies), ...CLIENTES_YT, "--no-playlist", "-o", "-", "--quiet", "--no-warnings", "--", item.url],
+      { stdio: ["ignore", "pipe", "pipe"], env: ambienteMinimo() });
     st.proc = proc;
+    // sem dados por YTDLP_PARADO_MS: o yt-dlp travou — morto (o `close` segue o fluxo)
+    let parado = null;
+    const vigiar = () => {
+      clearTimeout(parado);
+      parado = setTimeout(() => {
+        log(`${canalVoz}: yt-dlp sem dados há ${YTDLP_PARADO_MS() / 1000}s em "${item.titulo}" — encerrando`);
+        try { proc.kill?.("SIGKILL"); } catch {}
+      }, YTDLP_PARADO_MS());
+      parado.unref?.();
+    };
+    vigiar();
+    proc.stdout?.on?.("data", vigiar);
+    proc.on("close", () => clearTimeout(parado));
     const desfecho = (r) => {
       if (fase !== "esperando") return;
       fase = r.ok ? "tocando" : "acabou";
@@ -388,6 +443,13 @@ async function tocarProxima(canalVoz) {
     if (g !== st.geracao) return saida;   // outro skip/parar chegou enquanto cortava
 
     let r = await tentarTocar(canalVoz, st, g, media, item);
+    // restrição de idade e cookies configurados: a MESMA faixa, logada, antes das alternativas
+    if (!r.ok && !r.cortada && g === st.geracao && temCookies() && motivoDaFalha(r.erro).id === "idade") {
+      log(`"${item.titulo}" pediu idade — nova tentativa com os cookies`);
+      await cortarFaixa(st, media);
+      if (g !== st.geracao) return saida;
+      r = await tentarTocar(canalVoz, st, g, media, item, { cookies: true });
+    }
     if (!r.ok && !r.cortada && g === st.geracao) {
       const motivo = motivoDaFalha(r.erro);
       log(`"${item.titulo}" não tocou (${motivo.texto}) — procurando outra versão`);
@@ -424,7 +486,7 @@ function resumo(r, st) {
   let x = r;
   while (x?.falhou) {
     partes.push(`⚠️ Não consegui tocar **${x.falhou.titulo}** — ${x.falhou.motivo}, e nenhuma outra versão funcionou.`
-      + (x.falhou.idade && !comCookies().length ? " _(vídeo com restrição de idade só toca com `MUSICA_COOKIES` configurado)_" : ""));
+      + (x.falhou.idade && !temCookies() ? " _(vídeo com restrição de idade só toca quando quem hospeda o bot liga uma conta do YouTube)_" : ""));
     x = x.depois;
   }
   if (x?.trocada) partes.push(`▶ Tocando **${st.atual?.titulo}**${duracaoTxt(st.atual?.duracao)} — a versão pedida (**${x.trocada.de}**) tem ${x.trocada.motivo}, então achei outra.`);

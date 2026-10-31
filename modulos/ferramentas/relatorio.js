@@ -20,6 +20,7 @@
 
 import * as db from "../core/db.js";
 import { pseudonimo } from "../core/pseudonimo.js";
+import { registrarErro } from "../core/erros.js";
 
 // "completo" | "anonimo" | null — o main.js liga a regra de verdade no boot
 // (precisa do dono de cada servidor e da config). Sem ela, ninguém entra.
@@ -55,7 +56,8 @@ export function evento(serverId, tipo, titulo, t = Date.now()) {
   // servidor que não aderiu nem é do dono: nem é gravado
   const e = filtrarEvento({ serverId, tipo, titulo: limparTitulo(titulo) });
   if (!e) return;
-  try { db.registrarEventoRelatorio(t, serverId, tipo, e.titulo); } catch { /* relatório nunca derruba nada */ }
+  try { db.registrarEventoRelatorio(t, serverId, tipo, e.titulo); }
+  catch (err) { if (tipo !== "erro") registrarErro("RELATORIO", err); }   // relatório nunca derruba nada (e erro de erro não vira laço)
 }
 
 // "📥 Membro entrou" → "Membro entrou": o emoji varia, o assunto não.
@@ -75,12 +77,20 @@ export function normalizarErro(texto) {
     .replace(/\b\d+([.,]\d+)?\b/g, "{n}")
     .replace(/\s+/g, " ").trim().slice(0, 180);
 }
+// (31 out 2026, R9) O relatório guarda só a ETIQUETA do erro ("[RSS]",
+// "[BANGLOBAL]"…) e uma frase fixa: nunca o texto livre, onde ia nome de
+// servidor que não aderiu, URL de feed ou trecho de mensagem. O texto inteiro
+// fica só no log local (quem escreve no console é o registrarErro).
+export function etiquetaDoErro(texto) {
+  const m = String(texto ?? "").match(/^\s*\[([A-Za-z0-9À-ÿ_:\- ]{1,40})\]/);
+  return m ? `[${m[1].trim()}]` : "[sem etiqueta]";
+}
 let errosNestaHora = 0, horaDosErros = 0;
 export function erro(texto, t = Date.now()) {
   const h = Math.floor(t / HORA);
   if (h !== horaDosErros) { horaDosErros = h; errosNestaHora = 0; }
   if (++errosNestaHora > ERROS_MAX_HORA) return;
-  evento(null, "erro", normalizarErro(texto), t);
+  evento(null, "erro", `${etiquetaDoErro(texto)} falha (detalhes só no log local)`, t);
 }
 
 // Ritmo e amostras de conversa ficam só em memória: contar não precisa de
@@ -218,8 +228,7 @@ export async function redigir(prompt, { fetcher = fetch } = {}) {
   if (!LLM_URL() || !MODELO()) return null;
   try {
     const r = await fetcher(`${LLM_URL()}/v1/chat/completions`, {
-      method: "POST", headers: { "Content-Type": "application/json",
-        ...(process.env.TOKEN_IA ? { Authorization: `Bearer ${process.env.TOKEN_IA}` } : {}) },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: MODELO(), stream: false, max_tokens: 1500, temperature: 0.3,
         messages: [{ role: "user", content: prompt }] }),
       signal: AbortSignal.timeout(240_000),
@@ -229,7 +238,7 @@ export async function redigir(prompt, { fetcher = fetch } = {}) {
     const texto = String(j?.choices?.[0]?.message?.content ?? "")
       .replace(/<think>[\s\S]*?<\/think>/g, "").replace(/^[\s\S]*<\/think>/, "").trim();
     return texto || null;
-  } catch { return null; }
+  } catch (e) { registrarErro("RELATORIO", e); return null; }   // sem o modelo, o relatório sai só com os números
 }
 
 // ─── Uma hora inteira: coleta → números → modelo → envio ───────────────────
@@ -249,7 +258,7 @@ export async function gerar({ client, cfg, ate = Date.now(), fetcher = fetch, es
   const numeros = montarNumeros({ grupos, atividade: ativ, nomes, desde, ate });
   const bruta = numeros.algo ? await redigir(montarPrompt({ numeros: numeros.texto, amostras: ativ, nomes }), { fetcher }) : null;
   const prosa = bruta ? limparAssuntos(bruta, ativ, nomes) : null;
-  try { db.podarRelatorio(ate - 48 * HORA); } catch {}
+  podar(ate);
   return {
     title: `📊 Relatório ${hhmm(desde)}–${hhmm(ate)} UTC`,
     description: [prosa, prosa ? "━━━━━━━━━━" : null, numeros.texto,
@@ -286,17 +295,25 @@ export function temAssunto(server, cfg, superAdmins = listaSuperAdmins()) {
   return true;
 }
 
+// O banco guarda só 48 h de eventos.
+export function podar(ate = Date.now()) {
+  try { db.podarRelatorio(ate - 48 * HORA); } catch (e) { registrarErro("RELATORIO", e); }
+}
+
 let timer = null;
 export function agendar({ client, getCfg, enviar }) {
   if (timer) return;
   const proxima = () => HORA - (Date.now() % HORA) + 5_000;   // 5s depois da hora cheia
   const rodar = async () => {
+    // (31 out 2026, R11) a poda roda toda hora, MESMO sem canal configurado:
+    // antes, sem canal, a tabela relatorio_eventos crescia para sempre
+    podar();
     const cfg = getCfg();
     if (cfg?.canalId && cfg.ativo !== false) {
       try {
         const rel = await gerar({ client, cfg, ate: Math.floor(Date.now() / HORA) * HORA });
         if (!(rel.vazio && cfg.pularVazias)) await enviar(cfg.canalId, rel);
-      } catch (e) { console.warn("[RELATORIO] falhou:", e?.message ?? e); }
+      } catch (e) { registrarErro("RELATORIO", e); }
     }
     timer = setTimeout(rodar, proxima());
   };

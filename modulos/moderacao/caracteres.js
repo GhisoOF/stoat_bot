@@ -56,9 +56,12 @@ export function analisarRepeticao(texto, opcoes = {}) {
 
   if (!texto) return null;
 
-  const escapado = ignorar.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const classe = escapado ? `[^${escapado}]` : ".";
-  const re = new RegExp(`(${classe})\\1{${maxRepeticao},}`, "iu");
+  // (31 out 2026, R10) o valor vem do banco: `1.5` ou "abc" gerava regex
+  // inválida e cada mensagem do servidor lançava exceção. Fora da faixa → padrão.
+  const n = Number.isInteger(maxRepeticao) && maxRepeticao >= 2 && maxRepeticao <= 200 ? maxRepeticao : 15;
+  const letras = String(ignorar ?? "").replace(/[^a-z0-9]/gi, "").slice(0, 10);
+  const classe = letras ? `[^${letras}]` : ".";
+  const re = new RegExp(`(${classe})\\1{${n},}`, "iu");
   if (re.test(texto)) {
     return { motivo: "repetição excessiva do mesmo caractere", tipo: "repeticao" };
   }

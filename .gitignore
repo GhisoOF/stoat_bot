@@ -18,3 +18,10 @@ npm-debug.log*
 _stoat-bot*_logs.txt
 *.log
 blocklist-cache.bin
+
+# Banco e dados locais (31 out 2026, R10): rodando fora do Docker o banco fica
+# em ./dados (DB_PATH) — conversas, punições, IDs. Nunca no Git nem na imagem.
+*.db
+*.db-wal
+*.db-shm
+dados/

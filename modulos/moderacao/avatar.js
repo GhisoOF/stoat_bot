@@ -15,6 +15,7 @@
 // `silenciar` (padrão: timeout nativo + alerta), `expulsar` ou `banir`. A staff
 // é sempre avisada — e o alerta nunca republica a foto.
 
+import { chaveServicoIA } from "../ai/servicos.js";
 import * as log from "../core/log.js";
 import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
 import { textoDoIdioma, idiomaDe } from "../core/i18n.js";
@@ -24,6 +25,7 @@ import { lerDuracao, duracaoTexto } from "../core/duracao.js";
 import { aplicarTimeout, CONFIRMAR_MS, MAX_TIMEOUT_MS } from "./timeout.js";
 import { pontuarDescricao } from "./imagem.js";
 import { descreverErro, tipoDoErro } from "../core/erros.js";
+import { canalDaStaff } from "./pertence.js";
 
 export const ACOES_AVATAR = ["alertar", "silenciar", "expulsar", "banir"];
 const ACAO_EN = { alert: "alertar", silence: "silenciar", mute: "silenciar", timeout: "silenciar", kick: "expulsar", ban: "banir" };
@@ -92,7 +94,7 @@ export function avaliarAvatar(descricao, { riscoModelo = false, recusou = false 
 // Num raid entram muitas contas juntas, e a mesma foto vale em vários
 // servidores: o resultado fica guardado por foto por 6 h.
 let analisar = async (url) => {
-  const chave = process.env.IA_SERVICO_CHAVE || "";
+  const chave = chaveServicoIA();
   const resp = await fetch(`${iaUrl()}/moderar-imagem`, {
     method: "POST", headers: { "Content-Type": "application/json", ...(chave ? { "x-chave": chave } : {}) },
     body: JSON.stringify({ url }), signal: AbortSignal.timeout(120_000),
@@ -201,9 +203,7 @@ export async function verificar({ ctx, server, userId, avatar, origem = "entrada
 }
 
 async function alertar(ctx, { server, userId, origem, r, feito, acao, en, es = false }) {
-  const destinoId = ctx.config?.automod?.antiScam?.alertChannelId || ctx.config?.log?.canalId || null;
-  const achado = destinoId ? await Promise.resolve(ctx.client?.channels?.get?.(destinoId) ?? ctx.client?.channels?.fetch?.(destinoId)).catch(() => null) : null;
-  const destino = achado && (achado.serverId ?? achado.server?.id ?? server.id) === server.id ? achado : null;
+  const destino = await canalDaStaff(ctx, server);
   if (!destino) { console.warn(`[AVATAR] alerta NÃO entregue: servidor ${server.id} sem canal de alerta do sentinela nem de log`); return null; }
   const P = ctx.PREFIXO ?? "&";
   const staff = (ctx.config?.acesso?.cargosStaff ?? []).map((id) => `<%${id}>`).join(" ");

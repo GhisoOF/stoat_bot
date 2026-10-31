@@ -11,14 +11,20 @@
 // Agora cada mensagem guarda o id, a quem respondeu vira um NOME, e as
 // menções viram `@nome`.
 
+import { MapaCurto } from "./mapa-curto.js";
+
 const MAX_MSGS = Number(process.env.CACHE_CANAL_MSGS || 20);
-const cache = new Map();   // canalId → [{ id, nome, userId, texto, respondeuAId, respondeuA, ehJudy, momento }]
+// (31 out 2026, P1, R9/R11) O fio vive 30 min (a PRIVACIDADE.md promete "os últimos
+// minutos") e no máximo 2000 canais: canal parado sai inteiro, mensagem velha sai do fio.
+const PRAZO_MS = 30 * 60_000;
+const cache = new MapaCurto({ ttlMs: PRAZO_MS, max: 2000 });   // canalId → [{ id, nome, userId, texto, respondeuAId, respondeuA, ehJudy, momento }]
+const vivas = (arr) => (arr || []).filter((m) => Date.now() - m.momento <= PRAZO_MS);
 
 // Registra uma mensagem no cache do canal. `id` e `respondeuAId` são opcionais.
 export function registrar(canalId, { id = null, nome, userId, texto, respondeuA = null, respondeuAId = null, ehJudy = false }) {
   if (!canalId || !texto) return;
-  let arr = cache.get(canalId);
-  if (!arr) { arr = []; cache.set(canalId, arr); }
+  const arr = vivas(cache.get(canalId));
+  cache.set(canalId, arr);   // renova o prazo do canal
   if (id && arr.some((m) => m.id === id)) return;   // a mesma mensagem não entra duas vezes
   arr.push({
     id: id || null,
@@ -35,8 +41,12 @@ export function registrar(canalId, { id = null, nome, userId, texto, respondeuA 
 
 // Devolve as mensagens recentes do canal (as mais novas por último).
 export function recentes(canalId, limite = MAX_MSGS) {
-  const arr = cache.get(canalId) || [];
-  return arr.slice(-limite);
+  return vivas(cache.get(canalId)).slice(-limite);
+}
+
+// Os canais com fio vivo (o `&chat esquecer tudo` filtra os do servidor dele).
+export function canais() {
+  return [...cache.podar().keys()];
 }
 
 // `<@ID>` → `@nome` (de quem já falou no canal), ou `@alguém`.
@@ -65,14 +75,14 @@ export function mencoesReais(texto, { pessoas = new Map(), botId = null } = {}) 
 }
 
 export function nomesDoCanal(canalId) {
-  const todas = cache.get(canalId) || [];
+  const todas = vivas(cache.get(canalId));
   return new Map(todas.filter((m) => m.userId).map((m) => [m.userId, m.ehJudy ? "Judy" : m.nome]));
 }
 
 // `excluirId`: a mensagem que está sendo respondida agora (ela vai à parte,
 // destacada) — sem isso ela apareceria duas vezes.
 export function contexto(canalId, { limite = 12, excluirUltima = false, excluirId = null } = {}) {
-  const todas = cache.get(canalId) || [];
+  const todas = vivas(cache.get(canalId));
   const nomes = nomesDoCanal(canalId);
   const porId = new Map(todas.filter((m) => m.id).map((m) => [m.id, m]));
   let arr = todas.filter((m) => !excluirId || m.id !== excluirId).slice(-limite);

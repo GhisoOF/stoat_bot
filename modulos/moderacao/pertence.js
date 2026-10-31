@@ -39,6 +39,43 @@ export function canalDeOutroServidor(canal, serverId) {
   return !!(serverId && dele && dele !== serverId);
 }
 
+// O canal que a pessoa apontou (`<#id>`, `#id` ou o ID cru), SÓ se for deste
+// servidor (31 out 2026, R9). Uma função para todos os comandos que publicam
+// num canal escolhido (&embed canal:, &ticket painel, &cor painel, &webhook,
+// &boasvindas, &rss, &log): canal de outro servidor, DM ou grupo → null.
+export function canalDesteServidor(server, entrada) {
+  const id = String(entrada ?? "").trim().replace(/^<#|>$/g, "").replace(/^#/, "");
+  if (!/^[0-9A-HJKMNP-TV-Z]{26}$/i.test(id) || !server) return null;
+  const canal = (server.channels ?? []).find?.((c) => c?.id === id) ?? null;
+  if (canal) return canal;
+  return canalDoServidor(server, id) ? { id } : null;
+}
+
+// O canal onde a STAFF recebe alertas (31 out 2026, R9): o do sentinela, senão o
+// de log — e só se for DESTE servidor. Sem nenhum, devolve null: o alerta NÃO vai
+// para o canal público da mensagem (antes "Padrão de dano", com trechos de
+// autolesão, e "Possível ameaça" caíam no canal onde a pessoa falou).
+export async function canalDaStaff(ctx, server = null) {
+  const id = ctx?.config?.automod?.antiScam?.alertChannelId || ctx?.config?.log?.canalId || null;
+  if (!id) return null;
+  let canal = null;
+  try { canal = ctx?.client?.channels?.get?.(id) ?? await ctx?.client?.channels?.fetch?.(id); } catch { canal = null; }
+  if (!canal) return null;
+  const sid = server?.id ?? ctx?.serverId ?? null;
+  if (canalDeOutroServidor(canal, sid)) return null;
+  return canal;
+}
+
+// Quem pede pode ESCREVER nesse canal? (31 out 2026, R9) `&embed canal:` e
+// `&cor painel <canal>` publicavam onde a pessoa não podia falar. Dono do
+// servidor e dono do bot passam; os outros precisam do SendMessage lá.
+export function podeEscreverNoCanal(message, canal, server, ctx) {
+  if (ctx?.ehSuperAdmin?.(message?.authorId)) return true;
+  if (server?.ownerId && server.ownerId === message?.authorId) return true;
+  if (!canal || canal.id === message?.channelId) return true;   // o próprio canal: já está escrevendo nele
+  try { return message?.member?.hasPermission?.(canal, "SendMessage") === true; } catch { return false; }
+}
+
 // Tira da config os IDs que não são deste servidor. Devolve o que mudou.
 export function curarIds(config, server) {
   if (!config || !server) return [];

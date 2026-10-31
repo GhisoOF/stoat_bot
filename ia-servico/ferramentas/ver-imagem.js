@@ -1,6 +1,6 @@
 import { esperarDesenho } from "./vez-da-gpu.js";
+import { pedirLLM } from "../llm.js";
 
-const LLM_URL      = (process.env.LLM_URL || "").replace(/\/$/, "");
 const MODELO_VISAO = process.env.LLM_MODEL_VISAO || "";        // vazio = visão desligada
 const SD_URL       = (process.env.SD_URL || "").replace(/\/$/, "");  // vazio = geração desligada
 const MAX_BYTES    = Number(process.env.IMAGEM_MAX_BYTES || 8 * 1024 * 1024);
@@ -148,20 +148,13 @@ export async function perguntarSobre(limpa, { pergunta, modelo = null, temperatu
       ],
     }],
   };
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
   try {
-    const r = await fetch(`${LLM_URL}/v1/chat/completions`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(corpo), signal: ctrl.signal,
-    });
-    if (!r.ok) throw new Error(`LLM HTTP ${r.status} — ${(await r.text()).slice(0, 150)}`);
-    const j = await r.json();
+    const j = await pedirLLM(corpo, { timeoutMs: TIMEOUT_MS });
     const texto = (j?.choices?.[0]?.message?.content || "").trim();
     return texto ? { descricao: texto } : { erro: "o modelo de visão não respondeu nada" };
   } catch (e) {
     return { erro: `modelo de visão: ${e?.message ?? e}` };
-  } finally { clearTimeout(t); }
+  }
 }
 
 // ─── Moderação de imagem ─────────────────────────────────────────────────────

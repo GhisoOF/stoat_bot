@@ -1,7 +1,8 @@
 
 import * as db from "../core/db.js";
 import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
-import { resolverUsuario, idEscrito } from "../core/ids.js";
+import { idEscrito } from "../core/ids.js";
+import { registrarErro } from "../core/erros.js";
 import { tr, lingua, idiomaDe } from "../core/i18n.js";
 import { semear as semearConteudo } from "./conteudo.js";
 import * as R from "./regras.js";
@@ -39,20 +40,47 @@ const JANELA_DONO_H = AV.JANELA_DONO_H;
 const RESPEC_POR_NIVEL = 60;
 
 // Semeia o catálogo uma vez por boot e migra quem já jogava (D13).
+const TIPOS_DO_BAZAR = ["venda", "cambio"];   // troca e duelo nunca aparecem nem se compram no bazar
 let semeado = false;
-let RPG_FECHADO = null;   // o erro da migração v4, se ela falhou
+let RPG_FECHADO = null;   // a etapa do boot do jogo que falhou (o jogo fica fechado)
+export const rpgFechado = () => RPG_FECHADO;
+// (31 out 2026, Regra do Reparo) QUALQUER falha no boot do jogo (catálogo, mundo,
+// migração) fecha o jogo e vai para o log: antes só a migração fechava, e um
+// catálogo ou um mundo pela metade deixava jogar em cima de dados quebrados.
+// `<@ID>` ou o ID cru (26 caracteres) — nunca busca por nome
+export function mencaoOuId(entrada) {
+  const m = String(entrada ?? "").trim().match(/^<@!?([0-9A-HJKMNP-TV-Z]{26})>$|^([0-9A-HJKMNP-TV-Z]{26})$/i);
+  return m ? (m[1] ?? m[2]).toUpperCase() : null;
+}
+
+// O nome do personagem aparece para todos (ficha, duelo, top de todos os
+// servidores). (31 out 2026, R6) Sem menção, @everyone, markdown nem link; até 32
+// caracteres; vazio → "Aventureiro".
+export const NOME_MAX = 32;
+export function nomeDePersonagem(bruto) {
+  let t = String(bruto ?? "").normalize("NFKC")
+    .replace(/<[@%#][^>]*>/g, " ")                                     // menções
+    .split(/\s+/).filter((p) => !/^\W*@|:\/\/|^www\.|\.[a-z]{2,}(\/|$)/i.test(p)).join(" ")   // @alguém, links e domínios
+    .replace(/[^\p{L}\p{M}\p{N} '\-]/gu, " ")                          // markdown, @, #, emoji…
+    .replace(/\s+/g, " ").trim();
+  if (t.length > NOME_MAX) t = t.slice(0, NOME_MAX).trim();
+  return t || "Aventureiro";
+}
+
 export function iniciarCatalogo() {
-  if (semeado) return;
-  try {
-    const n = semearConteudo(db);
-    semeado = true;
-    console.log(`[RPG] catálogo pronto (${n.itens} item(ns), ${n.companheiros} companheiro(s))`);
-  } catch (e) { console.error("[RPG] falha ao semear o catálogo:", e?.message ?? e); }
+  if (semeado && !RPG_FECHADO) return;
+  const etapa = (nome, fn) => {
+    try { return fn(); }
+    catch (e) { RPG_FECHADO ??= nome; registrarErro("RPG", e); console.error(`[RPG] falha em "${nome}" — o jogo fica fechado`); return null; }
+  };
+  RPG_FECHADO = null;
+  const n = etapa("catálogo", () => semearConteudo(db));
+  if (n) { semeado = true; console.log(`[RPG] catálogo pronto (${n.itens} item(ns), ${n.companheiros} companheiro(s))`); }
   // o mundo global: zera o jogo dos servidores uma única vez e garante as duas moedas
-  try { prepararMundo(); } catch (e) { console.error("[RPG] falha ao preparar o mundo:", e?.message ?? e); }
+  etapa("mundo", () => prepararMundo());
   // se a migração falhar, o jogo fica fechado: jogar o v4 em cima dos dados da v3
   // (e migrar depois por cima do que se jogou) estragaria os personagens
-  try { migrarParaV4(); RPG_FECHADO = null; } catch (e) { RPG_FECHADO = e?.message ?? String(e); console.error("[RPG] falha na migração v4 — o jogo fica fechado:", RPG_FECHADO); }
+  if (!RPG_FECHADO) etapa("migração v4", () => migrarParaV4());
 }
 
 // Soma os bônus dos acessórios (v4: armas e armaduras dão dano e defesa, não atributo).
@@ -345,8 +373,7 @@ export async function cmdGame(message, args, ctx) {
         { title: "🎭 Ya tienes personaje",
           description: `Míralo con \`${citar("game", "es", P)}\`. Para empezar de cero: \`${citar("game.apagar", "es", P)}\`.`, colour: COR.aviso }));
     }
-    const nome = args.slice(1).join(" ").trim().slice(0, 40)
-      || message.author?.username || "Aventureiro";
+    const nome = nomeDePersonagem(args.slice(1).join(" "));
     let p = db.criarPersonagem(serverId, eu, nome);
     darKitInicial(serverId, eu);
     p = db.getPersonagem(serverId, eu);
@@ -1480,7 +1507,9 @@ export async function cmdGame(message, args, ctx) {
     if (["comprar", "aceitar"].includes(acao)) {
       const id = parseInt(resto[0], 10);
       const of = Number.isFinite(id) ? db.getOferta(id) : null;
-      if (!of || of.serverId !== serverId || of.estado !== "aberta") {
+      // (31 out 2026, R6) só venda e câmbio se compram aqui: troca e duelo têm
+      // custódia própria (antes "comprar" um duelo tirava a aposta da custódia)
+      if (!of || of.serverId !== serverId || of.estado !== "aberta" || !TIPOS_DO_BAZAR.includes(of.tipo)) {
         return sendEmbed(message.channel, { title: tr(ctx, "❌ Oferta indisponível", "❌ Offer unavailable", "❌ Oferta no disponible"),
           description: tr(ctx, `Veja as abertas com \`${citarInterno("game.mercado", P)}\`.`, `See the open ones with \`${citarInterno("game.mercado", P)}\`.`, `Mira las abiertas con \`${citar("game.mercado", "es", P)}\`.`), colour: COR.erro });
       }
@@ -1535,7 +1564,7 @@ export async function cmdGame(message, args, ctx) {
         description: tr(ctx, "O que estava em custódia voltou para você.", "What was held in escrow came back to you.", "Lo que estaba en custodia volvió a ti."), colour: COR.mod });
     }
 
-    const ofertas = db.listarOfertas(serverId);
+    const ofertas = db.listarOfertas(serverId).filter((o) => TIPOS_DO_BAZAR.includes(o.tipo));
     if (!ofertas.length) {
       return sendEmbed(message.channel, { title: tr(ctx, "🏪 Bazar vazio", "🏪 Empty bazaar", "🏪 Bazar vacío"),
         description: tr(ctx, [
@@ -2926,12 +2955,28 @@ export async function cmdGame(message, args, ctx) {
   }
 
   // ── ficha (padrão) ──
-  const server = await getServer?.(message).catch(() => null);
-  const alvoId = (sub && !["ficha", "perfil", "status"].includes(sub))
-    ? await resolverUsuario(args[0], { message, server })
-    : (args[1] ? await resolverUsuario(args[1], { message, server }) : eu);
+  // (31 out 2026, R9/R11) `&game <erro de digitação>` virava busca de pessoa por
+  // NOME entre os membros E os banidos (e revelava se um nome batia com um
+  // banido). Agora: `&game` = a sua ficha; `&game ficha <@pessoa|ID>` ou
+  // `&game <@pessoa|ID>` = a de um MEMBRO deste servidor; o resto é erro curto.
+  const ehFicha = !sub || ["ficha", "perfil", "status"].includes(sub);
+  const entrada = ehFicha ? args[1] : args[0];
+  const alvoEscrito = entrada ? mencaoOuId(entrada) : eu;
+  if (!alvoEscrito) {
+    return sendEmbed(message.channel, ehFicha
+      ? { title: "🎭", colour: COR.aviso, description: tr(ctx, `Use uma menção ou um ID: \`${citarInterno("game.ficha", P)} @pessoa\`.`, `Use a mention or an ID: \`${citarInterno("game.ficha", P)} @person\`.`, `Usa una mención o un ID: \`${citar("game.ficha", "es", P)} @usuario\`.`) }
+      : { title: "❓", colour: COR.aviso, description: tr(ctx, `Subcomando desconhecido — \`${citarInterno("game.ajuda", P)}\`.`, `Unknown subcommand — \`${citarInterno("game.ajuda", P)}\`.`, `Subcomando desconocido — \`${citar("game.ajuda", "es", P)}\`.`) });
+  }
+  if (alvoEscrito !== eu) {
+    const server = await getServer?.(message).catch(() => null);
+    const membro = await server?.fetchMember?.(alvoEscrito).catch(() => null);
+    if (!membro) {
+      return sendEmbed(message.channel, { title: "🎭", colour: COR.aviso,
+        description: tr(ctx, "Essa pessoa não está neste servidor.", "That person isn't on this server.", "Esa persona no está en este servidor.") });
+    }
+  }
 
-  const id = alvoId ?? eu;
+  const id = alvoEscrito;
   const p = db.getPersonagem(serverId, id);
   if (!p) {
     const proprio = id === eu;

@@ -9,8 +9,9 @@ import { canalDeOutroServidor } from "../moderacao/pertence.js";
 // o cargo no log: menção + nome (o log mostrava só o ID — 14 out 2026)
 const cargoNoLog = (server, id) => { const n = cargoDe(server, id)?.name; return n ? `<%${id}> **${n}**` : `<%${id}>`; };
 import { tr, lingua } from "../core/i18n.js";
-import { normalizarErro } from "../core/erros.js";
+import { normalizarErro, descreverErro, registrarErro, tipoDoErro } from "../core/erros.js";
 import { chamarApi } from "../core/stoat-api.js";
+import { numero } from "../core/env.js";
 
 // Reexporta o resolvedor central, para quem já importava daqui.
 
@@ -20,22 +21,6 @@ export function normalizarEmoji(e) {
   let v = e;
   try { v = decodeURIComponent(e); } catch {}
   return v.replace(/\uFE0F/g, "");   // remove o "variation selector"
-}
-
-function descreverErro(e) {
-  if (!e) return "erro desconhecido";
-  if (typeof e === "string") return e;
-  const partes = [];
-  if (e.message) partes.push(e.message);
-  if (e.type) partes.push(`type=${e.type}`);
-  if (e.error) partes.push(`error=${typeof e.error === "string" ? e.error : JSON.stringify(e.error)}`);
-  if (e.status ?? e.statusCode) partes.push(`status=${e.status ?? e.statusCode}`);
-  if (e.response?.status) partes.push(`http=${e.response.status}`);
-  if (e.permission) partes.push(`permissão=${e.permission}`);
-  if (!partes.length) {
-    try { partes.push(JSON.stringify(e).slice(0, 300)); } catch { partes.push(String(e)); }
-  }
-  return partes.join(" | ");
 }
 
 async function tirarReacaoDe(message, emoji, userId, client) {
@@ -49,12 +34,12 @@ async function tirarReacaoDe(message, emoji, userId, client) {
     );
     return true;
   } catch (e) {
-    console.error(`[REACTIONROLE] não consegui tirar a reação ${emoji} de ${userId}: ${descreverErro(e)}`);
+    registrarErro("REACTIONROLE", e);
     return false;
   }
 }
 
-const PAUSA_MS = Number(process.env.RR_PAUSA_MS || 750);   // 15 por 10s = 1 a cada 667ms
+const PAUSA_MS = numero("RR_PAUSA_MS", 750, { min: 0, inteiro: true });   // 15 por 10s = 1 a cada 667ms
 const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Devolve `true`, ou o motivo da falha em texto.
@@ -74,7 +59,7 @@ async function reagirComPaciencia(message, emoji, { tentativas = 3 } = {}) {
         continue;
       }
       if (espera > 0) return `limite de requisições (retry_after ${espera}ms)`;
-      if (/InvalidOperation/.test(descreverErro(e))) {
+      if (tipoDoErro(e) === "InvalidOperation") {
         return "o Stoat recusou: ou a mensagem chegou ao teto de reações, ou é um emoji personalizado que eu não posso usar";
       }
       return descreverErro(e);
@@ -136,11 +121,11 @@ export async function aoReagir(message, userId, emoji, ctx) {
 
     const serverId = alvo.serverId;
     const server = await ctx.client.servers.fetch(serverId).catch((e) => {
-      console.error(`[REACTIONROLE] não consegui carregar o servidor ${serverId}:`, descreverErro(e)); return null;
+      registrarErro("REACTIONROLE", e); return null;
     });
     if (!server) return false;
     const member = await server.fetchMember(userId).catch((e) => {
-      console.error(`[REACTIONROLE] não consegui carregar o membro ${userId}:`, descreverErro(e)); return null;
+      registrarErro("REACTIONROLE", e); return null;
     });
     if (!member) { console.log(`[REACTIONROLE] membro ${userId} não encontrado no servidor`); return false; }
 
@@ -160,7 +145,7 @@ export async function aoReagir(message, userId, emoji, ctx) {
     try {
       await editarCargos(server, member, (a) => novos.filter((id) => a.includes(id) || id === alvo.roleId));
     } catch (e) {
-      console.error(`[REACTIONROLE] ❌ falhei ao dar o cargo ${alvo.roleId} para ${userId}: ${descreverErro(e)}`);
+      registrarErro("REACTIONROLE", e);
       console.error("[REACTIONROLE]    → confira: o bot tem **AssignRoles**? o cargo dele está ACIMA de <@&" + alvo.roleId + "> na lista de cargos?");
       return false;
     }
@@ -192,7 +177,7 @@ export async function aoReagir(message, userId, emoji, ctx) {
     });
     return true;
   } catch (err) {
-    console.error("[REACTIONROLE] erro inesperado:", descreverErro(err));
+    registrarErro("REACTIONROLE", err);
     if (err?.stack) console.error(err.stack.split("\n").slice(0, 3).join("\n"));
     return false;
   }
@@ -218,7 +203,7 @@ export async function aoDesreagir(message, userId, emoji, ctx) {
     try {
       await editarCargos(server, member, (a) => a.filter((id) => id !== alvo.roleId));
     } catch (e) {
-      console.error(`[REACTIONROLE] ❌ falhei ao remover o cargo ${alvo.roleId} de ${userId}: ${descreverErro(e)}`);
+      registrarErro("REACTIONROLE", e);
       return false;
     }
     console.log(`[REACTIONROLE] -cargo ${alvo.roleId} de ${userId} (msg ${messageId})`);
@@ -232,49 +217,71 @@ export async function aoDesreagir(message, userId, emoji, ctx) {
     });
     return true;
   } catch (err) {
-    console.error("[REACTIONROLE][desreagir]", descreverErro(err));
+    registrarErro("REACTIONROLE", err);
     return false;
   }
 }
 
-export async function precarregarMensagens(client) {
-  let ok = 0, perdidas = 0, repostos = 0;
+// No boot: carrega cada mensagem com cargo por reação e repõe o que faltar.
+// (31 out 2026, R11) O registro cuja mensagem SUMIU (a API responde NotFound
+// para a mensagem ou para o canal) é apagado — antes ficava para sempre e, sem
+// canal gravado, o boot varria todos os canais do servidor atrás dela, toda vez.
+// Erro que não é "não existe" (rede, permissão) não apaga nada.
+const sumiu = (e) => tipoDoErro(e) === "NotFound" || e?.status === 404 || e?.response?.status === 404;
+async function buscar(fn) {
+  try { return { obj: await fn() ?? null }; } catch (e) { return { obj: null, sumiu: sumiu(e), erro: e }; }
+}
+// `serverId`: só as deste servidor (o `recarregar` de um servidor não mexe nem conta os outros)
+export async function precarregarMensagens(client, { serverId = null } = {}) {
+  let ok = 0, perdidas = 0, repostos = 0, apagadas = 0;
   const falhas = [];
-  const registros = db.mensagensComReactionRole();
-  if (!registros.length) return { ok, perdidas, repostos, falhas, total: 0 };
+  const registros = db.mensagensComReactionRole().filter((r) => !serverId || r.serverId === serverId);
+  if (!registros.length) return { ok, perdidas, repostos, falhas, apagadas, total: 0 };
 
   for (const reg of registros) {
-    let msg = null;
+    let msg = null, naoExiste = false;
     try {
       if (reg.channelId) {
-        const canal = client.channels.get(reg.channelId)
-          ?? await client.channels.fetch(reg.channelId).catch(() => null);
-        if (canal) msg = await canal.fetchMessage(reg.messageId).catch(() => null);
-      }
-      if (!msg && reg.serverId) {
-        // sem canal gravado: procura e memoriza para não repetir a busca
+        const c = client.channels.get(reg.channelId) ? { obj: client.channels.get(reg.channelId) } : await buscar(() => client.channels.fetch(reg.channelId));
+        if (c.obj) {
+          const m = await buscar(() => c.obj.fetchMessage(reg.messageId));
+          msg = m.obj; naoExiste = !msg && m.sumiu;
+        } else naoExiste = c.sumiu;
+      } else if (reg.serverId) {
+        // registro antigo, sem canal gravado: procura UMA vez; achou, grava o canal;
+        // todos os canais disseram "não existe", o registro sai (não varre de novo)
         const server = await client.servers.fetch(reg.serverId).catch(() => null);
-        for (const ch of server?.channels ?? []) {
-          const canal = typeof ch === "string"
-            ? (client.channels.get(ch) ?? await client.channels.fetch(ch).catch(() => null))
-            : ch;
+        // (31 out 2026) só apaga com certeza: lista de canais vazia, canal que não
+        // carregou ou erro de rede/permissão mantêm o registro
+        const lista = server?.channels ?? [];
+        let todosNaoTem = !!server && lista.length > 0;
+        for (const ch of lista) {
+          let canal = ch;
+          if (typeof ch === "string") {
+            canal = client.channels.get(ch) ?? null;
+            if (!canal) { const c = await buscar(() => client.channels.fetch(ch)); canal = c.obj; if (!canal && !c.sumiu) todosNaoTem = false; }
+          }
           if (!canal?.fetchMessage) continue;
-          msg = await canal.fetchMessage(reg.messageId).catch(() => null);
-          if (msg) { db.setReactionRoleCanal(reg.messageId, canal.id ?? canal._id); break; }
+          const m = await buscar(() => canal.fetchMessage(reg.messageId));
+          if (m.obj) { msg = m.obj; db.setReactionRoleCanal(reg.messageId, canal.id ?? canal._id); break; }
+          if (!m.sumiu) todosNaoTem = false;
         }
+        naoExiste = !msg && todosNaoTem;
       }
     } catch (e) {
-      console.error(`[REACTIONROLE][boot] ${reg.messageId}:`, e?.message);
+      registrarErro("REACTIONROLE", e);
     }
     if (msg) {
       ok++;
-      const r = await reporReacoesQueFaltam(msg, client).catch(() => ({ repostos: [], falhas: [] }));
+      const r = await reporReacoesQueFaltam(msg, client).catch((e) => { registrarErro("REACTIONROLE", e); return { repostos: [], falhas: [] }; });
       repostos += r.repostos.length;
       falhas.push(...(r.falhas ?? []));
-    } else { perdidas++; console.log(`[REACTIONROLE][boot] não achei a mensagem ${reg.messageId} (canal apagado ou sem acesso?)`); }
+    } else if (naoExiste) {
+      apagadas += db.removeReactionRolesMensagem(reg.messageId) ? 1 : 0;
+    } else { perdidas++; console.log(`[REACTIONROLE][boot] não achei a mensagem ${reg.messageId} (sem acesso agora?) — o registro fica`); }
   }
-  console.log(`[REACTIONROLE] ${ok} mensagem(ns) recarregada(s)${perdidas ? `, ${perdidas} não encontrada(s)` : ""}${repostos ? `, ${repostos} reação(ões) reposta(s)` : ""}`);
-  return { ok, perdidas, repostos, falhas, total: registros.length };
+  console.log(`[REACTIONROLE] ${ok} mensagem(ns) recarregada(s)${perdidas ? `, ${perdidas} não encontrada(s)` : ""}${apagadas ? `, ${apagadas} registro(s) de mensagem apagada removido(s)` : ""}${repostos ? `, ${repostos} reação(ões) reposta(s)` : ""}`);
+  return { ok, perdidas, repostos, falhas, apagadas, total: registros.length };
 }
 
 export async function cmdReactionRole(message, args, ctx) {
@@ -487,11 +494,11 @@ export async function cmdReactionRole(message, args, ctx) {
     } catch (e) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Não consegui limpar as reações",
-          description: `\`${descreverErro(e)}\`\n\nLimpar reações dos outros exige **ManageMessages** no canal.`, colour: COR.erro },
+          description: `${descreverErro(e, "pt")}\n\nLimpar reações dos outros exige **ManageMessages** no canal.`, colour: COR.erro },
         { title: "❌ Couldn't clear the reactions",
-          description: `\`${descreverErro(e)}\`\n\nClearing other people's reactions needs **ManageMessages** in the channel.`, colour: COR.erro },
+          description: `${descreverErro(e, "en")}\n\nClearing other people's reactions needs **ManageMessages** in the channel.`, colour: COR.erro },
         { title: "❌ No pude quitar las reacciones",
-          description: `\`${descreverErro(e)}\`\n\nQuitar las reacciones de otros requiere **ManageMessages** en el canal.`, colour: COR.erro }));
+          description: `${descreverErro(e, "es")}\n\nQuitar las reacciones de otros requiere **ManageMessages** en el canal.`, colour: COR.erro }));
     }
     const segundos = Math.ceil((ordem.length * PAUSA_MS) / 1000);
     if (ordem.length > 8) {
@@ -556,7 +563,7 @@ export async function cmdReactionRole(message, args, ctx) {
         description: "Fetching the reaction-role messages so they return to the cache.", colour: COR.info },
       { title: "🔄 Recargando…",
         description: "Buscando los mensajes de roles por reacción para que vuelvan a la caché.", colour: COR.info }));
-    const r = await precarregarMensagens(client);
+    const r = await precarregarMensagens(client, { serverId });
     const motivos = [...new Set((r.falhas ?? []).map((f) => `${f.emoji} — ${f.motivo}`))].slice(0, 6);
     return sendEmbed(message.channel, tr(ctx, {
       title: r.perdidas ? "⚠️ Recarregado com pendências" : "✅ Recarregado",
@@ -768,14 +775,14 @@ export async function cmdReactionRole(message, args, ctx) {
         colour: COR.sucesso,
       }));
     } catch (err) {
-      console.error("[REACTIONROLE][add]", descreverErro(err));
+      registrarErro("REACTIONROLE", err);
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Falha",
-          description: `**Erro:** ${descreverErro(err)}\n\n_O bot precisa de **React**, **ManageRole** e **AssignRoles**._`, colour: COR.erro },
+          description: `**Erro:** ${descreverErro(err, "pt")}\n\n_O bot precisa de **React**, **ManageRole** e **AssignRoles**._`, colour: COR.erro },
         { title: "❌ Failure",
-          description: `**Error:** ${descreverErro(err)}\n\n_The bot needs **React**, **ManageRole** and **AssignRoles**._`, colour: COR.erro },
+          description: `**Error:** ${descreverErro(err, "en")}\n\n_The bot needs **React**, **ManageRole** and **AssignRoles**._`, colour: COR.erro },
         { title: "❌ Fallo",
-          description: `**Error:** ${descreverErro(err)}\n\n_El bot necesita **React**, **ManageRole** y **AssignRoles**._`, colour: COR.erro }));
+          description: `**Error:** ${descreverErro(err, "es")}\n\n_El bot necesita **React**, **ManageRole** y **AssignRoles**._`, colour: COR.erro }));
     }
   }
 

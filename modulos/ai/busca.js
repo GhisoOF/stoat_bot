@@ -296,9 +296,53 @@ const SOBRE_A_CONVERSA = /\b(servidor|server|chat|canal|grupo|aqui|a[ií]|voc[e�
 const PAPO = /\b(tudo (?:bem|bom|certo|tranquilo)|como (?:vai|vc|voc[eê]|tu)|e a[ií]|beleza|blz|bom dia|boa (?:tarde|noite)|how are you|what'?s up)\b/i;
 const ENTIDADE = new RegExp(`${NOME_PROPRIO.source}|\\b(1[89]|20)\\d\\d\\b|["“][^"”]{2,40}["”]`);
 
-export function valeBuscarDeFundo(pergunta) {
+// ─── Pessoas fora da busca de fundo (31 out 2026, P1, R9) ───────────────────
+// "onde mora o Ghiso?" saía quase literal para o Google/Bing — sem ninguém ter pedido
+// busca, e num público majoritariamente menor de idade. A busca de FUNDO (a silenciosa)
+// agora: (1) não sai para pergunta sobre uma pessoa (quem é / onde mora / telefone /
+// endereço / idade / redes de alguém); (2) tira da consulta os nomes de gente — os de
+// quem está na conversa (`nomes`) e todo "Nome Sobrenome" (duas palavras seguidas com
+// inicial maiúscula); (3) se sobrar só nome — nada de assunto —, não busca. Uma palavra
+// maiúscula sozinha (Brasil, Minecraft, Zelda) fica: é quase sempre lugar ou coisa, e
+// sem ela a busca não serve. A busca que a pessoa PEDE ("pesquisa…") segue como ela
+// escreveu.
+const SOBRE_PESSOA = /\b(?:onde\s+(?:mora|vive|trabalha|estuda|fica\s+a\s+casa)|endere[çc]o|telefone|celular|whats(?:app|zap)?|zap\s+d[oa]|n[úu]mero\s+d[oa]|cpf|rg\s+d[oa]|e-?mail\s+d[oa]|insta(?:gram)?\s+d[oa]|perfil\s+d[oa]|sobrenome|nome\s+completo|idade\s+d[oa]|quantos\s+anos\s+(?:tem|o|a)|where\s+does\s+\S+\s+live|phone\s+number|home\s+address|how\s+old\s+is|d[óo]nde\s+vive|tel[ée]fono|direcci[óo]n|cu[áa]ntos\s+a[ñn]os\s+tiene)\b/i;
+// "quem é o Ghiso?", "who is Lucas?", "quién es Ana?": a pergunta de identidade com nome
+const QUEM_E_NOME = /\b(?:[Qq]uem\s+(?:é|e|era|foi)|[Ww]ho\s+(?:is|was)|[Qq]ui[ée]n\s+(?:es|era|fue))\s+(?:(?:o|a|os|as|el|la|esse|essa|aquele|aquela)\s+)?[A-ZÀ-Þ]/;
+export function perguntaSobrePessoa(texto) {
+  const t = String(texto ?? "");
+  return SOBRE_PESSOA.test(t) || QUEM_E_NOME.test(t);
+}
+const semAcentoMin = (w) => String(w).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+// Nome Sobrenome: palavra com inicial maiúscula e o resto minúsculo (sigla, número e
+// maiúscula no meio — RTX, GTA5, iPhone — não contam)
+const ehNomeProprio = (w) => /^[A-ZÀ-Þ][a-zà-þ'’-]+$/.test(w);
+export function semNomesDePessoa(texto, nomes = []) {
+  const conhecidos = new Set();
+  for (const n of nomes) for (const w of String(n ?? "").split(/\s+/)) if (w.length >= 3) conhecidos.add(semAcentoMin(w));
+  const palavras = String(texto ?? "").split(/\s+/).filter(Boolean);
+  const nu = palavras.map((w) => w.replace(/^[("“'¿¡]+|[)"”'.,;:!?…]+$/g, ""));
+  const fora = new Set();
+  for (let i = 0; i < nu.length; i++) {
+    if (conhecidos.has(semAcentoMin(nu[i]).replace(/^@/, ""))) fora.add(i);
+    if (ehNomeProprio(nu[i]) && i + 1 < nu.length && ehNomeProprio(nu[i + 1])
+        && !/[.!?]$/.test(palavras[i])) { fora.add(i); fora.add(i + 1); }
+  }
+  return palavras.filter((_, i) => !fora.has(i)).join(" ");
+}
+// A consulta da busca de fundo, ou null (= não buscar).
+export function consultaDeFundo(texto, { nomes = [] } = {}) {
+  const t = String(texto ?? "");
+  if (perguntaSobrePessoa(t)) return null;
+  const sem = semNomesDePessoa(t.replace(/<@[^>]+>/g, " "), nomes);
+  if (!termosDeAssunto(sem).length) return null;
+  return limparConsulta(sem) || null;
+}
+
+export function valeBuscarDeFundo(pergunta, { nomes = [] } = {}) {
   const t = String(pergunta ?? "").replace(/<@[^>]+>/g, " ").replace(/^\s*judy\b[,:]?\s*/i, "");
   if (!t.trim()) return false;
+  if (consultaDeFundo(t, { nomes }) === null) return false;   // pessoa, ou só nome: não sai
   if (/\[(imagem\(ns\) anexada|attached image)/i.test(t)) return false;
   if (PAPO.test(t)) return false;
   if (!PEDE_INFO.test(t)) return false;                 // afirmação ou pedido: nada a procurar

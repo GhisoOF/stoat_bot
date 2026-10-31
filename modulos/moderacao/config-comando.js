@@ -121,7 +121,7 @@ export async function cmdConfig(message, args, ctx) {
     T("**Silêncio:** timeout nativo (precisa de **TimeoutMembers**)", "**Silence:** native timeout (needs **TimeoutMembers**)", "**Silencio:** timeout nativo (necesita **TimeoutMembers**)"),
     `${T("**Sentinela — mais rígido com novatos:**", "**Sentinel — stricter with newcomers:**", "**Centinela — más estricto con los recién llegados:**")} ${am.antiScam.porAntiguidade !== false ? T("🟢 ligado", "🟢 on", "🟢 activado") : T("🔴 desligado", "🔴 off", "🔴 desactivado")}`,
     `${T("**Sentinela — alerta à staff:**", "**Sentinel — staff alerts:**", "**Centinela — alerta al staff:**")} ${am.antiScam.alertarAdmin !== false ? T("🟢 ligado", "🟢 on", "🟢 activado") : T("🔴 desligado", "🔴 off", "🔴 desactivado")}`,
-    `${T("**Canal de avisos:**", "**Alert channel:**", "**Canal de alertas:**")} ${am.antiScam.alertChannelId ? `<#${am.antiScam.alertChannelId}>` : T("_(canal da própria mensagem)_", "_(the message's own channel)_", "_(el canal del propio mensaje)_")}`,
+    `${T("**Canal de avisos:**", "**Alert channel:**", "**Canal de alertas:**")} ${am.antiScam.alertChannelId ? `<#${am.antiScam.alertChannelId}>` : (config.log?.canalId ? T("_(o canal de logs)_", "_(the log channel)_", "_(el canal de registro)_") : T("_(nenhum — os alertas não são enviados)_", "_(none — alerts aren't sent)_", "_(ninguno — las alertas no se envían)_"))}`,
   ].filter(Boolean);
 
   // ── Canal de log ──
@@ -185,7 +185,7 @@ export async function cmdConfig(message, args, ctx) {
     `${T("**Tickets:**", "**Tickets:**", "**Tickets:**")} ${config.tickets?.painel?.canalId ? `${T("painel", "panel", "panel")} <#${config.tickets.painel.canalId}> · ` : ""}${config.tickets?.logCanal ? `log <#${config.tickets.logCanal}> · ${nTickets} ${T("aberto(s)", "open", "abierto(s)")}${config.tickets?.cargoEquipe ? ` · ${T("equipe", "team", "equipo")} <%${config.tickets.cargoEquipe}>` : ""}` : T(`_(não configurado — \`${citarInterno("ticket", PREFIXO)} log #canal\`)_`, `_(not set up — \`${citarInterno("ticket", PREFIXO)} log #channel\`)_`, `_(sin configurar — \`${citar("ticket", "es", PREFIXO)} log #canal\`)_`)}`,
     `**Webhooks:** ${nGanchos} ${T("gancho(s)", "hook(s)", "gancho(s)")} — \`${citar("webhook.lista", lang, PREFIXO)}\``,
     `${T("**Voz e música:**", "**Voice and music:**", "**Voz y música:**")} ${!vozAqui
-      ? T("_indisponível neste servidor (o dono do bot libera em `TTS_SERVIDORES`)_", "_not available on this server (the bot owner enables it in `TTS_SERVIDORES`)_", "_no disponible en este servidor (el dueño del bot lo habilita en `TTS_SERVIDORES`)_")
+      ? T("_indisponível neste servidor (quem libera é o dono do bot)_", "_not available on this server (the bot owner enables it)_", "_no disponible en este servidor (lo habilita el dueño del bot)_")
       : config.tts?.ativo && config.tts?.canalVoz ? `🟢 <#${config.tts.canalVoz}>` : T(`🔴 fora da call — \`${citarInterno("entrar", PREFIXO)}\``, `🔴 not in a call — \`${citarInterno("entrar", PREFIXO)}\``, `🔴 fuera de la llamada — \`${citar("entrar", "es", PREFIXO)}\``)}`,
   ];
 
@@ -244,7 +244,7 @@ export async function cmdConfig(message, args, ctx) {
         "",
       ] : []),
       T("**🌐 Global** *(compartilhado entre servidores)*", "**🌐 Global** *(shared across servers)*", "**🌐 Global** *(compartido entre servidores)*"),
-      `Debug: ${simL(cfgGlobal.debug !== false)} · ${T("Listas anti-link:", "Anti-link lists:", "Listas anti-link:")} ${cfgGlobal.linkBlocklistSources.length} ${T("fonte(s)", "source(s)", "fuente(s)")}, ${cfgGlobal.linkBlocklistManual.length} ${T("domínio(s) manual(is)", "manual domain(s)", "dominio(s) manual(es)")}`,
+      `Debug: ${simL(cfgGlobal.debug === true)} · ${T("Listas anti-link:", "Anti-link lists:", "Listas anti-link:")} ${cfgGlobal.linkBlocklistSources.length} ${T("fonte(s)", "source(s)", "fuente(s)")}, ${cfgGlobal.linkBlocklistManual.length} ${T("domínio(s) manual(is)", "manual domain(s)", "dominio(s) manual(es)")}`,
       "",
       T(`💡 Ajuste com \`${citarInterno("automod", PREFIXO)}\` (que reúne blocklist, whitelist, sentinela e punicao) e \`${citar("log", "pt", PREFIXO)}\` — \`${citarInterno("tutorial", PREFIXO)}\` mostra o caminho, \`${citarInterno("assistente", PREFIXO)}\` percorre com você.`,
         `💡 Adjust with \`${citarInterno("automod", PREFIXO)}\` (holds blocklist, whitelist, sentinel and punishment) and \`${citar("log", "en", PREFIXO)}\` — \`${citarInterno("tutorial", PREFIXO)}\` shows the path, \`${citarInterno("assistente", PREFIXO)}\` walks it with you.`,

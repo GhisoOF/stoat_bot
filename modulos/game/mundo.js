@@ -62,9 +62,29 @@ export const VERSAO_MUNDO = 1;
 // Na primeira subida com o mundo global, o jogo de cada servidor é zerado
 // (pedido de Ghieh: "reseta o game nos servidores"). Só uma vez — a marca
 // fica na tabela de config.
+//
+// (31 out 2026, R3/Regra do Reparo) A marca é lida AQUI, crua: o `lerConfig`
+// devolve null tanto para "não existe" quanto para "não consegui ler" — e o null
+// virava "falta migrar", apagando o jogo de todo mundo. Agora só apaga quando a
+// marca DIZ que falta (versão menor) ou quando ela não existe E o mundo ainda não
+// tem ninguém; marca ilegível, ou mundo com gente e sem marca, para tudo em voz
+// alta (o jogo fica fechado — ver game.js).
+export function lerMarcaDoMundo() {
+  const d = db.getDb();
+  const linha = d.prepare("SELECT json FROM config WHERE serverId = ?").get(MARCA);
+  if (!linha) {
+    const noMundo = d.prepare("SELECT COUNT(*) AS n FROM rpg_personagem WHERE serverId = ?").get(MUNDO)?.n ?? 0;
+    if (noMundo > 0) throw new Error("a marca do mundo sumiu, mas o mundo já tem personagens — nada foi apagado");
+    return { versao: 0 };
+  }
+  let marca;
+  try { marca = JSON.parse(linha.json); } catch { marca = null; }
+  if (!marca || typeof marca !== "object" || !Number.isInteger(marca.versao)) throw new Error("a marca do mundo está ilegível — nada foi apagado");
+  return marca;
+}
 export function prepararMundo({ log = console.log } = {}) {
-  const marca = db.lerConfig(MARCA);
-  if ((marca?.versao ?? 0) < VERSAO_MUNDO) {
+  const marca = lerMarcaDoMundo();
+  if (marca.versao < VERSAO_MUNDO) {
     const d = db.getDb();
     const apagados = {};
     for (const t of TABELAS_DE_PROGRESSO) {
@@ -87,7 +107,7 @@ export function arredondarSaldosUmaVez({ log = console.log } = {}) {
   let n = 0;
   try { n += d.prepare("UPDATE rpg_carteira SET quantidade = CAST(quantidade AS INTEGER) WHERE quantidade != CAST(quantidade AS INTEGER)").run().changes ?? 0; } catch (e) { log(`[RPG] inteiros (carteira): ${e.message}`); }
   try { d.prepare("UPDATE rpg_moedas SET mercado = CAST(mercado AS INTEGER), dungeon = CAST(dungeon AS INTEGER)").run(); } catch (e) { log(`[RPG] inteiros (moedas): ${e.message}`); }
-  try { d.prepare("UPDATE rpg_ofertas SET qtdOferecida = CAST(qtdOferecida AS INTEGER), qtdPedida = CAST(qtdPedida AS INTEGER)").run(); } catch {}
+  try { d.prepare("UPDATE rpg_ofertas SET qtdOferecida = CAST(qtdOferecida AS INTEGER), qtdPedida = CAST(qtdPedida AS INTEGER)").run(); } catch (e) { log(`[RPG] inteiros (ofertas): ${e.message}`); }
   db.gravarConfig(MARCA_INTEIROS, { feito: true, em: Date.now(), saldos: n });
   if (n) log(`[RPG] moedas inteiras: ${n} saldo(s) com fração arredondado(s) para baixo`);
 }

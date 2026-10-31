@@ -8,9 +8,19 @@ import { createRequire } from "node:module";
 
 const require_ = createRequire(import.meta.url);
 
+// (31 out 2026, P1, R10) Os programas de fora (Piper, ffmpeg) recebem só o ambiente
+// de que precisam para rodar — nada de BOT_TOKEN, VOZ_CHAVE ou SPOTIFY_SECRET.
+// (Mesma lista do modulos/ai/servicos.js; aqui sem importar o bot, o serviço roda
+// também sozinho noutra máquina.)
+export function ambienteMinimo() {
+  const env = {};
+  for (const k of ["PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "LD_LIBRARY_PATH", "ESPEAK_DATA_PATH"]) if (process.env[k] != null) env[k] = process.env[k];
+  return env;
+}
+
 function rodarPiper(bin, args, texto, timeoutMs) {
   return new Promise((res, rej) => {
-    const p = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"] });
+    const p = spawn(bin, args, { stdio: ["pipe", "pipe", "pipe"], env: ambienteMinimo() });
     let saida = "", erros = "";
     let terminou = false;
 
@@ -64,7 +74,20 @@ export function vozesDisponiveis() {
   } catch { return []; }
 }
 
-export async function diagnostico() {
+// (31 out 2026, P1, R11) O diagnóstico roda o Piper de verdade — então roda SÓ no boot
+// e quando alguém pede o estado (`diagnostico({ forcar: true })`); o resto usa o
+// resultado guardado. Antes cada fala rodava o Piper DUAS vezes (o teste e a fala), e
+// o arquivo de teste tinha nome fixo: duas calls ao mesmo tempo apagavam o WAV uma da
+// outra e a fala falhava com "WAV vazio".
+let diagGuardado = null;
+export async function diagnostico({ forcar = false } = {}) {
+  if (diagGuardado && !forcar) return diagGuardado;
+  const d = await diagnosticar();
+  diagGuardado = d;
+  return d;
+}
+
+async function diagnosticar() {
   if (!fs.existsSync(PIPER)) {
     return { ok: false, erro: `binário do Piper não encontrado em ${PIPER}`, vozes: [] };
   }
@@ -78,7 +101,7 @@ export async function diagnostico() {
     return { ok: false, erro: `falta ${vozAtual}.onnx.json ao lado do .onnx (o Piper precisa dos dois)`, vozes };
   }
   try {
-    const prova = path.join(TMP, "prova.wav");
+    const prova = path.join(TMP, `prova-${crypto.randomUUID()}.wav`);
     await rodarPiper(PIPER, ["--model", caminhoVoz(vozAtual), "--output_file", prova],
       "teste", 15_000);
     const bytes = fs.existsSync(prova) ? fs.statSync(prova).size : 0;
@@ -226,7 +249,7 @@ export async function aplicarEfeito(arquivo, nome, tom = null) {
         "-hide_banner", "-loglevel", "error",
         "-i", arquivo, "-af", cadeia,
         "-ar", "48000", "-ac", "1", "-y", saida,
-      ]);
+      ], { env: ambienteMinimo() });
       let err = "";
       p.stderr.on("data", (d) => { err += d; });
       p.on("error", rej);

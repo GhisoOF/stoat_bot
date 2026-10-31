@@ -30,6 +30,18 @@ export function semPingEmMassa(texto, { maxMencoes = 3 } = {}) {
   return t;
 }
 
+// Texto que vem DE FORA (webhook, RSS, transcrição, título de feed, motivo
+// digitado): um neutralizador só (DRY). Tira o ping em massa, desmascara link
+// ("[github.com](http://outro)" vira "github.com (http://outro)"), tira o
+// caractere de controle e corta no tamanho.
+export function textoDeFora(texto, { max = 2000, maxMencoes = 3 } = {}) {
+  if (texto == null) return "";
+  let t = String(texto).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "");
+  t = t.replace(/\[([^\]\n]{0,200})\]\((\S{1,500}?)\)/g, (_m, rotulo, url) => `${rotulo} (${url})`);
+  t = semPingEmMassa(t, { maxMencoes });
+  return t.length > max ? t.slice(0, max - 1) + "…" : t;
+}
+
 // ── Endereços: só internet pública ─────────────────────────────────────────
 function ipv4Privado(ip) {
   const [a, b] = ip.split(".").map(Number);

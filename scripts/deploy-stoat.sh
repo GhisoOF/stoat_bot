@@ -15,7 +15,8 @@
 #
 #  Variáveis: REPO (o checkout), FORCAR=1 (sobe mesmo com o main à frente
 #  da base do zip — desfaz esses commits!), TESTAR=1 (roda os testes antes
-#  do commit; precisa de node_modules no checkout).
+#  do commit; precisa de node_modules no checkout), MINIPC (o usuario@host
+#  do MiniPC, só para a dica do fim — o endereço não fica no repositório).
 #
 #  Depois do push, no MiniPC: ~/atualizar-minipc.sh (backup do banco, pull,
 #  build e o log da subida).
@@ -41,6 +42,10 @@ MSG="${2:-}"
 TMP="$(mktemp -d)"
 
 trap 'rm -rf "$TMP"' EXIT
+
+# Cópia de um .env (token do bot, chaves): só o dono lê (600), também quando
+# o destino já existia com outra permissão.
+copiar_env() { (umask 077; cp "$1" "$2") && chmod 600 "$2"; }
 
 erro() { printf '\n\033[31m✗ %s\033[0m\n' "$1" >&2; exit 1; }
 info() { printf '\033[36m→ %s\033[0m\n' "$1"; }
@@ -125,9 +130,9 @@ fi
 okay "pacote válido: $(find "$FONTE" -type f | wc -l) arquivo(s)"
 
 # ── 2. Guardar os .env que o passo 3 pode levar junto ──
-[ -f .env ]             && cp .env "$ENV_BACKUP"                 && okay ".env da raiz guardado em $ENV_BACKUP"
-[ -f ia-servico/.env ]  && cp ia-servico/.env "$IA_ENV_BACKUP"   && okay "ia-servico/.env guardado em $IA_ENV_BACKUP"
-[ -f voz-servico/.env ] && cp voz-servico/.env "$VOZ_ENV_BACKUP" && okay "voz-servico/.env guardado em $VOZ_ENV_BACKUP"
+[ -f .env ]             && copiar_env .env "$ENV_BACKUP"                 && okay ".env da raiz guardado em $ENV_BACKUP"
+[ -f ia-servico/.env ]  && copiar_env ia-servico/.env "$IA_ENV_BACKUP"   && okay "ia-servico/.env guardado em $IA_ENV_BACKUP"
+[ -f voz-servico/.env ] && copiar_env voz-servico/.env "$VOZ_ENV_BACKUP" && okay "voz-servico/.env guardado em $VOZ_ENV_BACKUP"
 
 # ── 3. Substituir os diretórios versionados ──
 info "removendo as versões antigas dos módulos"
@@ -152,17 +157,17 @@ rm -f ./*.zip ./_stoat-bot*_logs.txt
 
 # ── 4. Devolver os .env (nunca sobrescrevendo um existente) ──
 if [ ! -f .env ] && [ -f "$ENV_BACKUP" ]; then
-  cp "$ENV_BACKUP" .env
+  copiar_env "$ENV_BACKUP" .env
   okay ".env da raiz devolvido ($(wc -l < .env) linhas)"
 fi
 mkdir -p ia-servico
 if [ ! -f ia-servico/.env ]; then
-  if   [ -f "$IA_ENV_BACKUP" ]; then cp "$IA_ENV_BACKUP" ia-servico/.env; okay "ia-servico/.env devolvido"
-  elif [ -f "$TOKEN_BACKUP" ];  then cp "$TOKEN_BACKUP" ia-servico/.env; avis "só havia o backup do token em ia-servico/.env"
+  if   [ -f "$IA_ENV_BACKUP" ]; then copiar_env "$IA_ENV_BACKUP" ia-servico/.env; okay "ia-servico/.env devolvido"
+  elif [ -f "$TOKEN_BACKUP" ];  then copiar_env "$TOKEN_BACKUP" ia-servico/.env; avis "só havia o backup do token em ia-servico/.env"
   fi
 fi
 if [ -d voz-servico ] && [ ! -f voz-servico/.env ] && [ -f "$VOZ_ENV_BACKUP" ]; then
-  cp "$VOZ_ENV_BACKUP" voz-servico/.env
+  copiar_env "$VOZ_ENV_BACKUP" voz-servico/.env
   okay "BOT_TOKEN/VOZ_CHAVE devolvidos a voz-servico/.env"
 fi
 
@@ -170,6 +175,7 @@ fi
 FALTA=""
 grep -qE "^BOT_TOKEN=." .env 2>/dev/null || FALTA="$FALTA BOT_TOKEN"
 grep -qE "^(DONO|SUPER_ADMINS)=." .env 2>/dev/null || FALTA="$FALTA DONO"
+grep -qE "^SEARXNG_SECRET=." .env 2>/dev/null || FALTA="$FALTA SEARXNG_SECRET(openssl-rand-hex-32)"
 if ! grep -qE "^IA=(0|false|nao|não|off|no)\b" .env 2>/dev/null; then
   grep -qE "^(SERVIDOR|CHAT_SERVIDORES)=." .env 2>/dev/null || FALTA="$FALTA SERVIDOR"
   grep -qE "^(IA_MODO|LLM_URL)=." .env 2>/dev/null || FALTA="$FALTA IA_MODO-ou-LLM_URL"
@@ -283,5 +289,5 @@ done
 
 echo
 info "Actions: https://github.com/GhisoOF/stoat_bot/actions"
-info "no MiniPC:  ssh void@gmktec.tailaeddbe.ts.net '~/atualizar-minipc.sh'"
+info "no MiniPC:  ssh ${MINIPC:-<usuario@host-do-minipc>} '~/atualizar-minipc.sh'"
 info "            (backup do banco → git pull → docker compose up -d --build → log da subida)"

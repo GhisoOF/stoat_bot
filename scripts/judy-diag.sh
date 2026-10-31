@@ -58,12 +58,17 @@ diagnostico() {
 
   titulo "IA (dentro do container)"
   local saude
-  saude=$(docker exec "$CONTAINER" curl -sf --max-time 5 "http://127.0.0.1:$IA_PORTA/saude" 2>/dev/null)
-  if [ -n "$saude" ]; then
+  # (31 out 2026) o /saude dos serviços exige a chave (x-chave). Ela é lida do
+  # ambiente do container; se o iniciar.js a gerou sozinho (sem chave no .env),
+  # o diag só vê que a porta responde (401) — ponha IA_SERVICO_CHAVE/VOZ_CHAVE no .env.
+  saude=$(docker exec "$CONTAINER" sh -c 'curl -sf --max-time 5 -H "x-chave: ${IA_SERVICO_CHAVE:-$IA_CHAVE}" "http://127.0.0.1:$1/saude"' _ "$IA_PORTA" 2>/dev/null)
+  if [ -z "$saude" ] && [ "$(docker exec "$CONTAINER" curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1:$IA_PORTA/saude" 2>/dev/null)" = "401" ]; then
+    aviso "ia-servico responde, mas sem a chave no .env o diag não vê os detalhes (defina IA_SERVICO_CHAVE)"
+  elif [ -n "$saude" ]; then
     if echo "$saude" | grep -q '"alcancavel":true'; then
       ok "ia-servico responde e alcança o LLM"
     else
-      aviso "ia-servico responde, mas NÃO alcança o LLM (confira LLM_URL / IA_MODO)"
+      aviso "ia-servico responde, mas NÃO alcança o LLM (confira LLM_URL)"
       problemas=$((problemas+1))
     fi
     echo "$saude" | grep -o '"ferramentas":\[[^]]*\]' | head -1
@@ -73,9 +78,13 @@ diagnostico() {
   fi
 
   titulo "Voz"
-  if docker exec "$CONTAINER" curl -sf --max-time 5 "http://127.0.0.1:$VOZ_PORTA/saude" >/dev/null 2>&1; then
+  local voz_http
+  voz_http=$(docker exec "$CONTAINER" sh -c 'curl -s -o /dev/null -w "%{http_code}" --max-time 5 -H "x-chave: $VOZ_CHAVE" "http://127.0.0.1:$1/saude"' _ "$VOZ_PORTA" 2>/dev/null)
+  if [ "$voz_http" = "200" ]; then
     ok "voz embutida respondendo na porta $VOZ_PORTA"
-  elif [ -n "${VOZ_SERVICO_URL:-}" ] && curl -sf --max-time 5 "$VOZ_SERVICO_URL/saude" >/dev/null 2>&1; then
+  elif [ "$voz_http" = "401" ]; then
+    aviso "voz embutida responde, mas sem VOZ_CHAVE no .env o diag não vê os detalhes"
+  elif [ -n "${VOZ_SERVICO_URL:-}" ] && curl -sf --max-time 5 -H "x-chave: ${VOZ_CHAVE:-}" "$VOZ_SERVICO_URL/saude" >/dev/null 2>&1; then
     ok "voz externa respondendo em $VOZ_SERVICO_URL"
   else
     aviso "voz não responde — normal se VOZ_ATIVA=0 e não há serviço externo"

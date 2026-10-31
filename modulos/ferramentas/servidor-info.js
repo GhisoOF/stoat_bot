@@ -23,6 +23,7 @@ import { citarInterno, citar, subExibido } from "../core/aliases.js";
 import { listarMembros, contarMembros } from "../core/membros.js";
 import { resolverCanal, ehBot } from "../core/ids.js";
 import { canalDoServidor } from "../moderacao/pertence.js";
+import { calcularPermissoes, BITS } from "../moderacao/permissoes.js";
 import { tr, lingua } from "../core/i18n.js";
 
 const CACHE_REGRAS_MS = 10 * 60_000;
@@ -50,6 +51,23 @@ function rolesDe(server) {
 function canaisDe(server) {
   try { return (server?.channels ?? []).filter((c) => c && typeof c === "object"); } catch { return []; }
 }
+
+// ─── Quem vê o quê (31 out 2026, R9) ────────────────────────────────────────
+// `&servidor canais` e `regras` são abertos a todos e mostravam canais privados
+// (nome e descrição); a IA recebia o mesmo. Agora só sai o canal que QUEM PEDE
+// enxerga (ViewChannel dele). `quem` = { uid, membro }; sem `quem`, vale o que o
+// @everyone enxerga (o mais fechado).
+export function veCanal(server, canal, quem = null) {
+  if (!canal) return false;
+  if (quem?.uid && server?.ownerId === quem.uid) return true;
+  const membro = quem?.membro ?? null;
+  if (membro && typeof membro.hasPermission === "function") {
+    try { return membro.hasPermission(canal, "ViewChannel") === true; } catch { /* sem o cálculo da lib: o nosso */ }
+  }
+  const { valor } = calcularPermissoes(server, canal, membro ?? { roles: [] });
+  return typeof valor === "number" && (valor & BITS.ViewChannel) === BITS.ViewChannel;
+}
+export const quemDaMensagem = (message) => ({ uid: message?.authorId ?? null, membro: message?.member ?? null });
 
 const PERMS_MODERAR = ["BanMembers", "KickMembers", "TimeoutMembers", "ManageMessages", "ManageServer", "ManagePermissions"];
 export function cargoModera(role) {
@@ -135,9 +153,9 @@ export async function cargosComContagem(server) {
     .sort((a, b) => a.rank - b.rank);
 }
 
-// Canais em ordem, agrupados por categoria (como o Stoat mostra).
-export function canaisOrganizados(server) {
-  const canais = canaisDe(server);
+// Canais em ordem, agrupados por categoria (como o Stoat mostra) — só os que `quem` vê.
+export function canaisOrganizados(server, quem = null) {
+  const canais = canaisDe(server).filter((c) => veCanal(server, c, quem));
   const porId = new Map(canais.map((c) => [c.id ?? c._id, c]));
   const usados = new Set();
   const grupos = [];
@@ -160,7 +178,9 @@ export function canalDeRegras(server, config) {
   const canais = canaisDe(server);
   // canal fixado só vale se for DESTE servidor (senão um ID de fora leria outro servidor)
   if (fixo && canalDoServidor(server, fixo)) return canais.find((c) => (c.id ?? c._id) === fixo) ?? { id: fixo };
-  const candidatos = canais.filter((c) => RE_CANAL_REGRAS.test(c?.name ?? "") && !/voice/i.test(c?.type ?? ""));
+  // a busca automática só pega canal que o @everyone vê: um "#regras-da-staff"
+  // privado não vira as regras de todo mundo (nem material da IA)
+  const candidatos = canais.filter((c) => RE_CANAL_REGRAS.test(c?.name ?? "") && !/voice/i.test(c?.type ?? "") && veCanal(server, c, null));
   return candidatos.find((c) => /^(📜|📌|❗|⚠️|\W)*\s*(regras|rules)\s*$/i.test(c.name ?? "")) ?? candidatos[0] ?? null;
 }
 
@@ -183,10 +203,12 @@ async function lerCanal(canal, { forcar = false } = {}) {
 }
 
 // → { fonte: "texto"|"canal", texto, canal? } ou { fonte: null, motivo }
-export async function regras(server, config, { forcar = false } = {}) {
+// `quem`: só lê o canal que quem pede enxerga (sem `quem`, o que o @everyone vê).
+export async function regras(server, config, { forcar = false, quem = null } = {}) {
   const info = config?.servidorInfo ?? {};
   if (info.regrasTexto?.trim()) return { fonte: "texto", texto: info.regrasTexto.trim() };
-  const canal = canalDeRegras(server, config);
+  const achado = canalDeRegras(server, config);
+  const canal = achado && veCanal(server, canaisDe(server).find((c) => (c.id ?? c._id) === (achado.id ?? achado._id)) ?? achado, quem) ? achado : null;
   if (!canal) return { fonte: null, motivo: "sem-canal" };
   try {
     const texto = await lerCanal(canal, { forcar });
@@ -227,7 +249,9 @@ export function secoesDaPergunta(texto) {
 
 const FONTE_REGRAS = { texto: "texto definido pela staff", canal: "canal" };
 
-export async function materialParaIA(pergunta, { server, config, client = null, lang = "pt" } = {}) {
+// `quem` = { uid, membro } de quem perguntou: os canais e as regras saem só do
+// que essa pessoa vê (sem `quem`: só o que o @everyone vê).
+export async function materialParaIA(pergunta, { server, config, client = null, lang = "pt", quem = null } = {}) {
   if (!server) return "";
   const secoes = secoesDaPergunta(pergunta);
   if (!secoes.size) return "";
@@ -242,7 +266,7 @@ export async function materialParaIA(pergunta, { server, config, client = null, 
     partes.push(`• ${en ? "Staff" : "Equipe"}: ${en ? "owner" : "dono"}: ${e.dono ?? "?"}${linhas.length ? `. ${linhas.join(". ")}` : en ? ". No staff role marked or found." : ". Nenhum cargo de staff marcado ou encontrado."}`);
   }
   if (secoes.has("regras")) {
-    const r = await regras(server, config);
+    const r = await regras(server, config, { quem });
     partes.push(r.fonte
       ? `• ${en ? "Rules" : "Regras"} (${r.fonte === "canal" ? `${en ? "from channel" : "do canal"} #${r.canal?.nome ?? "?"}` : FONTE_REGRAS.texto}):\n${r.texto.slice(0, 1800)}`
       : `• ${en ? "Rules" : "Regras"}: ${en ? "none registered and no rules channel I can read" : "nenhuma cadastrada e nenhum canal de regras que eu consiga ler"}${r.canal ? ` (#${r.canal.nome})` : ""}.`);
@@ -252,7 +276,7 @@ export async function materialParaIA(pergunta, { server, config, client = null, 
     partes.push(`• ${en ? "Roles (highest first)" : "Cargos (do mais alto ao mais baixo)"}: ${cs.slice(0, 30).map((c) => `${c.nome}${c.n != null ? ` (${c.n})` : ""}`).join(", ") || "—"}`);
   }
   if (secoes.has("canais")) {
-    const gs = canaisOrganizados(server);
+    const gs = canaisOrganizados(server, quem);
     partes.push(`• ${en ? "Channels" : "Canais"}:\n${gs.map((gr) => `${gr.titulo ? `[${gr.titulo}] ` : ""}${gr.canais.map((c) => `#${c.nome}${c.voz ? (en ? " (voice)" : " (voz)") : ""}${c.descricao ? ` — ${c.descricao.slice(0, 120)}` : ""}`).join("; ")}`).join("\n").slice(0, 1500)}`);
   }
   const faq = config?.servidorInfo?.faq ?? [];
@@ -351,7 +375,7 @@ export async function cmdServidor(message, args, ctx) {
       delete info.regrasTexto; salvarConfig?.();
       return sendEmbed(message.channel, { title: "📜", description: T("Texto das regras apagado — volto a ler o canal de regras.", "Rules text cleared — back to reading the rules channel.", "Texto de las reglas borrado — vuelvo a leer el canal de reglas."), colour: COR.info });
     }
-    const r = await regras(server, config, { forcar: true });
+    const r = await regras(server, config, { forcar: true, quem: quemDaMensagem(message) });
     if (!r.fonte) {
       const porque = r.motivo === "sem-acesso" ? T(`não consigo ler <#${r.canal.id}> (falta **ViewChannel**/**ReadMessageHistory** para a Judy)`, `I can't read <#${r.canal.id}> (Judy needs **ViewChannel**/**ReadMessageHistory**)`, `no puedo leer <#${r.canal.id}> (a Judy le falta **ViewChannel**/**ReadMessageHistory**)`)
         : r.motivo === "canal-vazio" ? T(`<#${r.canal.id}> está vazio`, `<#${r.canal.id}> is empty`, `<#${r.canal.id}> está vacío`)
@@ -370,7 +394,7 @@ export async function cmdServidor(message, args, ctx) {
 
   // ── &servidor canais ──
   if (sub === "canais") {
-    const gs = canaisOrganizados(server);
+    const gs = canaisOrganizados(server, quemDaMensagem(message));
     const linhas = gs.flatMap((g) => [g.titulo ? `**${g.titulo}**` : null, ...g.canais.map((c) => `${c.voz ? "🔊" : "#"} <#${c.id}>${c.descricao ? ` — ${c.descricao.slice(0, 120)}` : ""}`), ""]).filter((x) => x !== null);
     return sendEmbed(message.channel, { title: T("💬 Canais", "💬 Channels", "💬 Canales"), description: linhas.join("\n").trim() || T("Nenhum canal.", "No channels.", "Ningún canal."), colour: COR.info });
   }

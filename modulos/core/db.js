@@ -1018,12 +1018,15 @@ export function addHistorico(userId, papel, conteudo, { serverId = null, canalId
 }
 
 // `global`: a pessoa escolheu que a conversa continue entre servidores e canais
-// (&privacidade fio global) — o fio é dela, não do canal.
+// (&privacidade fio global) — o fio é dela, não do canal. (31 out 2026, P1, R9) De
+// OUTRO canal vêm só as falas DELA: a resposta da Judy noutro servidor (que pode citar
+// gente e coisas de lá) não atravessa; deste canal, a conversa inteira.
 export function getHistorico(userId, limite = 6, { canalId = null, minutos = 30, global = false } = {}) {
   const desde = new Date(Date.now() - minutos * 60_000).toISOString();
   const linhas = global
     ? prep(`SELECT papel, conteudo FROM ia_historico
-      WHERE userId = ? AND momento >= ? ORDER BY momento DESC LIMIT ?`).all(userId, desde, limite * 2)
+      WHERE userId = ? AND momento >= ? AND (papel = 'user' OR canalId IS ?)
+      ORDER BY momento DESC LIMIT ?`).all(userId, desde, canalId, limite * 2)
     : prep(`SELECT papel, conteudo FROM ia_historico
       WHERE userId = ? AND canalId IS ? AND momento >= ?
       ORDER BY momento DESC LIMIT ?`).all(userId, canalId, desde, limite * 2);
@@ -1166,36 +1169,28 @@ export function setCuidado(serverId, userId, ligado) {
   return !!ligado;
 }
 
-// Apaga TUDO que a IA sabe de uma pessoa (fatos + perfil + histórico).
+// Apaga TUDO que a IA sabe de uma pessoa (fatos + perfil + histórico) — é a própria
+// pessoa que pede (`&chat esquecer`). (31 out 2026, P1, Reparo) Sem `catch {}`: se um
+// DELETE falha, quem pediu ouve "não consegui", não "apagado".
 export function apagarTudoDaPessoa(serverId, userId) {
   const f = prep("DELETE FROM ia_fatos_pessoa WHERE serverId = ? AND userId = ?").run(serverId, userId).changes ?? 0;
   const p = prep("DELETE FROM ia_perfil WHERE serverId = ? AND userId = ?").run(serverId, userId).changes ?? 0;
-  let h = 0, m = 0;
-  try { h = prep("DELETE FROM ia_historico WHERE userId = ?").run(userId).changes ?? 0; } catch {}
-  try { m = prep("DELETE FROM ia_memoria WHERE userId = ?").run(userId).changes ?? 0; } catch {}
+  const h = prep("DELETE FROM ia_historico WHERE userId = ?").run(userId).changes ?? 0;
+  const m = prep("DELETE FROM ia_memoria WHERE userId = ?").run(userId).changes ?? 0;
   return { fatos: f, perfil: p, historico: h, memoria: m };
 }
 
-// Apaga TODA a memória da IA no servidor (fatos de pessoas, de servidor, perfis).
+// Apaga TODA a memória da IA DESTE servidor (fatos de pessoas, de servidor, perfis e
+// o histórico de conversa daqui). (31 out 2026, P1, R9) Só o que tem o serverId dele:
+// a ia_memoria é global (de cada pessoa, em todos os servidores) — a staff de UM
+// servidor não apaga o que a pessoa construiu nos outros; quem quer, apaga a sua com
+// `&chat esquecer` ou `&privacidade memoria off`.
 export function apagarMemoriaServidor(serverId) {
-  // ids: coletado ANTES dos DELETEs — depois, as tabelas de referência já estariam vazias
-  let idsDaqui = [];
-  try {
-    idsDaqui = prep(`SELECT userId FROM ia_perfil WHERE serverId = ?
-      UNION SELECT userId FROM ia_fatos_pessoa WHERE serverId = ?
-      UNION SELECT userId FROM ia_historico WHERE serverId = ?`)
-      .all(serverId, serverId, serverId).map((r) => r.userId).filter(Boolean);
-  } catch {}
-
   const fp = prep("DELETE FROM ia_fatos_pessoa WHERE serverId = ?").run(serverId).changes ?? 0;
   const fs = prep("DELETE FROM ia_fatos_servidor WHERE serverId = ?").run(serverId).changes ?? 0;
   const pf = prep("DELETE FROM ia_perfil WHERE serverId = ?").run(serverId).changes ?? 0;
   const hi = prep("DELETE FROM ia_historico WHERE serverId = ?").run(serverId).changes ?? 0;
-  let me = 0;
-  try {
-    for (const id of idsDaqui) me += prep("DELETE FROM ia_memoria WHERE userId = ?").run(id).changes ?? 0;
-  } catch {}
-  return { fatosPessoa: fp, fatosServidor: fs, perfis: pf, historico: hi, memoriaAntiga: me };
+  return { fatosPessoa: fp, fatosServidor: fs, perfis: pf, historico: hi };
 }
 
 export function addFatoServidor(serverId, fato, confianca = 0.5) {

@@ -6,10 +6,24 @@ import { tr, lingua } from "../core/i18n.js";
 import { chamarApi } from "../core/stoat-api.js";
 import * as abrev from "../core/abreviacoes.js";
 import * as filtro from "./tts-filtro.js";
+import { donosDoBot } from "../core/prioridade.js";
+import { canalDoServidor } from "../moderacao/pertence.js";
+import { descreverErro, registrarErro } from "../core/erros.js";
 
 const VOZ_URL   = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
 const VOZ_CHAVE = process.env.VOZ_CHAVE || "";
 const VOZ_API_ESPERADA = 11;
+
+// (31 out 2026, P1, R10) O que o serviço de voz responde de errado (caminho, endereço,
+// nome de variável, a última linha do Piper) vai ao log e ao DONO do bot — é ele quem
+// mexe na máquina. Para os outros, uma frase curta.
+const ehDonoDoBot = (message) => !!message?.authorId && donosDoBot().has(message.authorId);
+function motivoDaVoz(e, ctx, message) {
+  if (e?.semServico) return tr(ctx, "o serviço de voz não está ligado nesta instalação", "the voice service isn't running on this install", "el servicio de voz no está activo en esta instalación");
+  if (ehDonoDoBot(message)) return String(e?.message ?? e).replace(/`/g, "").slice(0, 300);
+  registrarErro("TTS", e);
+  return descreverErro(e, lingua(ctx) === "es" ? "es" : lingua(ctx) === "en" ? "en" : "pt");
+}
 
 // (24 out 2026) sem espera por pessoa por padrão — "está atrapalhando". `&tts cooldown <s>`
 // ou TTS_COOLDOWN_MS liga de novo, se um servidor quiser.
@@ -153,7 +167,7 @@ function garantirConfig(config) {
 }
 
 async function chamar(rota, corpo = null, metodo = "POST") {
-  if (!VOZ_URL) throw new Error("VOZ_SERVICO_URL não configurada no ambiente do bot");
+  if (!VOZ_URL) throw Object.assign(new Error("VOZ_SERVICO_URL não configurada no ambiente do bot"), { semServico: true });
   const res = await fetch(`${VOZ_URL}${rota}`, {
     method: metodo,
     headers: { "content-type": "application/json", ...(VOZ_CHAVE ? { "x-chave": VOZ_CHAVE } : {}) },
@@ -186,7 +200,7 @@ export async function aoMensagem(message, ctx) {
     if (c.filtro !== false) {
       const v = filtro.avaliar(texto);
       if (!v.falar) {
-        if (ctx.cfgGlobal?.debug !== false) console.log(`[TTS] ignorei (${v.motivo}): ${JSON.stringify(texto.slice(0, 60))}`);
+        if (ctx.cfgGlobal?.debug === true) console.log(`[TTS] ignorei (${v.motivo}): ${JSON.stringify(texto.slice(0, 60))}`);
         return false;
       }
     }
@@ -268,7 +282,10 @@ async function executarResgate({ presa, auxPreferida = null, message, ctx, c, se
   const falha = (t) => passos.push(`❌ ${t}`);
   const resultado = (okFinal, motivo = null, extra = {}) => ({ ok: okFinal, passos, motivo, ...extra });
 
-  if (!meuId || !token) return resultado(false, "config", { dica: "sem `BOT_TOKEN`/id próprio no ambiente do bot" });
+  if (!meuId || !token) {
+    console.error("[TTS] resgate: sem BOT_TOKEN ou sem o id do próprio bot no ambiente");
+    return resultado(false, "config", { dica: tr(ctx, "falta configuração do bot para o resgate — avise quem hospeda o bot", "the bot is missing configuration for the rescue — tell whoever hosts the bot", "al bot le falta configuración para el rescate — avisa a quien aloja el bot") });
+  }
 
   const candidatas = candidatasAuxiliares(server, client, presa, auxPreferida);
   if (!candidatas.length) return resultado(false, "sem-auxiliar");
@@ -394,7 +411,10 @@ function relatarResgate(r, { presa, message, ctx, c, lang }) {
       `O Stoat aceitou o mover mas não mandou o evento \`UserMoveVoiceChannel\` com o token. \`${citarInterno("sair", P)}\` e tente de novo.`,
       `Stoat accepted the move but never sent the \`UserMoveVoiceChannel\` event with the token. \`${citarInterno("sair", P)}\` and try again.`,
       `Stoat aceptó el movimiento pero no envió el evento \`UserMoveVoiceChannel\` con el token. \`${citar("sair", "es", P)}\` e inténtalo de nuevo.`),
-    "token-join": tr(ctx,
+    "token-join": !ehDonoDoBot(message) ? tr(ctx,
+      "O serviço de voz recusou a entrada com o token — avise quem hospeda o bot.",
+      "The voice service refused the join with the token — tell whoever hosts the bot.",
+      "El servicio de voz rechazó la entrada con el token — avisa a quien aloja el bot.") : tr(ctx,
       `Se o serviço respondeu "rota desconhecida", atualize o \`voz-servico/\` na máquina (isto precisa da versão ${VOZ_API_ESPERADA} da API).`,
       `If the service answered "rota desconhecida", update \`voz-servico/\` on the machine (this needs API version ${VOZ_API_ESPERADA}).`,
       `Si el servicio respondió "rota desconhecida", actualiza \`voz-servico/\` en la máquina (esto necesita la versión ${VOZ_API_ESPERADA} de la API).`),
@@ -427,12 +447,13 @@ export async function cmdTts(message, args, ctx) {
   // ── estado (público) ──
   if (sub === "estado" || sub === "status" || sub === "saude" || sub === "health") {
     let saude = null, erroSaude = null;
-    try { saude = await chamar("/saude", null, "GET"); }
-    catch (e) {
-      erroSaude = !VOZ_URL
-        ? tr(ctx, "`VOZ_SERVICO_URL` não configurada no ambiente do bot", "`VOZ_SERVICO_URL` isn't set in the bot's environment", "`VOZ_SERVICO_URL` no está configurada en el entorno del bot")
-        : (e?.message ?? String(e));
-    }
+    try { saude = await chamar("/saude?forcar=1", null, "GET"); }   // o estado refaz o teste do Piper
+    catch (e) { erroSaude = motivoDaVoz(e, ctx, message); }
+    // (31 out 2026, P1) os detalhes técnicos (versão, Piper, biblioteca) são do dono do
+    // bot; e as calls listadas são só as DESTE servidor (antes, as de todos)
+    const dono = ehDonoDoBot(message);
+    const servidorAqui = await getServer(message).catch(() => null);
+    const daqui = (x) => x?.serverId ? x.serverId === serverId : canalDoServidor(servidorAqui, x?.canalVoz);
 
     const linhas = [
       `**${tr(ctx, "Ligado", "Enabled", "Activado")}:** ${c.ativo ? "🟢" : "🔴"}`,
@@ -446,7 +467,7 @@ export async function cmdTts(message, args, ctx) {
       "",
       `**${tr(ctx, "Serviço de voz", "Voice service", "Servicio de voz")}:** ${saude ? "🟢 ok" : `🔴 ${erroSaude}`}`,
     ];
-    if (saude) {
+    if (saude && dono) {
       const v = Number(saude.versao ?? 1);
       linhas.push(v < VOZ_API_ESPERADA
         ? `**${tr(ctx, "Versão do serviço", "Service version", "Versión del servicio")}:** ⚠️ **${v}** ${tr(ctx,
@@ -457,7 +478,9 @@ export async function cmdTts(message, args, ctx) {
       linhas.push(`**Piper:** ${saude.piper?.ok ? `🟢 ${saude.piper.vozAtual}` : `🔴 ${saude.piper?.erro}`}`);
       linhas.push(`**${tr(ctx, "revoice (biblioteca)", "revoice (library)", "revoice (biblioteca)")}:** ${saude.voz?.pronto
         ? tr(ctx, "🟢 carregada", "🟢 loaded", "🟢 cargada") : `🔴 ${saude.voz?.erro}`}`);
-      const con = saude.voz?.conexoes ?? [];
+    }
+    if (saude) {
+      const con = (saude.voz?.conexoes ?? []).filter(daqui);
       linhas.push(`**${tr(ctx, "Em calls", "In calls", "En llamadas")}:** ${con.length
         ? con.map((x) => `<#${x.canalVoz}> (${x.falas} ${tr(ctx, "falas", "utterances", "frases")})`).join(", ")
         : "_—_"}`);
@@ -497,10 +520,11 @@ export async function cmdTts(message, args, ctx) {
           description: `Envía \`${citar("entrar", "es", PREFIXO)}\` primero (estando en una llamada) — el diagnóstico examina la llamada que estoy usando.`, colour: COR.erro }));
     }
     let d;
+    const dono = ehDonoDoBot(message);
     try { d = await chamar("/diagnostico", { canalVoz: c.canalVoz }); }
     catch (e) {
-      const motivo = String(e.message ?? e).replace(/`/g, "");
-      const velho = /rota desconhecida|HTTP 404/i.test(motivo);
+      const motivo = motivoDaVoz(e, ctx, message);
+      const velho = dono && /rota desconhecida|HTTP 404/i.test(String(e?.message ?? ""));
       return sendEmbed(message.channel, velho ? tr(ctx, {
         title: "⚠️ O serviço de voz está desatualizado",
         description: [
@@ -560,16 +584,17 @@ export async function cmdTts(message, args, ctx) {
         colour: COR.aviso,
       }) : {
         title: tr(ctx, "❌ O serviço de voz não respondeu", "❌ The voice service didn't answer", "❌ El servicio de voz no respondió"),
-        description: `\`${motivo}\`\n\n${tr(ctx,
-          "O problema é antes da call: o `judy-voz` está fora do ar ou inalcançável. Precisa de mão na máquina.",
-          "The problem is before the call: `judy-voz` is down or unreachable. It needs a hand on the machine.",
-          "El problema está antes de la llamada: `judy-voz` está caído o inalcanzable. Hay que intervenir en la máquina.")}`,
+        description: `${motivo}\n\n${tr(ctx,
+          "O problema é antes da call: o serviço de voz está fora do ar ou inalcançável — avise quem hospeda o bot.",
+          "The problem is before the call: the voice service is down or unreachable — tell whoever hosts the bot.",
+          "El problema está antes de la llamada: el servicio de voz está caído o inalcanzable — avisa a quien aloja el bot.")}`,
         colour: COR.erro });
     }
 
     const marca = (v) => v === true ? "✅" : v === false ? "❌" : "❔";
-    const linhas = (d.etapas ?? []).map((e) =>
-      `${marca(e.ok)} **${e.etapa}** — ${e.ms}ms${e.status ? ` · HTTP ${e.status}` : ""}\n   ${String(e.detalhe ?? "").slice(0, 160).replace(/`/g, "")}`);
+    const linhas = (d.etapas ?? []).map((e) => dono
+      ? `${marca(e.ok)} **${e.etapa}** — ${e.ms}ms${e.status ? ` · HTTP ${e.status}` : ""}\n   ${String(e.detalhe ?? "").slice(0, 160).replace(/`/g, "")}`
+      : `${marca(e.ok)} **${e.etapa}** — ${e.ms}ms${e.status ? ` · HTTP ${e.status}` : ""}`);
 
     const marcos = d.marcos ?? d.ultimaFalha?.marcos ?? [];
     const linhaMarcos = marcos.length
@@ -580,7 +605,17 @@ export async function cmdTts(message, args, ctx) {
     const passo = (nome) => d.etapas?.find((e) => e.etapa === nome);
     const api = passo("api+token"), canal = passo("canal"), jc = passo("join_call"), tcp = passo("livekit-tcp");
     let veredito;
-    if (d.flagNode !== "ok") {
+    // o que se resolve na MÁQUINA (flag do Node, token, endereço da API, rede/UDP) é
+    // do dono do bot; a staff vê "avise quem hospeda" — sem nome de variável nem rede
+    const daMaquina = tr(ctx,
+      "🔎 **O problema está na máquina que roda a voz**, não neste servidor. Avise quem hospeda o bot — ele vê o detalhe com este mesmo comando.",
+      "🔎 **The problem is on the machine that runs the voice**, not on this server. Tell whoever hosts the bot — they see the details with this same command.",
+      "🔎 **El problema está en la máquina que ejecuta la voz**, no en este servidor. Avisa a quien aloja el bot — ve el detalle con este mismo comando.");
+    const infra = d.flagNode !== "ok" || api?.ok === false || tcp?.ok === false
+      || (jc?.ok === false && /HTML/i.test(String(jc.detalhe ?? ""))) || (jc?.ok && tcp?.ok);
+    if (!dono && infra) {
+      veredito = daMaquina;
+    } else if (d.flagNode !== "ok") {
       veredito = tr(ctx,
         "⚠️ **O serviço está sem a flag do Node.** Suba o `judy-voz` com `--no-experimental-global-navigator` — sem ela a entrada falha sempre.",
         "⚠️ **The service is missing the Node flag.** Start `judy-voz` with `--no-experimental-global-navigator` — without it joining always fails.",
@@ -629,7 +664,7 @@ export async function cmdTts(message, args, ctx) {
     } else {
       veredito = tr(ctx, "🔎 Resultado inconclusivo — veja as etapas acima.", "🔎 Inconclusive — see the steps above.", "🔎 Resultado no concluyente — mira los pasos de arriba.");
     }
-    if (!d.debug) {
+    if (!d.debug && dono) {
       veredito += tr(ctx,
         "\n\n_Para o log contar mais: suba o `judy-voz` com `VOZ_DEBUG=1`._",
         "\n\n_For a more talkative log: start `judy-voz` with `VOZ_DEBUG=1`._",
@@ -665,7 +700,7 @@ export async function cmdTts(message, args, ctx) {
     catch (e) {
       return sendEmbed(message.channel, {
         title: tr(ctx, "❌ O serviço não respondeu", "❌ The service didn't answer", "❌ El servicio no respondió"),
-        description: `\`${String(e.message ?? e).replace(/`/g, "")}\``, colour: COR.erro });
+        description: motivoDaVoz(e, ctx, message), colour: COR.erro });
     }
     const linhas = (r?.passos ?? r?.resultados ?? []).map((t) =>
       `${t.ok ? "✅" : "❌"} \`${t.metodo ?? ""} ${String(t.rota ?? "").replace(alvo, "…")}\` — ${t.erro ?? `HTTP ${t.status}`}`);
@@ -751,26 +786,27 @@ export async function cmdTts(message, args, ctx) {
     filtro.limpar(c.canalTexto ?? null);
     try {
       const r = await chamar("/reiniciar", {});
+      const falhaTxt = r?.ok ? "" : motivoDaVoz(new Error(r?.erro ?? "?"), ctx, message);
       return sendEmbed(message.channel, tr(ctx,
         { title: r?.ok ? "✅ Voz reiniciada" : "⚠️ Reiniciei, mas com problema",
           description: r?.ok
             ? `Saí de todas as calls e recriei a conexão.\n\nAgora: \`${citarInterno("entrar", PREFIXO)}\``
-            : `\`${r?.erro}\`\n\nVeja \`${citarInterno("tts.estado", PREFIXO)}\`.`,
+            : `${falhaTxt}\n\nVeja \`${citarInterno("tts.estado", PREFIXO)}\`.`,
           colour: r?.ok ? COR.sucesso : COR.aviso },
         { title: r?.ok ? "✅ Voice restarted" : "⚠️ Restarted, but with a problem",
           description: r?.ok
             ? `I left every call and rebuilt the connection.\n\nNow: \`${citarInterno("entrar", PREFIXO)}\``
-            : `\`${r?.erro}\`\n\nSee \`${citarInterno("tts.estado", PREFIXO)}\`.`,
+            : `${falhaTxt}\n\nSee \`${citarInterno("tts.estado", PREFIXO)}\`.`,
           colour: r?.ok ? COR.sucesso : COR.aviso },
         { title: r?.ok ? "✅ Voz reiniciada" : "⚠️ Reinicié, pero con un problema",
           description: r?.ok
             ? `Salí de todas las llamadas y recreé la conexión.\n\nAhora: \`${citar("entrar", "es", PREFIXO)}\``
-            : `\`${r?.erro}\`\n\nMira \`${citar("tts.estado", "es", PREFIXO)}\`.`,
+            : `${falhaTxt}\n\nMira \`${citar("tts.estado", "es", PREFIXO)}\`.`,
           colour: r?.ok ? COR.sucesso : COR.aviso }));
     } catch (e) {
       return sendEmbed(message.channel, {
         title: tr(ctx, "❌ Não consegui reiniciar", "❌ Couldn't restart", "❌ No pude reiniciar"),
-        description: `\`${e.message}\`\n\n${tr(ctx,
+        description: `${motivoDaVoz(e, ctx, message)}\n\n${tr(ctx,
           "O serviço de voz pode estar fora do ar — aí precisa de mão na máquina.",
           "The voice service itself may be down — it needs a hand on the machine.",
           "Puede que el servicio de voz esté caído — entonces hay que intervenir en la máquina.")}`,
@@ -921,13 +957,13 @@ export async function cmdTts(message, args, ctx) {
       if (!servidorPermitido(serverId)) {
         return sendEmbed(message.channel, tr(ctx,
           { title: "🔒 Voz desligada neste servidor",
-            description: `A leitura por voz só roda nos servidores listados em \`TTS_SERVIDORES\` no \`.env\` do bot.\nPara liberar aqui, quem cuida do bot adiciona este id à lista:\n\`${serverId}\`\n(vários ids separados por vírgula; reinicie o bot depois)`,
+            description: `A leitura por voz não está liberada neste servidor. Quem hospeda o bot libera pelo id dele:\n\`${serverId}\``,
             colour: COR.aviso },
           { title: "🔒 Voice disabled on this server",
-            description: `Voice reading only runs on servers listed in \`TTS_SERVIDORES\` in the bot's \`.env\`.\nTo enable it here, whoever runs the bot adds this id to the list:\n\`${serverId}\`\n(comma-separated ids; restart the bot afterwards)`,
+            description: `Voice reading isn't enabled on this server. Whoever hosts the bot enables it by its id:\n\`${serverId}\``,
             colour: COR.aviso },
           { title: "🔒 Voz desactivada en este servidor",
-            description: `La lectura por voz solo funciona en los servidores listados en \`TTS_SERVIDORES\` del \`.env\` del bot.\nPara habilitarla aquí, quien administra el bot añade este id a la lista:\n\`${serverId}\`\n(varios ids separados por comas; reinicia el bot después)`,
+            description: `La lectura por voz no está habilitada en este servidor. Quien aloja el bot la habilita con su id:\n\`${serverId}\``,
             colour: COR.aviso }));
       }
       const server = await getServer(message).catch(() => null);
@@ -972,14 +1008,13 @@ export async function cmdTts(message, args, ctx) {
       try {
         await chamar("/entrar", { canalVoz: c.canalVoz, serverId, servidores: servidoresConhecidos(ctx) });
       } catch (e) {
-        const motivo = String(e.message ?? e).replace(/`/g, "");
-        if (/AlreadyConnected/i.test(motivo)) {
+        if (/AlreadyConnected/i.test(String(e?.message ?? e))) {
           const r = await executarResgate({ presa: c.canalVoz, message, ctx, c, server, lang, anunciar: true });
           return relatarResgate(r, { presa: c.canalVoz, message, ctx, c, lang });
         }
         return sendEmbed(message.channel, {
           title: tr(ctx, "❌ Não consegui entrar", "❌ Couldn't join", "❌ No pude entrar"),
-          description: `\`${motivo}\`\n\n${tr(ctx,
+          description: `${motivoDaVoz(e, ctx, message)}\n\n${tr(ctx,
             `**Entre na call antes de me chamar** — entrar numa call vazia é onde costuma travar.\n\nDescubra onde: \`${citarInterno("tts.diagnostico", PREFIXO)}\``,
             `**Make sure you're already in the call** before calling me — joining an empty call is where it usually jams.\n\nFind out where: \`${citarInterno("tts.diagnostico", PREFIXO)}\``,
             `**Entra en la llamada antes de llamarme** — entrar en una llamada vacía es donde suele atascarse.\n\nAverigua dónde: \`${citar("tts.diagnostico", "es", PREFIXO)}\``)}`,
@@ -1283,7 +1318,7 @@ export async function cmdTts(message, args, ctx) {
       catch (e) {
         return sendEmbed(message.channel, {
           title: tr(ctx, "❌ O serviço de voz não respondeu", "❌ The voice service didn't answer", "❌ El servicio de voz no respondió"),
-          description: `\`${String(e.message ?? e).replace(/`/g, "")}\`\n\n\`${tr(ctx, citarInterno("tts.estado", PREFIXO), citarInterno("tts.estado", PREFIXO), citar("tts.estado", "es", PREFIXO))}\``, colour: COR.erro });
+          description: `${motivoDaVoz(e, ctx, message)}\n\n\`${tr(ctx, citarInterno("tts.estado", PREFIXO), citarInterno("tts.estado", PREFIXO), citar("tts.estado", "es", PREFIXO))}\``, colour: COR.erro });
       }
     }
     const opcoes = ehVoz ? (saude?.piper?.vozes ?? []) : (saude?.efeitos ?? []);

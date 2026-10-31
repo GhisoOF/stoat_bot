@@ -10,11 +10,19 @@ instalarRitmoDaApi();
 // ficava em console.log e por isso nunca funcionou.
 // Erros e avisos do bot entram no relatório horário (&servidores relatorio),
 // agrupados por padrão. Serviços filhos (ia/voz) escrevem direto no docker log.
+function etiquetaDoLog(args) {
+  const primeiro = typeof args[0] === "string" ? args[0] : "";
+  const m = primeiro.match(/^\s*(\[[A-Za-z0-9À-ÿ _:\-]{1,40}\])/);
+  return m ? m[1] : "[sem etiqueta]";
+}
 for (const canal of ["error", "warn"]) {
   const original = console[canal].bind(console);
   console[canal] = (...args) => {
     original(...args);
-    try { relatorioHora.erro(args.map((x) => (x instanceof Error ? x.message : typeof x === "string" ? x : JSON.stringify(x))).join(" ")); } catch {}
+    // (31 out 2026, R9) o relatório do dono recebe só a ETIQUETA do erro ("[RSS]",
+    // "[BANGLOBAL]"…), nunca o texto: ali podia ir nome de servidor que não aderiu,
+    // URL de feed ou trecho de mensagem. O texto inteiro fica só no log local.
+    try { relatorioHora.erro(etiquetaDoLog(args)); } catch (e) { original("[RELATORIO] falha ao anotar:", e?.message); }
   };
 }
 for (const canal of ["debug", "log"]) {
@@ -78,6 +86,7 @@ import { vigiarConexao } from "./modulos/core/vida.js";
 import { comandosPorLinha, mensagemDaLinha } from "./modulos/core/lote.js";
 import * as relatorioHora from "./modulos/ferramentas/relatorio.js";
 import { descreverErro } from "./modulos/core/erros.js";
+import { problemasDoEnv, avisosDoEnv, numero } from "./modulos/core/env.js";
 import * as confianca from "./modulos/moderacao/confianca.js";
 import { semPingEmMassa } from "./modulos/core/seguranca.js";
 
@@ -139,7 +148,7 @@ client.on("connected", () => {
 });
 client.on("disconnected", () => console.warn("[CONN] ⚠️ DESCONECTADO do Stoat — aguardando reconexão…"));
 
-const INATIVIDADE_MS = Number(process.env.INATIVIDADE_MS || 600000); // 10 min sem eventos → reinicia
+const INATIVIDADE_MS = numero("INATIVIDADE_MS", 600000, { min: 60000, inteiro: true }); // 10 min sem eventos → reinicia
 setInterval(() => {
   const ocioso = Date.now() - ultimoEvento;
 
@@ -156,7 +165,7 @@ setInterval(() => {
 // O histórico de conversa da IA vive 24 h (privacidade, 20 out 2026)
 setInterval(() => { try { dbIA.podarHistoricoIA(); } catch (e) { console.error("[DB] poda do histórico:", e.message); } }, 3600_000).unref?.();
 
-const HEARTBEAT_MS = Number(process.env.HEARTBEAT_MS || 300000); // 5 min
+const HEARTBEAT_MS = numero("HEARTBEAT_MS", 300000, { min: 10000, inteiro: true }); // 5 min
 setInterval(() => {
   const ociosoMin = Math.round((Date.now() - ultimoEvento) / 60000);
   const mem = Math.round(process.memoryUsage().rss / 1048576);
@@ -204,7 +213,8 @@ async function enviarEmbedUnico(channel, { title, description, colour = COR.info
     desc = desc.slice(0, paginas.LIMITE_EMBED - 5) + "…";
   }
   const base = { title, description: desc, colour };
-  console.log(`[CMD] ${title ?? "(sem título)"} | ${desc.replace(/\n/g, " ⏎ ").slice(0, 400)}`);
+  // (31 out 2026, R9) o log não copia o texto da resposta (pode ter dados de alguém)
+  if (cfgGlobal.debug === true) console.log(`[CMD] ${String(title ?? "(sem título)").slice(0, 80)} | ${desc.length} caractere(s)`);
   const exibicao = imagem ? midia.comoExibir(imagem) : null;
   const payload = { embeds: [base] };
   if (exibicao?.modo === "media") payload.embeds = [{ ...base, media: exibicao.id }];
@@ -272,7 +282,10 @@ function membroTemPermissao(message, server, permName) {
     if (ehSuperAdmin(userId)) return true;              // dono do bot: controle total
     if (server?.ownerId && server.ownerId === userId) return true;
 
-    if (permName !== "ManageServer") {
+    // (31 out 2026, R9) o cargo de staff vale para moderar, mas não para mexer em
+    // cargos/permissões nem no servidor: senão a staff promovia mais cargos a
+    // staff, recoloria o cargo de admin e desligava o log.
+    if (!["ManageServer", "ManagePermissions", "ManageRole"].includes(permName)) {
       try {
         const serverId = message.serverId ?? message.server?.id ?? null;
         const cfg = serverId ? store.configDoServidor(serverId) : null;
@@ -515,7 +528,7 @@ async function tratarMensagem(message) {
   ultimoEvento = Date.now();   // prova de vida: recebemos um evento
   if (message.authorId === client.user.id) return;
 
-  if (cfgGlobal.debug !== false && process.env.MSG_LOG !== "off") {
+  if (cfgGlobal.debug === true && process.env.MSG_LOG !== "off") {
     const c = message.content ?? "";
     const resumo = c.length > 120 ? c.slice(0, 120) + `… (+${c.length - 120})` : c;
     console.log(`[MSG] ${message.authorId} no canal ${message.channelId}: ${JSON.stringify(resumo)}`);
@@ -628,9 +641,12 @@ async function tratarMensagem(message) {
     // o que quem pediu silêncio escreve não vai para a IA (nem memória, nem o fio do canal)
     if (chat.servidorPermitido(serverId) && !chat.naoFalarCom(message.authorId)) {
       const nome = message.author?.username ?? message.member?.nickname ?? message.authorId;
+      // (31 out 2026) a memória só aprende do que é dito à Judy: a resposta a uma
+      // mensagem dela (mesmo sem o ping) conta. Só o cache local, sem ir à API.
+      const respondeAJudy = (message.replyIds ?? []).some((id) => client.messages?.get?.(id)?.authorId === client.user?.id);
       chat.observarMensagem({
         serverId, userId: message.authorId, nome,
-        texto: message.content, ehBot: !!message.author?.bot,
+        texto: message.content, ehBot: !!message.author?.bot, paraJudy: respondeAJudy,
       });
       // Cache do canal: registra o fio da conversa (quem falou, a quem respondeu).
       // (era `reply_ids`, que a stoat.js não tem: o "respondendo a" nunca aparecia)
@@ -685,7 +701,7 @@ async function tratarMensagem(message) {
   try { await i18n.talvezSugerirIdioma(message, ctx); }
   catch (e) { console.error("[I18N]", e?.message); }
 
-  if (cfgGlobal.debug !== false) console.log(`[CMD] Executando "${command}" (args: ${JSON.stringify(args)})`);
+  if (cfgGlobal.debug === true) console.log(`[CMD] Executando "${command}" (args: ${JSON.stringify(args)})`);
 
   const canonico = CANONICO[command] ?? command;
 
@@ -796,6 +812,19 @@ function ehCanalDeVoz(message) {
       ].join("\n") },
   });
 
+  // (31 out 2026, decisão do dono) o dono do bot tem controle total em qualquer
+  // servidor; quando usa um comando num servidor que não é dele, a staff de lá
+  // fica sabendo pelo log (categoria própria, sempre ligada).
+  const donoDoServidor = message.server?.ownerId ?? client.servers.get(serverId)?.ownerId ?? null;
+  if (serverId && ehSuperAdmin(message.authorId) && donoDoServidor !== message.authorId) {
+    const linha = `\`${PREFIXO}${command}${args.length ? " " + args.join(" ") : ""}\``.slice(0, 300);
+    await log.registrar(ctx, "dono", {
+      titulo: "🛠️ Comando do dono do bot", descricao: `<@${message.authorId}> · <#${message.channelId}>\n${linha}`,
+      en: { titulo: "🛠️ Bot owner command", descricao: `<@${message.authorId}> · <#${message.channelId}>\n${linha}` },
+      es: { titulo: "🛠️ Comando del dueño del bot", descricao: `<@${message.authorId}> · <#${message.channelId}>\n${linha}` },
+    });
+  }
+
   const argsFinais = aliases.normalizarArgs(canonico, args, CANONICO);
 
   // `<grupo>`, `<@pessoa>`, `‹cargo›` copiados da ajuda ao pé da letra (12 out
@@ -848,7 +877,7 @@ function ehCanalDeVoz(message) {
 client.on("messageReactionAdd", async (...a) => {
   ultimoEvento = Date.now();
   try {
-    if (cfgGlobal.debug !== false) {
+    if (cfgGlobal.debug === true) {
       console.log("[REAÇÃO] args:", a.map((x) =>
         (x && typeof x === "object") ? (x.id ?? x._id ?? Object.keys(x)) : x));
     }
@@ -906,7 +935,7 @@ client.events.on("event", async (ev) => {
 client.on("messageReactionRemove", async (...a) => {
   ultimoEvento = Date.now();
   try {
-    if (cfgGlobal.debug !== false) {
+    if (cfgGlobal.debug === true) {
       console.log("[REAÇÃO-] args:", a.map((x) =>
         (x && typeof x === "object") ? (x.id ?? x._id ?? Object.keys(x)) : x));
     }
@@ -1035,11 +1064,11 @@ client.on("serverMemberLeave", async (member, extra) => {
     const userId   = member?.id?.user ?? member?._id?.user ?? member?.userId ?? member?.user?.id
                   ?? (typeof extra === "string" ? extra : extra?.user);
 
-    if (cfgGlobal.debug !== false) {
+    if (cfgGlobal.debug === true) {
       console.log(`[EVENTO] serverMemberLeave: server=${serverId} user=${userId}`);
     }
     if (!serverId || !userId) {
-      if (cfgGlobal.debug !== false) {
+      if (cfgGlobal.debug === true) {
         console.log("[EVENTO] serverMemberLeave: id incompleto — payload:",
           JSON.stringify(member)?.slice(0, 200));
       }
@@ -1127,14 +1156,14 @@ client.on("userUpdate", (user, anterior) => {
 client.on("messageDelete", async (message) => {
   ultimoEvento = Date.now();
   try {
-    if (cfgGlobal.debug !== false) {
+    if (cfgGlobal.debug === true) {
       console.log(`[EVENTO] messageDelete: canal=${message?.channelId} autor=${message?.authorId}`);
     }
     if (message?.authorId === client.user?.id) return;  // ignora o próprio bot
 
     const serverId = await servidorDoCanal(message?.channelId);
     if (!serverId) {
-      if (cfgGlobal.debug !== false) console.log("[EVENTO] messageDelete: sem servidor (DM?) — ignorado");
+      if (cfgGlobal.debug === true) console.log("[EVENTO] messageDelete: sem servidor (DM?) — ignorado");
       return;
     }
     const ctx = criarContexto(serverId);
@@ -1308,8 +1337,17 @@ if (!TOKEN || TOKEN.trim() === "" || TOKEN === "cole_seu_token_aqui") {
   console.error("══════════════════════════════════════════════════════════\n");
   process.exit(1);
 }
+// (31 out 2026, Regra do Reparo) .env inválido para o boot com a lista do que corrigir
+{
+  const problemas = problemasDoEnv();
+  if (problemas.length) {
+    console.error(`[ENV] O .env tem ${problemas.length} problema(s):\n  - ${problemas.join("\n  - ")}`);
+    process.exit(1);
+  }
+  for (const a of avisosDoEnv()) console.warn(`[ENV] ${a}`);
+}
 async function conectar(tentativa = 1) {
-  const MAX = Number(process.env.LOGIN_MAX_TENTATIVAS || 10);
+  const MAX = numero("LOGIN_MAX_TENTATIVAS", 10, { min: 1, max: 1000, inteiro: true });
   try {
     await client.loginBot(TOKEN);
     console.info("[CONN] Login aceito pelo Stoat.");

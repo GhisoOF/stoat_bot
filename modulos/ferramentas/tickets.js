@@ -16,12 +16,14 @@
 import * as db from "../core/db.js";
 import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
 import { tr, lingua, textoDoIdioma, idiomaDe, idiomaDaTela } from "../core/i18n.js";
-import { descreverErro } from "../core/erros.js";
+import { descreverErro, registrarErro } from "../core/erros.js";
 import { subirAnexo } from "../core/anexos.js";
 import { chamarApi } from "../core/stoat-api.js";
 import { editarCargos, cargoDe, rankDoCargo, rankDoMembro, idsDeCargos } from "../core/hierarquia.js";
 import { tipoDoErro } from "../core/erros.js";
-import { canalDeOutroServidor } from "../moderacao/pertence.js";
+import { canalDeOutroServidor, canalDesteServidor } from "../moderacao/pertence.js";
+import { numero } from "../core/env.js";
+import { textoDeFora } from "../core/seguranca.js";
 
 const DENY_TUDO = 0x000fffffffffffffn;            // mesmo GRANT_ALL_SAFE do resto do bot
 const VER_E_LER = (1n << 20n) | (1n << 21n);      // ViewChannel + ReadMessageHistory
@@ -42,7 +44,11 @@ function permsQueOBotDa(server) {
   }
   return bits;
 }
-const MAX_MSGS_TRANSCRICAO = Number(process.env.TICKET_MAX_MSGS || 1000);
+const MAX_MSGS_TRANSCRICAO = numero("TICKET_MAX_MSGS", 1000, { min: 1, max: 10_000, inteiro: true });
+// (31 out 2026, R9/R11) uma raid não abre N canais e N cargos: teto de tickets
+// abertos por servidor, e conta que acabou de entrar não abre.
+export const MAX_ABERTOS_SERVIDOR = numero("TICKET_MAX_ABERTOS", 20, { min: 1, inteiro: true });
+export const ENTRADA_MIN_MS = 10 * 60_000;
 export const E_FECHAR = "🔒";
 export const E_APAGAR = "🗑️";
 export const CATEGORIAS_PADRAO = [
@@ -298,7 +304,7 @@ export async function prepararEquipe({ ctx, server, criar = true }) {
   const rankBot = rankDoMembro(server, bot);
   const deram = [], faltam = [];
   let membros = [];
-  try { const r = await server.fetchMembers(); membros = r?.members ?? r ?? []; } catch {}
+  try { const r = await server.fetchMembers(); membros = r?.members ?? r ?? []; } catch (e) { registrarErro("TICKET", e); }
   const botId = ctx.client?.user?.id;
   for (const m of membros) {
     const uid = m?.id?.user ?? m?.id;
@@ -377,7 +383,7 @@ async function avisarStaffDeFora({ ctx, fora, numero, cargoBot = null }) {
       `_Este aviso vuelve como máximo cada 6 h. Comprobar ahora: \`${citar("ticket.equipe", "es", P)}\`._`,
     ].join("\n"),
     colour: ctx.COR.aviso,
-  })).catch(() => {});
+  })).catch((e) => registrarErro("TICKET", e));
   return true;
 }
 
@@ -426,9 +432,15 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
   // erros e nome/descrição do canal: texto puro (vão dentro de outro texto ou para o Stoat)
   const es = idiomaDe(ctx) === "es";
   const X = (pt, eng, esp) => (es ? esp : en ? eng : pt);
-  const jaTem = db.listarTickets(ctx.serverId).find((t) => t.autorId === userId);
+  const abertos = db.listarTickets(ctx.serverId);
+  const jaTem = abertos.find((t) => t.autorId === userId);
   if (jaTem) return { jaTem: jaTem.canalId };
   if (!cfg.logCanal) return { semLog: true };
+  if (abertos.length >= MAX_ABERTOS_SERVIDOR) return { cheio: true };
+  // quem entrou há menos de 10 min não abre (conta de raid); sem a data, o Stoat decide
+  const quem = await server.fetchMember?.(userId).catch(() => null);
+  const entrou = quem?.joinedAt ? new Date(quem.joinedAt).getTime() : NaN;
+  if (Number.isFinite(entrou) && Date.now() - entrou < ENTRADA_MIN_MS) return { novo: true };
 
   const numero = ++cfg.contador;
   ctx.salvarConfig?.();
@@ -439,7 +451,7 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
     roleId = criado?.id ?? criado?.role?._id ?? criado?.role?.id;
     if (!roleId) throw new Error(X("a API não devolveu o id do cargo (falta ManageRole?)", "the API didn't return the role id (missing ManageRole?)", "la API no devolvió el id del rol (¿falta ManageRole?)"));
     // o cargo do ticket vai para quem abriu
-    const membro = await server.fetchMember(userId).catch(() => null);
+    const membro = quem ?? await server.fetchMember(userId).catch(() => null);
     if (!membro) throw new Error(X("não te achei no servidor", "I couldn't find you on the server", "no te encontré en el servidor"));
     await editarCargos(server, membro, (atuais) => [...atuais, roleId]).catch((e) => { throw new Error(descreverErro(e, lang)); });
     // e o bot entra no canal pelo cargo DELE (antes ele se dava o cargo do ticket —
@@ -460,8 +472,9 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
     staffFora = st.fora; cargoBotTicket = st.cargoBot;
     await canal.setPermissions("default", { allow: 0, deny: Number(DENY_TUDO) }).catch((e) => { throw new Error(descreverErro(e, lang)); });
   } catch (e) {
-    try { if (canal?.delete) await canal.delete(); } catch {}
-    try { if (roleId) await server.deleteRole?.(roleId); } catch {}
+    // desfaz o que já foi criado; o que não sair fica no log (canal/cargo órfão)
+    try { if (canal?.delete) await canal.delete(); } catch (e2) { registrarErro("TICKET", e2); }
+    try { if (roleId) await server.deleteRole?.(roleId); } catch (e2) { registrarErro("TICKET", e2); }
     return { erro: e instanceof Error ? e.message : descreverErro(e, lang) };
   }
 
@@ -498,7 +511,7 @@ export async function abrirTicket({ ctx, server, userId, motivo = "", categoria 
     colour: ctx.COR.sucesso,
   }));
   if (controle?.id) {
-    await controle.react?.(encodeURIComponent(E_FECHAR)).catch(() => {});
+    await controle.react?.(encodeURIComponent(E_FECHAR)).catch((e) => registrarErro("TICKET", e));   // sem o 🔒, só o comando fecha
     db.registrarMsgTicket(controle.id, ctx.serverId, canal.id, "controle", ticketId);
   }
   if (staffFora.length) await avisarStaffDeFora({ ctx, fora: staffFora, numero, cargoBot: cargoBotTicket });
@@ -529,13 +542,13 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
   let travou = false;
   let logCanal = cfg.logCanal ? await canalPorId(ctx.client, cfg.logCanal) : null;
   if (canalDeOutroServidor(logCanal, ctx.serverId)) logCanal = null;   // o registro nunca vai para outro servidor
-  let arquivo = false;
+  let arquivo = false, registroCompleto = false;
   if (logCanal) {
     let anexoId = null;
     try {
       anexoId = await subirAnexo({ base64: Buffer.from(texto, "utf8").toString("base64"), mime: "text/plain", nome: `${nome}.txt` }, ctx.client);
-    } catch (e) { console.error(`[TICKET] upload do .txt falhou: ${e?.message ?? e}`); }
-    await ctx.sendEmbed(logCanal, {
+    } catch (e) { registrarErro("TICKET", e); }
+    const resumo = await ctx.sendEmbed(logCanal, {
       title: `🗂️ Ticket #${ticket.numero} ${tr(ctx, "fechado", "closed", "cerrado")}`,
       description: [
         `${tr(ctx, "Aberto por", "Opened by", "Abierto por")} <@${ticket.autorId}> · ${tr(ctx, "fechado por", "closed by", "cerrado por")} <@${porId}>`,
@@ -548,9 +561,17 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
       colour: ctx.COR.mod ?? ctx.COR.info,
       anexos: anexoId ? [anexoId] : null,
     });
-    if (anexoId) arquivo = true;
-    else for (const fatia of fatiarTranscricao(texto)) {
-      await logCanal.sendMessage?.({ content: "```text\n" + fatia + "\n```" }).catch(() => {});
+    if (anexoId) { arquivo = true; registroCompleto = !!resumo; }
+    else {
+      // (31 out 2026) em texto, a transcrição é mensagem COMUM: o que as pessoas
+      // escreveram passa por textoDeFora (sem @everyone, sem link mascarado), e
+      // o "foi para o log" só aparece se TODAS as partes saíram
+      let todas = !!resumo;
+      for (const fatia of fatiarTranscricao(textoDeFora(texto, { max: 5_000_000 }))) {
+        try { await logCanal.sendMessage({ content: "```text\n" + fatia.replace(/```/g, "ˋˋˋ") + "\n```" }); }
+        catch (e) { todas = false; registrarErro("TICKET", e); }
+      }
+      registroCompleto = todas;
     }
   }
 
@@ -564,7 +585,7 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
       description: [
         `Fechado por <@${porId}>.${nota ? `\n**Nota:** ${nota}` : ""}`,
         "A conversa está travada: dá para ler, não dá para escrever.",
-        logCanal ? `O registro completo foi para <#${cfg.logCanal}>.` : "⚠️ Sem canal de log configurado — o registro não foi guardado.",
+        registroCompleto ? `O registro completo foi para <#${cfg.logCanal}>.` : logCanal ? "⚠️ O registro não foi inteiro para o log — confira o canal de log e as permissões da Judy lá." : "⚠️ Sem canal de log configurado — o registro não foi guardado.",
         "",
         `${E_APAGAR} — a staff apaga este canal.`,
       ].join("\n"),
@@ -574,7 +595,7 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
       description: [
         `Closed by <@${porId}>.${nota ? `\n**Note:** ${nota}` : ""}`,
         "The conversation is locked: it can be read, not written.",
-        logCanal ? `The full record went to <#${cfg.logCanal}>.` : "⚠️ No log channel set — the record wasn't kept.",
+        registroCompleto ? `The full record went to <#${cfg.logCanal}>.` : logCanal ? "⚠️ The record didn't fully reach the log — check the log channel and Judy's permissions there." : "⚠️ No log channel set — the record wasn't kept.",
         "",
         `${E_APAGAR} — staff deletes this channel.`,
       ].join("\n"),
@@ -584,14 +605,14 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
       description: [
         `Cerrado por <@${porId}>.${nota ? `\n**Nota:** ${nota}` : ""}`,
         "La conversación está bloqueada: se puede leer, no escribir.",
-        logCanal ? `El registro completo fue a <#${cfg.logCanal}>.` : "⚠️ No hay canal de log configurado — el registro no se guardó.",
+        registroCompleto ? `El registro completo fue a <#${cfg.logCanal}>.` : logCanal ? "⚠️ El registro no llegó completo al log — revisa el canal de log y los permisos de Judy allí." : "⚠️ No hay canal de log configurado — el registro no se guardó.",
         "",
         `${E_APAGAR} — el staff borra este canal.`,
       ].join("\n"),
       colour: ctx.COR.aviso,
     })).catch(() => null);
     if (aviso?.id) {
-      await aviso.react?.(encodeURIComponent(E_APAGAR)).catch(() => {});
+      await aviso.react?.(encodeURIComponent(E_APAGAR)).catch((e) => registrarErro("TICKET", e));
       db.registrarMsgTicket(aviso.id, ctx.serverId, ticket.canalId, "fechado", ticket.id);
     }
   }
@@ -606,18 +627,26 @@ export async function fecharTicket({ ctx, server, ticket, porId, nota = "" }) {
   }
 
   if (!travou && canal) await canal.sendMessage?.({ content: X("⚠️ Não consegui travar este canal (falta ManagePermissions?).", "⚠️ I couldn't lock this channel (missing ManagePermissions?).", "⚠️ No pude bloquear este canal (¿falta ManagePermissions?).") }).catch(() => {});
-  return { ok: true, travou, arquivo, mensagens: msgs.length };
+  return { ok: true, travou, arquivo, registroCompleto, mensagens: msgs.length };
 }
 
 // ── Apagar (depois de fechado) ───────────────────────────────────────────────
 export async function apagarTicket({ ctx, server, ticket }) {
   const canal = await canalPorId(ctx.client, ticket.canalId);
-  try { if (ticket.roleId) await server?.deleteRole?.(ticket.roleId); } catch {}
+  try { if (ticket.roleId) await server?.deleteRole?.(ticket.roleId); } catch (e) { registrarErro("TICKET", e); }   // cargo órfão: fica no log
   try { await canal?.delete?.(); } catch (e) { return { erro: descreverErro(e) }; }
   db.marcarTicketApagado(ticket.id);
   for (const m of db.getDb().prepare("SELECT msgId FROM ticket_mensagens WHERE ticketId = ?").all(ticket.id)) db.esquecerMsgTicket(m.msgId);
   return { ok: true };
 }
+
+// Os dois "não abre" novos (31 out 2026), nos 3 idiomas: [pt, en, es]
+const avisoCheio = (u) => [`<@${u}>, este servidor já tem **${MAX_ABERTOS_SERVIDOR}** tickets abertos — espere a staff fechar algum.`,
+  `<@${u}>, this server already has **${MAX_ABERTOS_SERVIDOR}** open tickets — wait for staff to close one.`,
+  `<@${u}>, este servidor ya tiene **${MAX_ABERTOS_SERVIDOR}** tickets abiertos — espera a que el staff cierre alguno.`];
+const avisoNovo = (u) => [`<@${u}>, você entrou há pouco — espere alguns minutos para abrir um ticket.`,
+  `<@${u}>, you just joined — wait a few minutes before opening a ticket.`,
+  `<@${u}>, acabas de entrar — espera unos minutos para abrir un ticket.`];
 
 // ── Reações (painel 🎫, controle 🔒, fechado 🗑️) ─────────────────────────────
 // `criarContexto(serverId)` vem do main: a reação chega sem servidor.
@@ -641,6 +670,8 @@ export async function aoReagir(msgObj, userId, emoji, { client, criarContexto })
     await tirarReacao(reg.canalId, msgId, emoji, userId);
     const r = await abrirTicket({ ctx, server, userId, categoria });
     if (r.jaTem) await avisar(`<@${userId}>, você já tem um ticket aberto: <#${r.jaTem}>`, `<@${userId}>, you already have an open ticket: <#${r.jaTem}>`, `<@${userId}>, ya tienes un ticket abierto: <#${r.jaTem}>`);
+    else if (r.cheio) await avisar(...avisoCheio(userId));
+    else if (r.novo) await avisar(...avisoNovo(userId));
     else if (r.semLog) await avisar("A staff ainda não definiu o canal de log dos tickets (`" + citarInterno("ticket") + " log #canal`).", "Staff hasn't set the tickets' log channel yet (`" + citarInterno("ticket") + " log #channel`).", "El staff todavía no definió el canal de log de los tickets (`" + citar("ticket", "es") + " log #canal`).");
     else if (r.erro) { console.error(`[TICKET] abrir falhou: ${r.erro}`); await avisar(`Não consegui abrir o ticket: ${r.erro}`, `I couldn't open the ticket: ${r.erro}`, `No pude abrir el ticket: ${r.erro}`); }
     return true;
@@ -677,6 +708,9 @@ export async function cmdTicket(message, args, ctx) {
     || (!!cfg.cargoEquipe && idsDeCargos(message.member).includes(cfg.cargoEquipe));
   const enviar = (title, description, colour = COR.info) => sendEmbed(message.channel, { title, description, colour });
   const T = (pt, eng, es) => tr(ctx, pt, eng, es);
+  // o canal que a staff apontou: "aqui"/vazio = este; senão só se for DESTE servidor
+  const canalEscolhido = (entrada) => (!entrada || /^(aqui|here|aquí)$/i.test(String(entrada)))
+    ? { id: message.channelId } : canalDesteServidor(server, entrada);
   const semPermissao = () => enviar(T("🔒 Sem permissão", "🔒 No permission", "🔒 Sin permiso"), T("Só a staff.", "Staff only.", "Solo el staff."), COR.aviso);
 
   if (!sub || ["ajuda", "help"].includes(sub)) {
@@ -715,8 +749,10 @@ export async function cmdTicket(message, args, ctx) {
 
   if (sub === "painel" || sub === "panel") {
     if (!staff) return semPermissao();
-    const id = String(args[1] ?? "").replace(/[<#>]/g, "") || message.channelId;
-    const canal = await canalPorId(ctx.client, id);
+    // (31 out 2026, R9) só canal DESTE servidor: antes um ID de outro servidor publicava o painel lá
+    const escolhido = canalEscolhido(args[1]);
+    const canal = escolhido ? await canalPorId(ctx.client, escolhido.id) ?? (escolhido.id === message.channelId ? message.channel : null) : null;
+    if (!escolhido) return enviar("🎫", T("Esse canal não é **deste servidor**.", "That channel isn't **on this server**.", "Ese canal no es **de este servidor**."), COR.aviso);
     if (!canal) return enviar("🎫", T("Não achei esse canal.", "I couldn't find that channel.", "No encontré ese canal."), COR.aviso);
     try { await publicarPainel({ ctx, canal }); }
     catch (e) { return enviar("🎫", `${T("Não consegui postar o painel", "I couldn't post the panel", "No pude publicar el panel")}: ${e?.message ?? descreverErro(e)}`, COR.aviso); }
@@ -755,8 +791,9 @@ export async function cmdTicket(message, args, ctx) {
 
   if (sub === "log") {
     if (!staff) return semPermissao();
-    const canalId = ctx.limparId?.(args[1]) || String(args[1] ?? "").replace(/[<#>]/g, "");
-    if (!canalId) return enviar("🎫", T("Qual canal?", "Which channel?", "¿Qué canal?"), COR.aviso);
+    if (!args[1]) return enviar("🎫", T("Qual canal?", "Which channel?", "¿Qué canal?"), COR.aviso);
+    const canalId = canalEscolhido(args[1])?.id;
+    if (!canalId) return enviar("🎫", T("Esse canal não é **deste servidor**.", "That channel isn't **on this server**.", "Ese canal no es **de este servidor**."), COR.aviso);
     cfg.logCanal = canalId;
     salvarConfig();
     return enviar("🎫", T("O registro .txt de cada ticket fechado vai para ", "The .txt record of each closed ticket goes to ", "El registro .txt de cada ticket cerrado va a ") + `<#${canalId}>.`, COR.sucesso);
@@ -774,6 +811,8 @@ export async function cmdTicket(message, args, ctx) {
     if (!server) return enviar("🎫", "⚠️", COR.aviso);
     const r = await abrirTicket({ ctx: { ...ctx, client: ctx.client }, server, userId: message.authorId, motivo: args.slice(1).join(" ").trim().slice(0, 200) });
     if (r.jaTem) return enviar("🎫", T("Você já tem um ticket aberto: ", "You already have an open ticket: ", "Ya tienes un ticket abierto: ") + `<#${r.jaTem}>`, COR.aviso);
+    if (r.cheio) return enviar("🎫", T(...avisoCheio(message.authorId)), COR.aviso);
+    if (r.novo) return enviar("🎫", T(...avisoNovo(message.authorId)), COR.aviso);
     if (r.semLog) return enviar(T("🎫 Falta configurar", "🎫 Setup needed", "🎫 Falta configurar"), T(`Antes do primeiro ticket, a staff define para onde vão os registros: \`${citarInterno("ticket", P)} log #canal\`.`, `Staff must first set where records go: \`${citarInterno("ticket", P)} log #channel\`.`, `Antes del primer ticket, el staff define adónde van los registros: \`${citar("ticket", "es", P)} log #canal\`.`), COR.aviso);
     if (r.erro) return enviar("🎫", T("Não consegui abrir o ticket: ", "I couldn't open the ticket: ", "No pude abrir el ticket: ") + r.erro + "\n" + T(
       "O bot precisa de **ManageChannel, ManageRole, AssignRoles, ManagePermissions** — e o cargo dele precisa estar ACIMA dos cargos que ele cria.",
@@ -810,31 +849,47 @@ export async function cmdTicket(message, args, ctx) {
 // depender do evento, o bot confere de tempos em tempos, pela API, quem reagiu
 // nas mensagens de controle (🔒) e de fechado (🗑️) — e trata como se fosse o
 // evento. Quem não é staff tem a reação tirada, então nada é tratado duas vezes.
-const VIGIA_MS = Number(process.env.TICKET_VIGIA_MS || 15_000);
+const VIGIA_MS = numero("TICKET_VIGIA_MS", 15_000, { min: 1000, inteiro: true });
+const VIGIA_MAX_MS = 5 * 60_000;
+// (31 out 2026, R11) Antes: uma consulta à API a cada 15 s por mensagem, de
+// ticket aberto OU fechado, para sempre. Agora a vigia olha só o 🔒 dos tickets
+// ABERTOS, e cada mensagem tem o seu recuo: sem reação nova, o intervalo dobra
+// (15 s → 30 s → … → 5 min); com reação, volta a 15 s. Mensagem que a API diz
+// não existir (404) ou que o bot não pode mais ver (403) é esquecida.
 const emAndamento = new Set();
-export async function conferirReacoes({ client, criarContexto, api = chamarApi }) {
-  const regs = db.getDb().prepare("SELECT * FROM ticket_mensagens WHERE tipo IN ('controle', 'fechado')").all();
+const recuo = new Map();   // msgId → { proxima, intervalo } (só das mensagens vigiadas)
+export async function conferirReacoes({ client, criarContexto, api = chamarApi, agora = Date.now() }) {
+  const regs = db.getDb().prepare(`SELECT tm.* FROM ticket_mensagens tm JOIN tickets t ON t.id = tm.ticketId
+    WHERE tm.tipo = 'controle' AND t.status = 'aberto'`).all();
+  const vigiadas = new Set(regs.map((r) => r.msgId));
+  for (const id of recuo.keys()) if (!vigiadas.has(id)) recuo.delete(id);   // o Map nunca passa do que é vigiado
   for (const reg of regs) {
     if (emAndamento.has(reg.msgId)) continue;
+    const st = recuo.get(reg.msgId) ?? { proxima: 0, intervalo: VIGIA_MS };
+    if (agora < st.proxima) continue;
     const r = await api(`/channels/${reg.canalId}/messages/${reg.msgId}`);
-    if (r.status === 404) { db.esquecerMsgTicket(reg.msgId); continue; }   // mensagem ou canal sumiu
+    // (31 out 2026) só 404 (a mensagem sumiu) esquece o registro; 403 pode ser
+    // passageiro (troca de cargo) e cai no recuo como qualquer outra falha
+    if (r.status === 404) { db.esquecerMsgTicket(reg.msgId); recuo.delete(reg.msgId); continue; }
     const reacoes = r.json?.reactions ?? {};
-    const alvo = reg.tipo === "controle" ? E_FECHAR : E_APAGAR;
-    const quem = Object.entries(reacoes).filter(([e]) => mesmoEmoji(e, alvo)).flatMap(([, ids]) => ids ?? []);
+    const quem = Object.entries(reacoes).filter(([e]) => mesmoEmoji(e, E_FECHAR)).flatMap(([, ids]) => ids ?? [])
+      .filter((u) => u !== client?.user?.id);
+    // sem ninguém (ou a API falhou): espera o dobro da última vez, até 5 min
+    if (!quem.length) { recuo.set(reg.msgId, { proxima: agora + st.intervalo, intervalo: Math.min(st.intervalo * 2, VIGIA_MAX_MS) }); continue; }
+    recuo.set(reg.msgId, { proxima: agora + VIGIA_MS, intervalo: VIGIA_MS });
     for (const userId of quem) {
-      if (userId === client?.user?.id) continue;
       emAndamento.add(reg.msgId);
       try {
-        console.log(`[TICKET] vigia: ${alvo} de ${userId} na mensagem ${reg.msgId} (${reg.tipo})`);
-        await aoReagir({ id: reg.msgId }, userId, alvo, { client, criarContexto });
-      } catch (e) { console.error(`[TICKET] vigia: ${e?.message ?? e}`); }
+        console.log(`[TICKET] vigia: ${E_FECHAR} de ${userId} na mensagem ${reg.msgId}`);
+        await aoReagir({ id: reg.msgId }, userId, E_FECHAR, { client, criarContexto });
+      } catch (e) { registrarErro("TICKET", e); }
       finally { emAndamento.delete(reg.msgId); }
-      if (!db.msgTicket(reg.msgId)) break;   // fechou/apagou: essa mensagem não vale mais
+      if (!db.msgTicket(reg.msgId)) break;   // fechou: essa mensagem não vale mais
     }
   }
 }
 export function iniciarVigia(client, criarContexto) {
-  const t = setInterval(() => conferirReacoes({ client, criarContexto }).catch((e) => console.error("[TICKET] vigia:", e?.message ?? e)), VIGIA_MS);
+  const t = setInterval(() => conferirReacoes({ client, criarContexto }).catch((e) => registrarErro("TICKET", e)), VIGIA_MS);
   t.unref?.();
   return t;
 }

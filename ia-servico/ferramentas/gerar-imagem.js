@@ -9,12 +9,13 @@ const URLS = urlsDoModelo();
 const IMAGEM_LIGADA = (process.env.IMAGEM ?? "1").trim() !== "0";
 
 import { existsSync, mkdirSync, readFileSync, unlinkSync, renameSync } from "node:fs";
-import { spawn as spawnProc, spawnSync } from "node:child_process";
+import { spawn as spawnProc } from "node:child_process";
 import { basename, join } from "node:path";
 import { tmpdir } from "node:os";
 import { moderarBuffer, visaoDisponivel } from "./ver-imagem.js";
 import { desenhando } from "./vez-da-gpu.js";
-import { tipoDoModelo, urlsDoModelo, ehTurbo, tempoDeGeracaoMs, ladoMaximo, SIGMAS_QWEN_TURBO } from "../../modulos/core/imagem-modelo.js";
+import { tipoDoModelo, urlsDoModelo, ehTurbo, tempoDeGeracaoMs, ladoMaximo, SIGMAS_QWEN_TURBO, urlDeModeloValida } from "../../modulos/core/imagem-modelo.js";
+import { ambienteMinimo } from "../../modulos/ai/servicos.js";
 const LADO_MAX     = ladoMaximo();
 const PASSOS_MAX   = Number(process.env.IMAGEM_PASSOS_MAX || 30);
 const TIMEOUT_MS   = tempoDeGeracaoMs();
@@ -138,35 +139,47 @@ export const definicao = {
 
 // ── Backend embutido (sd.cpp; Z-Image-Turbo por padrão, SD-Turbo com SD_MODELO_TIPO=sd) ──
 // Baixa um arquivo de modelo pela URL e devolve o caminho local (uma vez só).
-function baixarArquivo(url, rotulo) {
-  const nome = basename(new URL(url).pathname);
-  const destino = join(SD_DIR, nome);
-  if (existsSync(destino)) return destino;
-  try { mkdirSync(SD_DIR, { recursive: true }); } catch {}
-  console.info(`[IA][gerar_imagem] baixando ${rotulo}: ${nome} (uma vez, fica no volume)…`);
-  const tmp = `${destino}.baixando`;
-  const r = spawnSync("curl", ["-fL", "--retry", "2", url, "-o", tmp], { stdio: "inherit" });
-  if (r.status !== 0) {
-    try { unlinkSync(tmp); } catch {}
-    throw new Error(`download de "${rotulo}" (${nome}) falhou — confira a URL no .env e se o arquivo existe nesse repositório do Hugging Face`);
+// (31 out 2026, P1) O download é ASSÍNCRONO: o download síncrono de gigabytes parava o
+// serviço inteiro (o chat, a moderação de imagens, o RSS) por minutos. Agora o
+// primeiro pedido começa a baixar e responde "ainda baixando"; os seguintes, também,
+// até o arquivo ficar pronto — ninguém espera travado.
+const baixando = new Map();   // destino → Promise do download em andamento
+export function _baixando() { return baixando; }
+export function baixarEmFundo(url, destino, rotulo, { spawn = spawnProc } = {}) {
+  if (baixando.has(destino)) return baixando.get(destino);
+  // só do Hugging Face, no formato de sempre (a URL vem do .env, mas nunca vira opção do curl)
+  if (!urlDeModeloValida(url)) {
+    console.error(`[IA][gerar_imagem] ${rotulo}: URL fora do padrão https://huggingface.co/<usuario>/<repo>/resolve/<ref>/<arquivo> — download recusado`);
+    return Promise.reject(Object.assign(new Error("o modelo de imagem desta instalação está mal configurado"), { publico: true }));
   }
-  renameSync(tmp, destino);
-  return destino;
-}
-
-function baixarModeloSD() {
-  const SD_MODELO_URL = URLS.modelo;
-  const nome = basename(new URL(SD_MODELO_URL).pathname);
-  const destino = join(SD_DIR, nome);
-  if (existsSync(destino)) return destino;
   try { mkdirSync(SD_DIR, { recursive: true }); } catch {}
-  console.info(`[IA][gerar_imagem] primeiro uso: baixando ${nome} (uma vez, fica no volume)…`);
+  console.info(`[IA][gerar_imagem] baixando ${rotulo}: ${basename(destino)} (uma vez, fica no volume)…`);
   const tmp = `${destino}.baixando`;
-  const r = spawnSync("curl", ["-fL", "--retry", "2", SD_MODELO_URL, "-o", tmp], { stdio: "inherit" });
-  if (r.status !== 0) { try { unlinkSync(tmp); } catch {} throw new Error("download do modelo de imagem falhou (rede? URL em SD_MODELO_URL?)"); }
-  renameSync(tmp, destino);
-  return destino;
+  const p = new Promise((ok, falha) => {
+    const filho = spawn("curl", ["-fL", "--retry", "2", "-o", tmp, "--", url], { stdio: ["ignore", "ignore", "pipe"], env: ambienteMinimo() });
+    let err = "";
+    filho.stderr?.on?.("data", (d) => { if (err.length < 4000) err += d; });
+    filho.on("error", (e) => falha(e));
+    filho.on("close", (c) => {
+      if (c !== 0) { try { unlinkSync(tmp); } catch {} return falha(new Error(`curl saiu com ${c}: ${err.trim().split("\n").pop() ?? ""}`)); }
+      try { renameSync(tmp, destino); ok(destino); } catch (e) { falha(e); }
+    });
+  }).then((d) => { console.info(`[IA][gerar_imagem] ${rotulo} pronto: ${basename(d)}`); return d; },
+    (e) => { console.error(`[IA][gerar_imagem] download de ${rotulo} (${basename(destino)}) falhou: ${e?.message ?? e}`); throw e; })
+    .finally(() => baixando.delete(destino));
+  p.catch(() => {});   // quem pediu já ouviu "ainda baixando"; a falha fica no log
+  baixando.set(destino, p);
+  return p;
 }
+const AINDA_BAIXANDO = "o modelo de imagem ainda está baixando (é uma vez só) — tente de novo daqui a alguns minutos";
+function baixarArquivo(url, rotulo) {
+  const destino = join(SD_DIR, basename(new URL(url).pathname));
+  if (existsSync(destino)) return destino;
+  if (!urlDeModeloValida(url)) throw Object.assign(new Error("o modelo de imagem desta instalação está mal configurado"), { publico: true });
+  baixarEmFundo(url, destino, rotulo).catch(() => {});
+  throw Object.assign(new Error(AINDA_BAIXANDO), { publico: true });
+}
+const baixarModeloSD = () => baixarArquivo(URLS.modelo, "modelo de imagem");
 
 // O sd.cpp usa semente FIXA por padrão: o mesmo prompt devolvia sempre a mesma
 // imagem, o que parecia um bug de cache ("ele reenviou a figura de ontem").
@@ -216,7 +229,8 @@ export async function gerarComFolga(pedido, { gerar = gerarEmbutido, liberar = l
       return await gerar({ ...pedido, economico: true });
     } catch (e2) {
       if (faltouMemoria(e2?.message)) {
-        throw new Error("a GPU ficou sem memória para desenhar, mesmo com o LLM descarregado e no modo econômico — tenta uma imagem menor ou de novo daqui a pouco (IMAGEM_LADO_GERACAO no .env diminui o tamanho)");
+        console.error("[IMAGEM] sem memória mesmo no modo econômico — IMAGEM_LADO_GERACAO no .env diminui o tamanho");
+        throw Object.assign(new Error("a GPU ficou sem memória para desenhar — tenta de novo daqui a pouco"), { publico: true });
       }
       throw e2;
     }
@@ -295,7 +309,7 @@ function gerarEmbutido({ texto, width, height, economico = false, negativo = NEG
     }
     // stdout E stderr: o sd.cpp e o backend Vulkan do ggml espalham o
     // diagnóstico pelos dois (dispositivo, memória, operação não suportada).
-    const p = spawnProc(SD_BIN, finalArgs, { stdio: ["ignore", "pipe", "pipe"] });
+    const p = spawnProc(SD_BIN, finalArgs, { stdio: ["ignore", "pipe", "pipe"], env: ambienteMinimo({}, { gpu: true }) });
     let err = "";
     const juntar = (d) => { if (err.length < 400_000) err += d; };
     p.stdout.on("data", juntar);
@@ -323,21 +337,47 @@ function gerarEmbutido({ texto, width, height, economico = false, negativo = NEG
   });
 }
 
+// (31 out 2026, P1) Teto diário por servidor: cada desenho segura a GPU por minutos,
+// e sem teto um servidor só ocupava a máquina o dia inteiro. IMAGEM_POR_DIA (padrão
+// 20; 0 = sem teto). Conta o pedido que chega ao gerador, dê certo ou não.
+const usoDoDia = new Map();   // "AAAA-MM-DD:servidor" → quantas
+const IMAGEM_POR_DIA = () => {
+  const n = Number(process.env.IMAGEM_POR_DIA ?? 20);
+  return Number.isInteger(n) && n >= 0 ? n : 20;
+};
+export function _zerarTetoDiario() { usoDoDia.clear(); }
+export function consumirTetoDiario(servidor, agora = new Date()) {
+  const teto = IMAGEM_POR_DIA();
+  if (!teto) return true;
+  const dia = agora.toISOString().slice(0, 10);
+  for (const k of usoDoDia.keys()) if (!k.startsWith(`${dia}:`)) usoDoDia.delete(k);   // ontem sai
+  const chave = `${dia}:${servidor || "-"}`;
+  const n = usoDoDia.get(chave) ?? 0;
+  if (n >= teto) return false;
+  usoDoDia.set(chave, n + 1);
+  return true;
+}
+
 export async function executar({ prompt, largura, altura }, contexto = {}) {
   const embutidoDisponivel = IMAGEM_LIGADA && existsSync(SD_BIN);
   if (!SD_URL && !embutidoDisponivel) {
-    return { erro: "geração de imagem indisponível: o binário embutido (sd.cpp) não está nesta imagem e não há SD_URL apontando para um servidor A1111 (Forge/SD.Next) — ver ia-servico/README." };
+    console.warn("[IA][gerar_imagem] sem gerador: nem o sd.cpp embutido nem SD_URL (ver ia-servico/README)");
+    return { erro: "a geração de imagem não está disponível nesta instalação." };
   }
   const texto = String(prompt ?? "").trim();
   if (!texto) return { erro: "descreva o que desenhar." };
   // (22 out 2026) toda imagem é conferida pela visão: sem ela, nem começa
   if (!visaoDisponivel()) {
-    return { erro: "geração desligada: toda imagem passa pelo modelo de visão antes de sair, e ele não está configurado (MODELO_VISAO / LLM_MODEL_VISAO)." };
+    console.warn("[IA][gerar_imagem] sem modelo de visão (MODELO_VISAO / LLM_MODEL_VISAO): nenhuma imagem sai sem conferência");
+    return { erro: "geração desligada: toda imagem passa pelo modelo de visão antes de sair, e ele não está ligado nesta instalação." };
   }
   const recusa = prompProibido(texto);
   if (recusa) {
     console.warn(`[IA][gerar_imagem] RECUSADO: ${texto.slice(0, 160)}`);
     return { erro: `recusado: ${recusa}` };
+  }
+  if (!consumirTetoDiario(contexto?.servidor)) {
+    return { erro: `este servidor já chegou ao teto de ${IMAGEM_POR_DIA()} imagens por hoje — amanhã tem mais.` };
   }
 
   const corpo = {
@@ -369,7 +409,9 @@ export async function executar({ prompt, largura, altura }, contexto = {}) {
         anexo_nome: "judy-arte.jpg",
       };
     } catch (e) {
-      return { erro: `gerador embutido: ${e?.message ?? e}` };
+      if (e?.publico) return { erro: e.message };
+      console.error(`[IA][gerar_imagem] gerador embutido falhou: ${e?.message ?? e}`);
+      return { erro: "o gerador de imagem falhou desta vez — tente de novo daqui a pouco." };
     }
   }
 
@@ -401,6 +443,7 @@ export async function executar({ prompt, largura, altura }, contexto = {}) {
       anexo_nome: "judy-arte.jpg",
     };
   } catch (e) {
-    return { erro: `gerador de imagem: ${e?.message ?? e}` };
+    console.error(`[IA][gerar_imagem] gerador externo falhou: ${e?.message ?? e}`);
+    return { erro: "o gerador de imagem falhou desta vez — tente de novo daqui a pouco." };
   } finally { clearTimeout(t); }
 }

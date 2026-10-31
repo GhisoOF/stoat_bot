@@ -29,10 +29,20 @@ services:
       - VOZ_ATIVA=${VOZ_ATIVA:-0}       # 1 liga a voz nas calls (Piper na imagem)
       - SEARXNG_URL=${SEARXNG_URL:-http://searxng:8080}   # o serviço que sobe no compose
       - WEBHOOK_PORTA=${WEBHOOK_PORTA:-8095}
+      - WEBHOOK_ESCUTA=0.0.0.0          # dentro do container; a exposição na máquina é o WEBHOOK_BIND da porta abaixo
       - LLAMA_NGL=${LLAMA_NGL:-999}     # camadas do modelo na GPU (IA_MODO=local)
       - LLAMA_CTX=${LLAMA_CTX:-}        # contexto do modelo local (tokens; vazio = 8192, ou 4096 com CONVERSA=0)
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # Endurecimento (31 out 2026, R10/R11): o processo roda como `node`, sem
+    # nenhuma capability do kernel e sem poder ganhar privilégio (setuid). Teto
+    # de processos/threads (o llama-server e o sd.cpp usam uma thread por núcleo)
+    # e de memória: a máquina tem 32 GB unificados e roda LLM + gerador de
+    # imagem; MEMORIA_LIMITE no .env ajusta (ex.: 12g numa máquina de 16 GB).
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 1024
+    mem_limit: ${MEMORIA_LIMITE:-24g}
     # GPU para o modo local: descomente se a máquina tem GPU/iGPU com driver
     # Vulkan (Intel, AMD e a maioria das integradas). Sem isto, roda em CPU.
     #devices:
@@ -43,10 +53,10 @@ services:
     # container morre com "unable to find group render". Só `video`.
     ports:
       # receptor de webhooks. WEBHOOK_BIND escolhe em que endereço da máquina ele
-      # fica: 0.0.0.0 (padrão) = toda a rede de casa enxerga; 127.0.0.1 = só a
-      # própria máquina (o Tailscale Funnel continua funcionando, ele fala com
-      # o localhost); 172.17.0.1 = só os containers (ex.: Crafty)
-      - "${WEBHOOK_BIND:-0.0.0.0}:${WEBHOOK_PORTA:-8095}:${WEBHOOK_PORTA:-8095}"
+      # fica: 127.0.0.1 (padrão desde 31 out 2026) = só a própria máquina (o
+      # Tailscale Funnel continua funcionando, ele fala com o localhost);
+      # 172.17.0.1 = só os containers (ex.: Crafty); 0.0.0.0 = toda a rede de casa
+      - "${WEBHOOK_BIND:-127.0.0.1}:${WEBHOOK_PORTA:-8095}:${WEBHOOK_PORTA:-8095}"
     volumes:
       - stoat_data:/data
     # Privacidade (20 out 2026): o log tem o conteúdo das mensagens (os IDs saem
@@ -62,9 +72,19 @@ services:
   # Sobe junto por padrão: `docker compose up -d` traz tudo.
   # Para rodar SÓ o bot:  docker compose up -d stoat-bot
   searxng:
-    image: searxng/searxng:latest
+    # versão fixa (tag + digest): `latest` trocava o buscador sem ninguém pedir
+    image: searxng/searxng:2026.10.27-b5ed73fcb@sha256:0f48ffe2152f388f5eaede27f96b610449cebfc890d0ad457304475a54ad7b6e
     container_name: stoat-searxng
     restart: unless-stopped
+    # O segredo do SearXNG vem do .env (antes estava ESCRITO no arquivo de
+    # exemplo, igual para todo mundo). Sem ele o compose nem sobe — gere com:
+    #   openssl rand -hex 32
+    environment:
+      - SEARXNG_SECRET=${SEARXNG_SECRET:?defina SEARXNG_SECRET no .env (gere com openssl rand -hex 32)}
+    # as capabilities que a imagem do SearXNG usa para trocar de usuário, e só elas
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID]
+    security_opt: [no-new-privileges:true]
     # a busca na web só serve ao chat: BUSCA_WEB=0 no .env não sobe este
     # container (junto com CONVERSA=0, para economizar memória e CPU)
     deploy:

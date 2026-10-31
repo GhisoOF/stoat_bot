@@ -5,7 +5,8 @@ import { validarUrlImagem, comoExibir, formatarLinkConteudo } from "../core/midi
 
 import * as log from "../core/log.js";
 import { tr, lingua, idiomaDe } from "../core/i18n.js";
-import { canalDeOutroServidor } from "./pertence.js";
+import { canalDesteServidor, podeEscreverNoCanal } from "./pertence.js";
+import { descreverErro } from "../core/erros.js";
 
 // Converte "#RRGGBB" ou nome comum em cor aceita pelo embed
 
@@ -163,9 +164,15 @@ export async function cmdEmbed(message, args, ctx) {
         { title: "❌ Canal inválido", description: `\`${campos.canal}\` não é um ID de canal válido.`, colour: COR.erro },
         { title: "❌ Invalid channel", description: `\`${campos.canal}\` is not a valid channel ID.`, colour: COR.erro },
         { title: "❌ Canal inválido", description: `\`${campos.canal}\` no es un ID de canal válido.`, colour: COR.erro }));
-    canalDestino = client.channels.get(campos.canal)
-      ?? await client.channels.fetch(campos.canal).catch(() => null);
-    if (!canalDestino || canalDeOutroServidor(canalDestino, ctx.serverId))
+    // (31 out 2026, R9) só canal DESTE servidor, e onde quem pede pode escrever
+    const deste = canalDesteServidor(server, campos.canal);
+    canalDestino = deste ? (client.channels.get(deste.id) ?? await client.channels.fetch(deste.id).catch(() => null)) : null;
+    if (canalDestino && !podeEscreverNoCanal(message, canalDestino, server, ctx))
+      return sendEmbed(message.channel, tr(ctx,
+        { title: "🚫 Sem permissão nesse canal", description: `Você não pode enviar mensagens em <#${canalDestino.id}> — então eu também não publico lá por você.`, colour: COR.erro },
+        { title: "🚫 No permission in that channel", description: `You can't send messages in <#${canalDestino.id}> — so I won't post there for you.`, colour: COR.erro },
+        { title: "🚫 Sin permiso en ese canal", description: `No puedes enviar mensajes en <#${canalDestino.id}> — así que yo tampoco publico ahí por ti.`, colour: COR.erro }));
+    if (!canalDestino)
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Canal não encontrado", description: `Não consegui acessar o canal \`${campos.canal}\` **neste servidor**.`, colour: COR.erro },
         { title: "❌ Channel not found", description: `I couldn't access the \`${campos.canal}\` channel **on this server**.`, colour: COR.erro },
@@ -238,10 +245,9 @@ export async function cmdEmbed(message, args, ctx) {
       }));
     }
   } catch (err) {
-    console.error("[EMBED]", err.message);
     await sendEmbed(message.channel, tr(ctx,
-      { title: "❌ Falha ao enviar", description: `**Erro:** ${err.message}`, colour: COR.erro },
-      { title: "❌ Failed to send", description: `**Error:** ${err.message}`, colour: COR.erro },
-      { title: "❌ Error al enviar", description: `**Error:** ${err.message}`, colour: COR.erro }));
+      { title: "❌ Falha ao enviar", description: `**Erro:** ${descreverErro(err, "pt")}`, colour: COR.erro },
+      { title: "❌ Failed to send", description: `**Error:** ${descreverErro(err, "en")}`, colour: COR.erro },
+      { title: "❌ Error al enviar", description: `**Error:** ${descreverErro(err, "es")}`, colour: COR.erro }));
   }
 }

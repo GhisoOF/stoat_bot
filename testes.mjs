@@ -18071,6 +18071,10 @@ await t("★ scripts com pipefail não cortam o pipe do git (SIGPIPE matava o de
     const sh = ler(f);
     assert.match(sh, /set -euo pipefail/, f);
     assert.doesNotMatch(sh, /git log[^\n|]*\|[^\n]*\b(head|awk[^\n]*exit)\b/, `${f}: git log | head/awk…exit`);
+    // (P2.4) o mesmo com `… | grep -q`: o backup saía "sem o stoat.db" porque o tar levava SIGPIPE
+    assert.doesNotMatch(sh.replace(/^\s*#.*$/gm, ""), /\|\s*grep\s+-q/, `${f}: algo | grep -q`);
+    // e o git nunca abre pager (no ssh com TERM desconhecido, o less travava/reclamava)
+    assert.match(sh, /^export GIT_PAGER=cat PAGER=cat/m, f);
   }
   // o mesmo jeito de falhar, de verdade: com pipefail, sair cedo do pipe derruba; ler tudo não
   assert.equal(spawnSync("bash", ["-c", "set -euo pipefail; X=\"$(seq 1 2000000 | awk '{ print; exit }')\"; echo ok"]).status, 141);

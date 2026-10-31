@@ -30,6 +30,8 @@
 # ══════════════════════════════════════════════════════════
 
 set -euo pipefail
+# (31 out 2026) sem pager: no ssh com TERM desconhecido (xterm-kitty) o `git log` abria o less
+export GIT_PAGER=cat PAGER=cat
 
 REPO="${REPO:-/home/void/judy-repo}"
 CONTAINER="${CONTAINER:-stoat-bot}"
@@ -79,7 +81,8 @@ fazer_backup() {
   docker run --rm -v "$vol":/data:ro -v "$BACKUPS":/b alpine \
     sh -c "cd /data && tar czf '/b/$(basename "$arq")' \$(ls -d stoat.db* automod-config.json log-segredo.key 2>/dev/null)" \
     || erro "o backup falhou — NADA foi atualizado (suba de novo com: docker compose up -d)"
-  tar tzf "$arq" | grep -q 'stoat.db$' || erro "o backup não tem o stoat.db: $arq — NADA foi atualizado"
+  # (P2.4) `grep -q` sai no primeiro achado, o tar leva SIGPIPE e o `pipefail` dava "não tem o stoat.db"
+  tar tzf "$arq" | grep 'stoat\.db$' >/dev/null || erro "o backup não tem o stoat.db: $arq — NADA foi atualizado"
   okay "backup: $arq ($(du -h "$arq" | cut -f1))"
   # guarda só os MANTER mais novos, e nenhum mais velho que DIAS_BACKUP dias
   ls -1t "$BACKUPS"/stoat-data-*.tgz 2>/dev/null | tail -n +"$((MANTER + 1))" | xargs -r rm -f
@@ -101,7 +104,7 @@ case "$ACAO" in
   restaurar)
     ARQ="${2:-}"
     [ -f "$ARQ" ] || erro "uso: $0 restaurar <arquivo.tgz>   (veja: $0 lista)"
-    tar tzf "$ARQ" | grep -q 'stoat.db$' || erro "$ARQ não tem stoat.db"
+    tar tzf "$ARQ" | grep 'stoat\.db$' >/dev/null || erro "$ARQ não tem stoat.db"
     printf '\033[33mO banco atual será SUBSTITUÍDO por %s (o atual vai para um backup antes). Continuar? [s/N] \033[0m' "$(basename "$ARQ")"
     read -r R; case "$R" in s|S|y|Y) ;; *) info "cancelado"; exit 0 ;; esac
     MANTER=100000 DIAS_BACKUP=100000 fazer_backup   # o atual, por garantia (sem podar: o arquivo a restaurar pode ser antigo)
@@ -155,7 +158,7 @@ FIM=$(( $(date +%s) + 360 ))
 VISTO=""
 while [ "$(date +%s)" -lt "$FIM" ]; do
   LOG="$(docker logs --since "$INICIO" "$CONTAINER" 2>&1 || true)"
-  if printf '%s' "$LOG" | grep -q 'falha na migração v4'; then
+  if grep -q 'falha na migração v4' <<<"$LOG"; then
     printf '%s\n' "$LOG" | grep -E '\[RPG\]' | tail -5
     printf '\n\033[31m✗ a migração do RPG falhou — o &game fica "em manutenção", o resto do bot segue.\033[0m\n'
     printf '  Nada do jogo foi gravado. Mande este log para análise. Backup: %s\n' "$ULTIMO_BACKUP"
@@ -164,9 +167,9 @@ while [ "$(date +%s)" -lt "$FIM" ]; do
   NOVO="$(printf '%s' "$LOG" | grep -E '\[RPG\]|\[DB\] Banco aberto|Logged in as' | tail -8 || true)"
   if [ "$NOVO" != "$VISTO" ]; then printf '%s\n' "$NOVO" | sed 's/^/   /'; VISTO="$NOVO"; fi
   # "catálogo pronto" vem depois do login; a migração roda logo em seguida
-  if printf '%s' "$LOG" | grep -q '\[RPG\] catálogo pronto'; then
+  if grep -q '\[RPG\] catálogo pronto' <<<"$LOG"; then
     sleep 5
-    docker logs --since "$INICIO" "$CONTAINER" 2>&1 | grep -q 'falha na migração v4' && continue
+    docker logs --since "$INICIO" "$CONTAINER" 2>&1 | grep 'falha na migração v4' >/dev/null && continue
     break
   fi
   if [ "$(docker inspect "$CONTAINER" --format '{{.State.Running}}' 2>/dev/null)" != "true" ]; then

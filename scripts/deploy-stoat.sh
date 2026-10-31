@@ -23,6 +23,7 @@
 # ══════════════════════════════════════════════════════════
 
 set -euo pipefail
+export GIT_PAGER=cat PAGER=cat   # (P2.4) o `git log` nunca abre o less
 
 # o checkout mudou de lugar em 23 set 2026 (a pasta antiga em Downloads foi apagada)
 if [ -z "${REPO:-}" ]; then

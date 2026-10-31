@@ -18243,6 +18243,15 @@ await t("★ o `node --check` cobre o iniciar.js e os serviços", () => {
   fs.writeFileSync(`${dir}/iniciar.js`, iniSrc);
   const rodar = () => spawnSync(process.execPath, ["scripts/verificar-build.js"], { cwd: dir, encoding: "utf8" });
   assert.equal(rodar().status, 0, "a cópia limpa passa");
+  // (31 out 2026, P2.1) o build do Docker roda com --imagem: o .dockerignore tira os READMEs
+  // traduzidos e o .env.example, e o build da imagem quebrou por isso. Sem eles, `--imagem` passa
+  // (e sem a flag, falha — a conferência dos READMEs continua valendo no repositório)
+  assert.match(ler("Dockerfile"), /^RUN node scripts\/verificar-build\.js --imagem$/m);
+  assert.match(ler(".dockerignore"), /^\*\.md$/m);
+  for (const f of ["README.pt-BR.md", "README.es.md", ".env.example"]) fs.rmSync(`${dir}/${f}`);
+  assert.equal(spawnSync(process.execPath, ["scripts/verificar-build.js", "--imagem"], { cwd: dir, encoding: "utf8" }).status, 0, "como na imagem");
+  assert.equal(rodar().status, 1, "no repositório, sem os READMEs, falha");
+  for (const f of ["README.pt-BR.md", "README.es.md", ".env.example"]) fs.copyFileSync(f, `${dir}/${f}`);
   fs.writeFileSync(`${dir}/iniciar.js`, iniSrc + "\nconst = ;\n");
   let r = rodar();
   assert.equal(r.status, 1); assert.match(r.stderr, /sintaxe inválida em iniciar\.js/);

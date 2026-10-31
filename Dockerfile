@@ -211,7 +211,7 @@ RUN cd voz-servico && (npm ci --omit=dev --no-audit --no-fund \
 COPY . .
 
 # 2b) Sanidade: repositório incompleto derruba o build aqui, não em runtime.
-RUN node scripts/verificar-build.js
+RUN node scripts/verificar-build.js --imagem
 
 ENV CONFIG_PATH=/data/automod-config.json \
     DB_PATH=/data/stoat.db \

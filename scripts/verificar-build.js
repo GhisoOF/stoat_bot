@@ -167,7 +167,10 @@ if (!existsSync(modulosDir)) {
 // 6) (P2, 31 out 2026, Regra da Geração) as tabelas dos READMEs (comandos e variáveis)
 //    saem do registro e do .env.example: tabela velha derruba o build
 //    (`node scripts/gerar-readme.js` regera)
-{
+//    Dentro do build do Docker (`--imagem`) os READMEs traduzidos e o .env.example não
+//    entram (.dockerignore): essa conferência é do repositório, e o CI a faz no job dos testes.
+if (process.argv.includes("--imagem")) console.log("  · READMEs: conferidos no repositório (não entram na imagem)");
+else {
   const { conferir } = await import(join(RAIZ, "scripts", "gerar-readme.js"));
   const problemas = await conferir(RAIZ).catch((e) => [`gerar-readme: ${e.message}`]);
   for (const p of problemas) falha(`README: ${p}`);

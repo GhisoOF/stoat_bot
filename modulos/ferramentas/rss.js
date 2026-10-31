@@ -8,7 +8,7 @@ import { tr, textoDoIdioma, idiomaDaTela } from "../core/i18n.js";
 import { servidorNaLista, numero } from "../core/env.js";
 import { servidorDaCasa } from "../core/casa.js";
 import { carimbo } from "../core/tempo.js";
-import { fusoDoServidor, lerHorario, instanteEm, proximoInstante, diaEm } from "../core/fusos.js";
+import { fusoDoServidor, lerHorario, instanteEm, proximoInstante, diaEm, buscarFuso, fusoValido, cidadeDoFuso } from "../core/fusos.js";
 import { idiomaDe } from "../core/i18n.js";
 import { salvarConfigServidor } from "../core/config-store.js";
 import { responder, erroDeUso, erro, semPermissao } from "../core/saida.js";
@@ -119,7 +119,9 @@ const MAX_URGENTES = 20, MAX_TERMO = 40;
 export function horarioDoServidor(config) {
   return lerHorario(config?.rss?.horario) ?? lerHorario(HORARIO_PADRAO);
 }
-const fusoDe = (config) => fusoDoServidor(config, idiomaDe({ config }));
+// (P2.3) o fuso do telejornal: o que a staff escolheu no `&rss horario 13:00 <cidade>`;
+// senão, o de referência do servidor (&fuso) ou o do idioma
+const fusoDe = (config) => (config?.rss?.fuso && fusoValido(config.rss.fuso)) ? config.rss.fuso : fusoDoServidor(config, idiomaDe({ config }));
 
 // O telejornal de hoje (no fuso do servidor) já devia ter saído e ainda não saiu?
 export function telejornalDevido(config, agora = Date.now()) {
@@ -481,6 +483,15 @@ export async function cmdRss(message, args, ctx) {
 
   // ── horario <HH:MM> ──
   if (sub === "horario" || sub === "horário" || sub === "hora") {   // `time` chega traduzido pelo registro
+    // (P2.3) `&rss horario 13:00 Madrid`: a hora é a da cidade dita (antes valia o fuso do
+    // idioma — pt = São Paulo — e 13:00 virava 17:00 para quem está em Madrid)
+    const termoCidade = args.slice(2).join(" ").trim();
+    if (termoCidade) {
+      const r = buscarFuso(termoCidade.slice(0, 60));
+      if (!r.exato) return erroDeUso(ctx, canal, "rss", "Cidade não encontrada (ex.: Madrid, Sao Paulo, Tokyo).", "City not found (e.g. Madrid, Sao Paulo, Tokyo).", "Ciudad no encontrada (ej.: Madrid, Sao Paulo, Tokyo).");
+      if (!args[1] || !lerHorario(args[1])) return erroDeUso(ctx, canal, "rss", "Horário inválido (ex.: 21:00).", "Invalid time (e.g. 21:00).", "Hora no válida (ej.: 21:00).");
+      config.rss.fuso = r.exato;
+    }
     const zona = fusoDe(config);
     if (args[1]) {
       const hm = lerHorario(args[1]);
@@ -493,7 +504,8 @@ export async function cmdRss(message, args, ctx) {
       armarAgendador();
     }
     const prox = proximoInstante(horarioDoServidor(config), zona);
-    const linha = `📰 ${carimbo(prox, "t")} (${carimbo(prox, "R")})`;
+    // a hora como foi pedida, na cidade (texto fixo), e o timestamp (na hora de quem lê)
+    const linha = `📰 **${config.rss.horario ?? HORARIO_PADRAO}** ${cidadeDoFuso(zona)} · ${carimbo(prox, "t")} (${carimbo(prox, "R")})`;
     return responder(ctx, canal, linha, linha, linha, args[1] ? "sucesso" : "info");
   }
 

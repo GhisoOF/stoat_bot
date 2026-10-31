@@ -118,7 +118,7 @@ export const POR_NOME = {
   cooldownMs: r("intervalo", "cooldown", "intervalo"), multiplicador: r("multiplicador", "multiplier", "multiplicador"),
   nivelMaximo: r("nível máximo", "max level", "nivel máximo"), intervaloCargos: r("cargo a cada", "role every", "rol cada"),
   canalAnuncio: r("anúncio em", "announced in", "anuncio en"),
-  horario: r("telejornal às", "news digest at", "noticiero a las"), urgentes: r("termos urgentes", "urgent terms", "términos urgentes"), anunciarLevelUp: r("anuncia subida", "announces level-up", "anuncia subida"),
+  horario: r("telejornal às", "news digest at", "noticiero a las"), fuso: r("fuso do telejornal", "news digest time zone", "huso del noticiero"), urgentes: r("termos urgentes", "urgent terms", "términos urgentes"), anunciarLevelUp: r("anuncia subida", "announces level-up", "anuncia subida"),
 };
 
 // O rótulo de um caminho (`["automod", "antiSpam", "windowMs"]`) no idioma, ou null

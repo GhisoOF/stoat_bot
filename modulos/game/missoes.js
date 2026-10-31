@@ -12,12 +12,12 @@ import { CONTRATOS, BICOS, ESPECIAIS, DUNGEONS, CHEFES } from "./conteudo.js";
 export { CONTRATOS, BICOS, ESPECIAIS, DUNGEONS, CHEFES };
 // bico: sem risco e paga 10% — com 30 min de espera rende metade de um contrato
 // por hora (com 10 min rendia mais que o contrato, e esvaziava o banco)
-export const ESPERA_MIN = { contrato: R.MISSAO.espera, dungeon: R.MISSAO.espera, especial: R.MISSAO.espera, bico: 30 };
+export const ESPERA_MIN = { contrato: R.MISSAO.espera, dungeon: R.MISSAO.espera, especial: R.MISSAO.espera, bico: R.MISSAO.espera };
 // quantos níveis uma vitória pode dar, no máximo (o nível 1 carregado no co-op
 // por um chefe do nível 60 não pula para o 51)
 export const NIVEIS_POR_LUTA = 2;
-export const ESPECIAL_PRIMEIRA_H = 2;   // até o primeiro êxito de uma especial
-export const CHEFE_ESPERA_H = 24;      // D19: por pessoa, por chefe
+export const ESPECIAL_PRIMEIRA_H = 0.25;   // até o primeiro êxito de uma especial (P2.3: 2 h → 15 min)
+export const CHEFE_ESPERA_H = 1;      // D19: por pessoa, por chefe (P2.3: 24 h → 1 h)
 export const COMPANHEIRO_LOOT = 0.07;  // por êxito, da faixa ou uma abaixo
 export const LOOT_TEMA = 0.70;         // na dungeon, 70% do loot é do tema
 

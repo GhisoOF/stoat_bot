@@ -88,7 +88,7 @@ export const padraoServidor = {
   // ── O servidor manda ao dono da Judy um relatório ANÔNIMO de ataques? (P4) ──
   relatorioDono: false,
   // ── Curadoria RSS ──
-  rss: { canalId: null, horario: "21:00", urgentes: [] },   // (P2, ferramentas) o telejornal: hora local e os termos urgentes
+  rss: { canalId: null, horario: "21:00", fuso: null, urgentes: [] },   // (P2.3) fuso: a cidade do `&rss horario 13:00 <cidade>`   // (P2, ferramentas) o telejornal: hora local e os termos urgentes
   autorole: { roleId: null },   // cargo dado automaticamente a quem entra
   chatLivre: { canais: [], modo: "relevante" },    // "relevante" = só o que julgar importante; "todas" = toda mensagem
   comentarioEspontaneo: {

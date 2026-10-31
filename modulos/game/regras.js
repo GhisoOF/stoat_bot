@@ -406,7 +406,8 @@ export function curvas() { return { poder: { f: (n) => refMemo(n).poder }, resil
 // para a party de referência daquele nível. Especial: 30/60. Chefe: 35/60 com
 // 4 jogadores.
 export const ESC2 = escalaPorParty(2);
-export const MISSAO = { exito: .40, sobrev: .70, xp: 40, espera: 45, exitoVale: 0.8 };
+// (31 out 2026, P2.3) espera entre missões: 45 → 5 min (o Ghieh: as pessoas não ficam o dia todo no Stoat)
+export const MISSAO = { exito: .40, sobrev: .70, xp: 40, espera: 5, exitoVale: 0.8 };
 export const BASE = { normal: { exito: .40, sobrev: .70 }, especial: { exito: .30, sobrev: .60 }, chefe: { exito: .35, sobrev: .60 } };
 const _missao = new Map();
 export function missao(nivel, base = BASE.normal) {

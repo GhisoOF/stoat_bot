@@ -20195,10 +20195,28 @@ await t("`&rss agora` é apelido de `testar` e respeita o intervalo mínimo (uma
 await t("`&rss horario 21:00` guarda a hora local e responde com o timestamp; hora inválida é erro de uso", async () => {
   await rss.cmdRss(msgR, ["horario", "8pm"], ctxR);
   assert.equal(cfgR.rss.horario, "20:00");
-  assert.match(textoDe(telaR.at(-1)), /^📰 <t:\d+:t> \(<t:\d+:R>\)$/);
+  // (31 out 2026, P2.3) a resposta diz a hora pedida e a cidade, além do timestamp
+  assert.match(textoDe(telaR.at(-1)), /^📰 \*\*20:00\*\* Sao Paulo · <t:\d+:t> \(<t:\d+:R>\)$/);
   await rss.cmdRss(msgR, ["horario", "25:00"], ctxR);
   assert.equal(textoDe(telaR.at(-1)), "❌ Horário inválido (ex.: 21:00). · `&help rss`");
   assert.equal(cfgR.rss.horario, "20:00");
+});
+await t("★ `&rss horario 13:00 Madrid`: a hora é a de Madrid (antes valia o fuso do idioma — pt = São Paulo — e 13:00 virava 17:00 em Madrid)", async () => {
+  const fus = await import("./modulos/core/fusos.js");
+  await rss.cmdRss(msgR, ["horario", "13:00", "Madrid"], ctxR);
+  assert.equal(cfgR.rss.fuso, "Europe/Madrid");
+  assert.equal(cfgR.rss.horario, "13:00");
+  const txt = textoDe(telaR.at(-1));
+  assert.match(txt, /^📰 \*\*13:00\*\* Madrid · <t:(\d+):t> \(<t:\d+:R>\)$/);
+  const seg = Number(txt.match(/<t:(\d+):t>/)[1]);
+  assert.equal(seg * 1000, fus.proximoInstante({ h: 13, m: 0 }, "Europe/Madrid"), "o timestamp é 13:00 em Madrid");
+  const hm = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/Madrid", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(seg * 1000));
+  assert.equal(hm, "13:00");
+  // cidade que não existe: erro de uso, e nada muda
+  await rss.cmdRss(msgR, ["horario", "14:00", "Cidadeinexistentexyz"], ctxR);
+  assert.match(textoDe(telaR.at(-1)), /^❌ Cidade não encontrada/);
+  assert.equal(cfgR.rss.horario, "13:00"); assert.equal(cfgR.rss.fuso, "Europe/Madrid");
+  delete cfgR.rss.fuso; cfgR.rss.horario = "20:00";
 });
 await t("`&rss urgente <termo>` liga e desliga o termo (literal, até 40 caracteres, teto de 20)", async () => {
   await rss.cmdRss(msgR, ["urgente", "Judy"], ctxR);
@@ -20510,7 +20528,7 @@ await t("integração: `&rolar init add Elfa 12` e o atalho `&iniciativa add Bia
   assert.match(r, /Elfa[\s\S]*Bia/);
 });
 await t("integração: `&rss horario 21:00` guarda a hora e `&xp` desligado responde uma linha", async () => {
-  assert.match(await diz("&rss horario 21:00"), /📰 <t:\d+:t>/);
+  assert.match(await diz("&rss horario 21:00"), /📰 \*\*21:00\*\* \S[^·]* · <t:\d+:t>/);   // (P2.3) com a hora pedida e a cidade
   assert.equal(store.configDoServidor(SID).rss.horario, "21:00");
   assert.match(await diz("&xp top"), /O XP está desligado neste servidor\. · `&help xp`/);
 });
@@ -22131,7 +22149,15 @@ await t("★ especial: a recompensa única uma vez por pessoa", () => {
   res = L.lutar([ANA], esp, { aleatorio: sempre(0.001) });
   assert.equal(res.resultados[0].unicos.length, 0, "o segundo não dá outro");
 });
-await t("★ chefe: 24 h por pessoa; o contrato do chefe vira ALIADO sozinho (não fica na mochila)", () => {
+await t("★ esperas curtas (P2.3, pedido do Ghieh): 5 min entre missões, 5 min de recuperação, 15 min na especial, 1 h no chefe", async () => {
+  const M = await import("./modulos/game/missoes.js"), Lt = await import("./modulos/game/lutas.js");
+  assert.deepEqual(M.ESPERA_MIN, { contrato: 5, dungeon: 5, especial: 5, bico: 5 });
+  assert.equal(Lt.RECUPERACAO_MS, 5 * 60_000);
+  assert.equal(M.ESPECIAL_PRIMEIRA_H * 60, 15);
+  assert.equal(M.CHEFE_ESPERA_H, 1);
+});
+// (31 out 2026, P2.3) a espera do chefe caiu de 24 h para 1 h (pedido do Ghieh): mesma exigência, com o valor novo
+await t("★ chefe: 1 h por pessoa; o contrato do chefe vira ALIADO sozinho (não fica na mochila)", () => {
   const harkon = MISS.CHEFES.get("b_tes_harkon");
   db.salvarPersonagem(ERA, ANA, { nivel: harkon.nivel }); descansar(ANA);
   const res = L.lutar([ANA], harkon, { aleatorio: sempre(0.001) });
@@ -22140,7 +22166,7 @@ await t("★ chefe: 24 h por pessoa; o contrato do chefe vira ALIADO sozinho (n�
   assert.ok(db.getParty(ERA, ANA).length <= 2, "no máximo dois vão junto");
   descansar(ANA);
   const imp = L.impedimento(ANA, L.montarAlvo(harkon, harkon.nivel));
-  assert.equal(imp?.motivo, "chefe"); assert.ok(imp.ate > Date.now() + 23 * 3600e3);
+  assert.equal(imp?.motivo, "chefe"); assert.ok(imp.ate > Date.now() + 0.95 * 3600e3 && imp.ate <= Date.now() + 3600e3);
   assert.notEqual(L.escolherChefe([ANA], harkon.nivel)?.id, "b_tes_harkon", "o chefe em espera não é escolhido");
 });
 await t("pergaminho vira magia sozinho; contrato repetido não dá aliado repetido", () => {

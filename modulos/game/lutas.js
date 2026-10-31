@@ -30,7 +30,7 @@ import { imagemDe } from "./imagens.js";
 import { T, cmd, nomeMissao, nomeItem, nomeAliado, nomeMagia, desfecho, emojiRaridade, emojiMissao, tipoMissao, fmt, pct, enviar } from "./telas.js";
 
 const MIN = 60_000, HORA = 60 * MIN;
-export const RECUPERACAO_MS = 30 * MIN;
+export const RECUPERACAO_MS = 5 * MIN;   // (P2.3) 30 → 5 min
 export const COOP_MAX = 4;
 export const CONVITE_MS = 2 * MIN;
 export const CHANCE_ESPECIAL = 0.15;   // a vez de uma missão especial no sorteio (a Sorte aumenta)

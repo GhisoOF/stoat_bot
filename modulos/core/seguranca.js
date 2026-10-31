@@ -137,6 +137,23 @@ export function erroEmIngles(texto) {
   for (const [re, en] of ERROS_EN) t = t.replace(re, en);
   return t;
 }
+// (31 out 2026) a tela em espanhol mostrava a frase em inglês
+const ERROS_ES = [
+  [/^bloqueado: /, "bloqueado: "],
+  [/o domínio aponta para um endereço interno/, "el dominio apunta a una dirección interna"],
+  [/o domínio não resolve/, "el dominio no se resuelve"],
+  [/endereço inválido/, "dirección no válida"],
+  [/protocolo (\S+) não é permitido/, "el protocolo $1 no está permitido"],
+  [/endereço interno/, "dirección interna"],
+  [/resposta grande demais \(mais de (\d+) MB\)/, "respuesta demasiado grande (más de $1 MB)"],
+  [/tempo esgotado/, "tiempo agotado"],
+  [/redirects demais/, "demasiadas redirecciones"],
+];
+export function erroEmEspanhol(texto) {
+  let t = String(texto ?? "");
+  for (const [re, es] of ERROS_ES) t = t.replace(re, es);
+  return t;
+}
 
 export const MAX_RESPOSTA = Number(process.env.REDE_MAX_BYTES || 5 * 1024 * 1024);
 

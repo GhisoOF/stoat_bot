@@ -15819,6 +15819,10 @@ Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: "/tmp/c
 globalThis.fetch = async (url) => /stoat\.chat|stoatusercontent|\/servers\/|\/channels\/|\/users\//.test(String(url))
   ? { ok: true, status: 200, text: async () => "{}", json: async () => ({}), headers: new Map() }
   : { ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() };
+// (31 out 2026) o buscarSeguro (RSS, listas) não passa pelo fetch: resolve o DNS e abre
+// a conexão sozinho. No CI, com internet, o `&rss add` lia sites de verdade e a tela
+// mudava — a suíte só passava aqui, sem DNS. Agora nenhum domínio resolve, nos dois.
+(await import("node:dns/promises")).default.lookup = async () => { throw Object.assign(new Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" }); };
 const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
 const main = await quieto(() => import("./main.js"));
 const paginas = await import("./modulos/core/paginas.js");
@@ -19516,6 +19520,16 @@ await t("★ @everyone/@online não pingam e o texto respeita o teto", () => {
   assert.doesNotMatch(r, /(^|\s)@(everyone|online)\b/);
   assert.ok(r.length <= 100);
   assert.equal(textoDeFora(null), "");
+});
+
+await t("★ erroEmEspanhol: o erro de rede sai em espanhol na tela em espanhol (no CI saía em inglês)", async () => {
+  const { erroEmEspanhol } = await import("./modulos/core/seguranca.js");
+  assert.equal(erroEmEspanhol("bloqueado: o domínio não resolve"), "bloqueado: el dominio no se resuelve");
+  assert.equal(erroEmEspanhol("bloqueado: o domínio aponta para um endereço interno"), "bloqueado: el dominio apunta a una dirección interna");
+  assert.equal(erroEmEspanhol("resposta grande demais (mais de 5 MB)"), "respuesta demasiado grande (más de 5 MB)");
+  assert.equal(erroEmEspanhol("HTTP 404"), "HTTP 404");
+  const { motivoDoFeed } = await import("./modulos/ferramentas/rss.js");
+  assert.equal(motivoDoFeed(new Error("tempo esgotado"), "es"), "tiempo agotado");
 });
 
 console.log("── pertence.canalDesteServidor ──");

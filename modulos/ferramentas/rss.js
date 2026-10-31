@@ -1,5 +1,5 @@
 import ParserRSS from "rss-parser";   // dependência: sem ele, o boot para (antes caía num leitor por regex)
-import { buscarSeguro, lerTexto, erroEmIngles, textoDeFora } from "../core/seguranca.js";
+import { buscarSeguro, lerTexto, erroEmIngles, erroEmEspanhol, textoDeFora } from "../core/seguranca.js";
 import { citar, citarInterno } from "../core/aliases.js";
 import * as db from "../core/db.js";
 import { canalDeOutroServidor, canalDesteServidor } from "../moderacao/pertence.js";
@@ -90,7 +90,7 @@ async function baixarFeed(url) {
 // tamanho); erro de biblioteca ou de rede vira uma frase só (R10).
 export function motivoDoFeed(err, lang = "pt") {
   const m = String(err?.message ?? "").replace(/\s*\([^)]*\)\s*$/, "");   // sem o endereço entre parênteses
-  if (/^(bloqueado: |HTTP \d{3}$|tempo esgotado|redirects demais|resposta grande demais)/.test(m)) return lang === "pt" ? m : erroEmIngles(m);
+  if (/^(bloqueado: |HTTP \d{3}$|tempo esgotado|redirects demais|resposta grande demais)/.test(m)) return lang === "pt" ? m : lang === "es" ? erroEmEspanhol(m) : erroEmIngles(m);
   return lang === "es" ? "no pude leer esa dirección como RSS/Atom" : lang === "en" ? "I couldn't read that address as RSS/Atom" : "não consegui ler esse endereço como RSS/Atom";
 }
 const semUrl = (t) => String(t ?? "").replace(/https?:\/\/\S+/g, "‹url›");

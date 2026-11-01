@@ -137,6 +137,32 @@ export function semRisada(texto) {
   return String(texto ?? "").split(/\s+/).filter((p) => !RISADA.test(p.replace(/[^\p{L}]/gu, ""))).join(" ");
 }
 
+// (1 nov 2026, P3a.1) a mensagem é SÓ risada ("KKKKKKK", "hahaha kkkk")? Uma risada é
+// conversa; três seguidas da mesma pessoa em 1 minuto contam como repetição (anti-duplicata).
+export function ehSoRisada(conteudo) {
+  const t = textoHumano(conteudo).replace(/^\s{0,3}#{1,6}\s+/gm, " ");
+  if ((t.match(/\p{L}/gu) ?? []).length < 3) return false;
+  return !/\p{L}/u.test(semRisada(t));
+}
+export const RISADA_SEGUIDA = { vezes: 3, janelaMs: 60_000 };
+
+// (1 nov 2026, P3a.1) título do markdown ("# texto", letra gigante): só com risada ou em
+// CAIXA ALTA é grito, mesmo curto ("# VAI LEVAR BAN", "# KKKKKK"). Título normal
+// ("# Regras do servidor") e sigla ("# FAQ") passam.
+export const TITULO_MIN_LETRAS = 4;
+export function tituloComGrito(conteudo, limiar = 0.7) {
+  const titulos = String(conteudo ?? "").matchAll(/^ {0,3}#{1,6}[ \t]+(.+)$/gm);
+  for (const [, resto] of titulos) {
+    const t = textoHumano(resto);
+    if (ehSoRisada(t)) return { tipo: "risada" };
+    const letras = semRisada(t).replace(SO_LETRAS, "");
+    if (letras.length < TITULO_MIN_LETRAS) continue;
+    const maius = (letras.match(MAIUSCULAS) ?? []).length;
+    if (maius / letras.length >= limiar) return { tipo: "caps" };
+  }
+  return null;
+}
+
 export function razaoDeCaixaAlta(texto) {
   const letras = semRisada(texto).replace(SO_LETRAS, "");
   if (letras.length < MIN_LETRAS) return null;

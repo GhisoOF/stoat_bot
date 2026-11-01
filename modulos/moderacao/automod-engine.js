@@ -14,7 +14,7 @@ import { aplicarTimeout, CONFIRMAR_MS } from "./timeout.js";
 import { editarCargos } from "../core/hierarquia.js";
 import * as imagemSentinela from "./imagem.js";
 import * as assuntos from "./assuntos.js";
-import { analisarCaracteres, analisarRepeticao, analisarDuplicata, digital, textoHumano, razaoDeCaixaAlta } from "./caracteres.js";
+import { analisarCaracteres, analisarRepeticao, analisarDuplicata, digital, textoHumano, razaoDeCaixaAlta, ehSoRisada, RISADA_SEGUIDA, tituloComGrito } from "./caracteres.js";
 import { lingua, tr } from "../core/i18n.js";
 import {
   ConstrutorIndice, criarIndiceVazio, carregarCache, salvarCache, idadeDoCache,
@@ -232,6 +232,9 @@ function dominioBloqueado(dominio, blockedDomains) {
   }
   return false;
 }
+
+// a digital de "mensagem só de risada" (nunca é igual a uma digital de texto: estas só têm a-z0-9)
+const DIGITAL_RISADA = "\u0001risada";
 
 export function agendarLimpezaSpam(ctx) {
   const { config, estado } = ctx;
@@ -1010,7 +1013,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
   // Fica aqui em cima porque o sentinela usa este número: uma mensagem
   // repetida pesa na nota dele, mesmo quando o texto em si é inofensivo.
   const dup = am.antiDuplicata ?? {};
-  let repetidas = 1, registrarDigital = null, anterioresDigitais = [];
+  let repetidas = 1, registrarDigital = null, anterioresDigitais = [], risadasSeguidas = 0;
   if (!soConteudo && dup.enabled !== false) {
     const agora = Date.now();
     const janela = dup.windowMs ?? 120_000;
@@ -1018,10 +1021,14 @@ async function analisarMensagem(message, ctx, opts = {}) {
     const recentes = (estado.ecoData?.get(chaveEco) ?? []).filter((x) => agora - x.t < janela);
     // texto, ou — mensagem só com anexo — a digital da mídia (tamanho + dimensões):
     // antes a mesma imagem repostada nunca contava como repetição
-    const d = digital(content) ?? rajada.digitalMidia(message);
+    // (1 nov 2026, P3a.1) risada pura vira uma digital só ("KKKK" e "kkkkkkkk" são a mesma
+    // coisa): a 3ª em 1 minuto conta como repetição. Ela não pesa no sentinela (repetidas = 1).
+    const risada = ehSoRisada(content);
+    const d = risada ? DIGITAL_RISADA : (digital(content) ?? rajada.digitalMidia(message));
     if (d) {
-      anterioresDigitais = recentes.map((x) => x.d);
-      repetidas = recentes.filter((x) => x.d === d).length + 1;
+      anterioresDigitais = recentes.map((x) => x.d).filter((x) => x !== DIGITAL_RISADA);
+      if (risada) risadasSeguidas = recentes.filter((x) => x.d === d && agora - x.t < RISADA_SEGUIDA.janelaMs).length + 1;
+      else repetidas = recentes.filter((x) => x.d === d).length + 1;
       // Só registra se a mensagem SOBREVIVER às regras abaixo: uma mensagem
       // apagada por outro motivo não deve contar como repetição depois.
       registrarDigital = () => {
@@ -1131,6 +1138,12 @@ async function analisarMensagem(message, ctx, opts = {}) {
   }
 
   const textoEstilo = textoHumano(content);
+  // (1 nov 2026, P3a.1) título do markdown só com risada ou em CAIXA ALTA: grito, mesmo curto
+  const titulo = am.antiCaps.enabled ? tituloComGrito(content, am.antiCaps.threshold) : null;
+  if (titulo) {
+    dbg(ctx, `  [anti-caps] ON → título ${titulo.tipo === "risada" ? "só com risada" : "em CAIXA ALTA"}`);
+    return punirRuido(am.antiCaps.punicao, titulo.tipo === "risada" ? "título só com risada é grito" : "evite escrever em CAIXA ALTA em excesso (título)", "anti-caps (título)");
+  }
   if (am.antiCaps.enabled && textoEstilo.length >= am.antiCaps.minLength) {
     // Siglas curtas ficam fora da conta; `null` = texto insuficiente.
     const ratio = razaoDeCaixaAlta(textoEstilo);
@@ -1178,7 +1191,11 @@ async function analisarMensagem(message, ctx, opts = {}) {
   if (!soConteudo && dup.enabled !== false) {
     // Conta nova repete 2× e já é pega (no raid, as contas tinham minutos de vida).
     const limiteDup = novato ? Math.max(2, (dup.maxRepetidas ?? 3) - 1) : (dup.maxRepetidas ?? 3);
-    const r = analisarDuplicata(content, anterioresDigitais, { maxRepetidas: limiteDup });
+    if (risadasSeguidas >= RISADA_SEGUIDA.vezes) {
+      dbg(ctx, `  [anti-duplicata] ON → ${risadasSeguidas}ª risada seguida em 1 min (limite ${RISADA_SEGUIDA.vezes})`);
+      return punirRuido(dup.punicao, `risada em sequência (${risadasSeguidas} mensagens só de risada em 1 minuto)`, "anti-duplicata (risada)");
+    }
+    const r = risadasSeguidas ? null : analisarDuplicata(content, anterioresDigitais, { maxRepetidas: limiteDup });
     dbg(ctx, `  [anti-duplicata] ON → ${repetidas}ª vez desta mensagem (limite ${limiteDup})`);
     if (r) {
       return punirRuido(dup.punicao, r.motivo, "anti-duplicata");

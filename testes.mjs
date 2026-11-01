@@ -25333,20 +25333,23 @@ await t("★ PRIVACIDADE.md (staff): casos duvidosos com a staff (14 dias; julga
   // os itens quebrados em ~88 colunas
   for (const l of p.split("\n")) if (/^(- |  )/.test(l) && /casos duvidosos|doubtful cases|casos dudosos|amostra diária|daily sample|muestra diaria|amostra do dono|owner's sample|muestra del dueño|perfil de quien|profile of whoever|perfil de quem/i.test(l)) assert.ok([...l].length <= 90, l);
 });
-await t("NOVIDADES: o topo é do pacote P3a, nos 3 idiomas, e o docs/pacote.json concorda", async () => {
+await t("NOVIDADES: a entrada do P3a está lá, nos 3 idiomas, e o topo concorda com o docs/pacote.json", async () => {
   const { NOVIDADES, problemaDaTrava } = await import("./modulos/ferramentas/novidades.js");
   const pac = JSON.parse(fs.readFileSync("docs/pacote.json", "utf8"));
-  assert.equal(pac.pacote, "P3a");
-  assert.equal(NOVIDADES[0].pacote, "P3a");
+  // (1 nov 2026, P3a.1) antes: o topo (e o pacote.json) tinham de ser o P3a. Agora o topo é o
+  // pacote atual (P3a.1); a entrada do P3a continua, conferida pelo id, com as mesmas frases
+  assert.equal(NOVIDADES[0].pacote, pac.pacote);
+  const p3a = NOVIDADES.find((x) => x.id === "2026-10-31-p3a");
+  assert.equal(p3a?.pacote, "P3a");
   assert.equal(problemaDaTrava(NOVIDADES, pac), null);
-  for (const l of ["pt", "en", "es"]) assert.match(NOVIDADES[0][l], /40%/, l);
+  for (const l of ["pt", "en", "es"]) assert.match(p3a[l], /40%/, l);
   // (31 out 2026, P3a, staff) o primeiro item: o caso duvidoso vai à staff com ✅/❌ e ajusta a Judy NAQUELE servidor; nada
   // da revisão do dono nem do sinal da staff
   for (const [l, re] of [["pt", /staff do servidor recebe um alerta com ✅\/❌, e o que ela decide vale e ajusta a Judy \*\*neste servidor\*\*/],
     ["en", /server's staff gets an alert with ✅\/❌, and what it decides counts and tunes Judy \*\*on this server\*\*/],
     ["es", /staff del servidor recibe una alerta con ✅\/❌, y lo que decide vale y ajusta a Judy \*\*en este servidor\*\*/]]) {
-    assert.match(NOVIDADES[0][l].split("\n")[0], re, l);
-    assert.doesNotMatch(NOVIDADES[0][l], /dono do bot|bot owner|dueño del bot|sinal|signal|señal/, l);
+    assert.match(p3a[l].split("\n")[0], re, l);
+    assert.doesNotMatch(p3a[l], /dono do bot|bot owner|dueño del bot|sinal|signal|señal/, l);
   }
 });
 
@@ -26017,6 +26020,123 @@ await t("★ (bot inteiro) o painel do perfil e o dos temas mostram quantos caso
 });
 
 console.log(`\nP3a STAFF: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// (1 nov 2026, P3a.1) o caso real: "KKKKKKKKKKKKKKKKKKKKKK" duas vezes seguidas e "# KKKKKKKKKKKK"
+// (título, letra gigante) passaram; "# VAI LEVAR BAN" (13 letras) também. Uma risada é conversa;
+// risada em sequência e título com grito/risada são ruído. Pelo runAutomod de verdade.
+SUITES["p3a1-ruido"] = async () => {
+const assert = (await import("node:assert")).default;
+const fs = (await import("node:fs")).default;
+process.env.DB_PATH = "/tmp/p3a1-ruido.db";
+process.env.CONFIG_PATH = "/tmp/p3a1-ruido.json";
+for (const f of [process.env.DB_PATH, process.env.DB_PATH + "-wal", process.env.DB_PATH + "-shm", process.env.CONFIG_PATH]) fs.rmSync(f, { force: true });
+const db = await import("./modulos/core/db.js");
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+await quieto(() => db.abrirBanco(process.env.DB_PATH));
+const store = await import("./modulos/core/config-store.js");
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const car = await import("./modulos/moderacao/caracteres.js");
+const { ConstrutorIndice } = await import("./modulos/moderacao/indice-dominios.js");
+const c0 = new ConstrutorIndice();
+const vazio = c0.construir?.() ?? c0.finalizar?.() ?? c0;
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${e.message}`); falhou++; } };
+
+let n = 0;
+const novoEstado = () => ({ blockedDomains: vazio, spamData: new Map(), ecoData: new Map(), massSpamData: new Map() });
+const cfg = (mexer = () => {}) => {
+  const c = structuredClone(store.configDoServidor(`01SRVRUID${String(++n).padStart(17, "0")}`));
+  c.automod.antiSpam.enabled = false; c.automod.antiMassSpam.enabled = false;   // o ritmo não entra aqui
+  // servidor novo nasce com o automod desligado: liga só as duas partes deste teste
+  c.automod.antiCaps.enabled = true; c.automod.antiDuplicata = { ...(c.automod.antiDuplicata ?? {}), enabled: true };
+  mexer(c.automod); return c;
+};
+async function rodar(texto, { config, estado = novoEstado(), autor = "01AUTOR0000000000000000000", staff = false }) {
+  let apagou = false;
+  const message = { authorId: autor, content: texto, channelId: "c", channel: { id: "c", sendMessage: async () => ({}) },
+    delete: async () => { apagou = true; }, member: { roles: [] } };
+  const ctx = { config, serverId: "01SRV", COR: { info: 1, aviso: 2, erro: 3, sucesso: 4 }, PREFIXO: "&", estado,
+    getServer: async () => ({ id: "01SRV", fetchMember: async () => ({ edit: async () => {} }) }),
+    membroTemPermissao: (_m, _s, perm) => staff && perm === "ManageMessages",
+    sendEmbed: async () => ({}), salvarConfig: () => {}, client: { channels: { fetch: async () => ({ sendMessage: async () => ({}) }) } } };
+  let erro = null;
+  try { await quieto(() => engine.runAutomod(message, ctx)); } catch (e) { erro = e; }
+  if (erro && !apagou) throw new Error(`runAutomod lançou sem apagar nada: ${erro.message}`);
+  return apagou;
+}
+
+console.log("── só risada ──");
+await t("ehSoRisada: risadas (KKKK, kkk haha, título com risada) sim; frase, \"Af\" e \"kk\" não", () => {
+  for (const s of ["KKKKKKKKKKKKKKKKKKKKKK", "kkk kkkk haha", "# KKKKKKKKKKKK", "HAHAHAHA", "kkkkkk :KEKW:"]) assert.ok(car.ehSoRisada(s), s);
+  for (const s of ["DEIXE EU RIR", "Af", "kk", "kkkk que piada boa", "", "<@01ARZ3NDEKTSV4RRFFQ69G5FAV>"]) assert.ok(!car.ehSoRisada(s), s);
+});
+
+console.log("── risada em sequência (anti-duplicata) ──");
+await t("★ uma risada passa; a 2ª passa; a 3ª da mesma pessoa em 1 min é repetição (o caso real)", async () => {
+  const config = cfg(), estado = novoEstado();
+  assert.equal(await rodar("KKKKKKKKKKKKKKKKKKKKKK", { config, estado }), false);
+  assert.equal(await rodar("kkkkkkkkkkkk", { config, estado }), false);
+  assert.equal(await rodar("KKKKKKKKKKKKKKKKKKKKKKKK", { config, estado }), true);
+});
+await t("risadas de pessoas diferentes não somam", async () => {
+  const config = cfg(), estado = novoEstado();
+  for (const a of ["01AAAAAAAAAAAAAAAAAAAAAAAA", "01BBBBBBBBBBBBBBBBBBBBBBBB", "01CCCCCCCCCCCCCCCCCCCCCCCC"]) assert.equal(await rodar("KKKKKKKKKKKK", { config, estado, autor: a }), false);
+});
+await t("risada com conversa no meio: só as risadas contam, e frase com risada não é \"só risada\"", async () => {
+  const config = cfg(), estado = novoEstado();
+  assert.equal(await rodar("kkkkkk", { config, estado }), false);
+  assert.equal(await rodar("kkkk que piada boa, mano", { config, estado }), false);
+  assert.equal(await rodar("hahahaha", { config, estado }), false);
+  assert.equal(await rodar("kkkkkkkk", { config, estado }), true, "a 3ª mensagem só de risada");
+});
+await t("risada há mais de 1 minuto não conta", async () => {
+  const config = cfg(), estado = novoEstado();
+  const real = Date.now;
+  try {
+    let agora = real(); Date.now = () => agora;
+    assert.equal(await rodar("KKKKKKK", { config, estado }), false);
+    assert.equal(await rodar("KKKKKKK", { config, estado }), false);
+    agora += 61_000;
+    assert.equal(await rodar("KKKKKKK", { config, estado }), false);
+  } finally { Date.now = real; }
+});
+await t("anti-duplicata desligado: risada em sequência passa; staff passa", async () => {
+  const off = cfg((am) => { am.antiDuplicata = { ...(am.antiDuplicata ?? {}), enabled: false }; }), e1 = novoEstado();
+  for (let i = 0; i < 4; i++) assert.equal(await rodar("KKKKKKKK", { config: off, estado: e1 }), false);
+  const config = cfg(), e2 = novoEstado();
+  for (let i = 0; i < 4; i++) assert.equal(await rodar("KKKKKKKK", { config, estado: e2, staff: true }), false);
+});
+await t("a risada não pesa como repetição de texto normal (a digital não se mistura)", async () => {
+  const config = cfg(), estado = novoEstado();
+  assert.equal(await rodar("kkkkkkkk", { config, estado }), false);
+  assert.equal(await rodar("bom dia pessoal, tudo certo por aqui?", { config, estado }), false);
+  assert.equal(await rodar("bom dia pessoal, tudo certo por aqui?", { config, estado }), false);
+});
+
+console.log("── título (# texto) ──");
+await t("tituloComGrito: risada ou CAIXA ALTA em título, mesmo curto; título normal e sigla passam", () => {
+  assert.deepEqual(car.tituloComGrito("# KKKKKKKKKKKK"), { tipo: "risada" });
+  assert.deepEqual(car.tituloComGrito("# VAI LEVAR BAN"), { tipo: "caps" });
+  assert.deepEqual(car.tituloComGrito("oi\n## OLHA ISSO AQUI"), { tipo: "caps" });
+  for (const s of ["# Regras do servidor", "# FAQ", "texto # NAO E TITULO", "#canal", "VAI LEVAR BAN"]) assert.equal(car.tituloComGrito(s), null, s);
+});
+await t("★ \"# KKKKKKKKKKKK\" e \"# VAI LEVAR BAN\" são pegos pelo antiCaps (o caso real); \"# Regras do servidor\" passa", async () => {
+  assert.equal(await rodar("# KKKKKKKKKKKK", { config: cfg() }), true);
+  assert.equal(await rodar("# VAI LEVAR BAN", { config: cfg() }), true);
+  assert.equal(await rodar("# Regras do servidor", { config: cfg() }), false);
+});
+await t("antiCaps desligado: título passa; staff passa", async () => {
+  assert.equal(await rodar("# VAI LEVAR BAN", { config: cfg((am) => { am.antiCaps.enabled = false; }) }), false);
+  assert.equal(await rodar("# VAI LEVAR BAN", { config: cfg(), staff: true }), false);
+});
+await t("sem título, \"VAI LEVAR BAN\" (13 caracteres) continua abaixo do tamanho mínimo", async () => {
+  assert.equal(await rodar("VAI LEVAR BAN", { config: cfg() }), false);
+});
+
+console.log(`\nP3a.1 RUÍDO: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

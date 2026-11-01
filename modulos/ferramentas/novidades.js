@@ -23,6 +23,14 @@ import { citarNoTexto, marcarTraduzido } from "../core/aliases.js";
 // citação, e uma inventada aborta o build do Docker (aconteceu do P5 ao P7).
 export const NOVIDADES = [
   {
+    id: "2026-11-01-p3a1",
+    pacote: "P3a.1",
+    data: "2026-11-01",
+    pt: "• **Caixa alta:** título (`#`) em maiúsculas ou só de risada agora conta como grito, mesmo curto (o resto da mensagem continua com o tamanho mínimo de `{&automod.antiruido}`).\n• **Repetição:** uma risada passa; a 3ª mensagem só de risada da mesma pessoa em 1 minuto conta como repetição.",
+    en: "• **Caps:** a heading (`#`) in capitals or made only of laughter now counts as shouting, even when short (the rest of the message keeps the minimum length of `{&automod.antiruido}`).\n• **Repetition:** one laugh is fine; the 3rd laughter-only message from the same person within 1 minute counts as repetition.",
+    es: "• **Mayúsculas:** un título (`#`) en mayúsculas o solo de risa ahora cuenta como grito, aunque sea corto (el resto del mensaje sigue con el tamaño mínimo de `{&automod.antiruido}`).\n• **Repetición:** una risa pasa; el 3.er mensaje solo de risa de la misma persona en 1 minuto cuenta como repetición.",
+  },
+  {
     id: "2026-10-31-p3a",
     pacote: "P3a",
     data: "2026-10-31",

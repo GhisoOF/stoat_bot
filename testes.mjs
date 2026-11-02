@@ -18923,6 +18923,48 @@ await t("★ aoReagir: só ✅/❌, só do dono, só no canal da DM do caso; out
   assert.equal(await rev.aoReagir("MSGDM", DONO, "❌️"), true);
   assert.equal(linha(c).veredito, "errou", "a última reação vale");
 });
+// (2 nov 2026, P4.2) o dono quer saber na hora se o julgamento foi recebido
+await t("★ reação do dono: a mensagem do caso é editada na hora (✔️, cor, \"Veredito … · recebido\"), sem mensagem a mais", async () => {
+  limpar();
+  const ed = [], env = [];
+  rev._ligarParaTestes({ editar: async (canal, msg, emb) => { ed.push({ canal, msg, emb }); } });
+  const c = reg({ evidencia: { trecho: "um trecho para julgar" } }).codigo;
+  db.filaAtualizar(c, { estado: "enviado", dmMsgId: "MSGDM2", dmCanalId: "CANALDM2" });
+  assert.equal(await rev.aoReagir("MSGDM2", DONO, "✅", { canalId: "CANALDM2" }), true);
+  assert.equal(linha(c).veredito, "certo");
+  assert.equal(ed.length, 1, "uma edição");
+  assert.deepEqual([ed[0].canal, ed[0].msg], ["CANALDM2", "MSGDM2"]);
+  assert.match(ed[0].emb.title, /^✔️ /);
+  assert.equal(ed[0].emb.colour, "#2ECC71");
+  assert.match(ed[0].emb.description, /(Veredito|Verdict|Veredicto)\*\* ✅[^\n]*(recebido|received|recibido) <t:\d+:t>/);
+  assert.match(ed[0].emb.description, /> um trecho para julgar/, "o caso continua legível");
+  assert.equal(await rev.aoReagir("MSGDM2", DONO, "❌", { canalId: "CANALDM2" }), true);
+  assert.equal(ed.length, 2, "mudou de ideia: edita de novo");
+  assert.equal(ed[1].emb.colour, "#E74C3C");
+  assert.match(ed[1].emb.description, /\*\* ❌/);
+  // reação de quem não é o dono: nada é editado
+  await rev.aoReagir("MSGDM2", OUTRO, "✅", { canalId: "CANALDM2" });
+  assert.equal(ed.length, 2);
+  assert.equal(env.length, 0);
+});
+await t("★ a edição falhou → uma linha curta na DM confirma; não gravou → uma linha avisa para reagir de novo", async () => {
+  limpar();
+  const linhas = [];
+  rev._ligarParaTestes({ editar: async () => { throw Object.assign(new Error("sumiu"), { type: "NotFound" }); } });
+  const c = reg({ evidencia: { trecho: "outro trecho" } }).codigo;
+  db.filaAtualizar(c, { estado: "enviado", dmMsgId: "MSGDM3", dmCanalId: "CANALDM3" });
+  const caso = linha(c);
+  // a confirmação usa a DM do dono: um dublê de cliente e de envio
+  const antes = rev._trocarEnvioParaTestes((dm, emb) => { linhas.push(emb); return { id: "X" }; });
+  try {
+    await quieto(() => rev.confirmar(caso, rev.julgar(c, "certo"), "certo"));
+    assert.equal(linhas.length, 1);
+    assert.match(linhas[0].description, new RegExp(`✔️ \\*\\*${c}\\*\\* (recebido|received|recibido): ✅`));
+    await quieto(() => rev.confirmar(caso, null, "errou"));
+    assert.equal(linhas.length, 2);
+    assert.match(linhas[1].description, new RegExp(`⚠️ \\*\\*${c}\\*\\*: [^\\n]*❌[^\\n]*(reaja de novo|react again|reacciona de nuevo)`));
+  } finally { rev._trocarEnvioParaTestes(antes); }
+});
 // (31 out 2026, P3a, staff — R13) antes: "registrarPerdido (`&caso perdeu`): caso julgado do dono, vale para a herança em
 // qualquer categoria". agora: o dono não aponta caso de servidor — nada do dono vira herança nem caso
 await t("★ sem `&caso perdeu`: a fila não grava caso do dono (origem \"dono\" recusada) e nada do dono vira herança", async () => {

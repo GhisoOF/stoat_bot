@@ -28,6 +28,7 @@ import { createHash } from "node:crypto";
 import * as db from "../core/db.js";
 import { numero } from "../core/env.js";
 import { pseudonimo } from "../core/pseudonimo.js";
+import { carimbo } from "../core/tempo.js";
 import { textoDeFora } from "../core/seguranca.js";
 import { registrarErro } from "../core/erros.js";
 import { tr } from "../core/i18n.js";
@@ -358,7 +359,8 @@ export function configurar({ client, enviar, editar = null } = {}) {
   armar();
 }
 export function desligar() { if (timer) clearTimeout(timer); timer = null; esquecerDm(cfg?.client); cfg = null; }
-const dmDoDono = () => (cfg?.client ? abrirDmDoDono(cfg.client) : Promise.resolve(null));
+let dmDeTeste = null;   // só os testes (ver _trocarEnvioParaTestes)
+const dmDoDono = () => (dmDeTeste ? Promise.resolve(dmDeTeste) : cfg?.client ? abrirDmDoDono(cfg.client) : Promise.resolve(null));
 const NOME_TIPO = {
   "perfil-imagem": ["perfil (imagem)", "profile (image)", "perfil (imagen)"], "perfil-texto": ["perfil (texto)", "profile (text)", "perfil (texto)"],
   assunto: ["assunto", "topic", "tema"], imagem: ["imagem", "image", "imagen"],
@@ -378,10 +380,13 @@ export function embedDoCaso(caso, ctx = ctxDono()) {
   if (caso.servidor) linhas.push(`**${tr(ctx, "Servidor", "Server", "Servidor")}** \`${caso.servidor}\``);
   if (caso.link) linhas.push(`**${tr(ctx, "Na origem", "At the source", "En el origen")}** [${tr(ctx, "abrir", "open", "abrir")}](${caso.link})`);
   if (caso.trecho) linhas.push("", ...textoDeFora(caso.trecho, { max: TRECHO_MAX }).split("\n").slice(0, 12).map((l) => `> ${l}`));
-  if (caso.veredito) linhas.push("", `**${tr(ctx, "Veredito", "Verdict", "Veredicto")}** ${caso.veredito === "certo" ? "✅" : "❌"}`);
+  if (caso.veredito) linhas.push("", `**${tr(ctx, "Veredito", "Verdict", "Veredicto")}** ${caso.veredito === "certo" ? tr(ctx, "✅ o bot acertou", "✅ the bot was right", "✅ el bot acertó") : tr(ctx, "❌ errou", "❌ wrong", "❌ falló")}${caso.julgadoEm ? ` · ${tr(ctx, "recebido", "received", "recibido")} ${carimbo(caso.julgadoEm, "t")}` : ""}`);
   else linhas.push("", tr(ctx, "✅ o bot acertou · ❌ errou", "✅ the bot was right · ❌ wrong", "✅ el bot acertó · ❌ falló"));
-  return { title: `🔎 ${caso.codigo} · ${nome(NOME_TIPO, caso.tipo, ctx)} · ${caso.categoria}`, description: linhas.join("\n"), colour: "#9B59B6" };
+  // (2 nov 2026, P4.2) julgado: o título ganha ✔️ e a cor muda (verde = acertou, vermelho = errou)
+  const cor = caso.veredito === "certo" ? COR_CERTO : caso.veredito === "errou" ? COR_ERROU : "#9B59B6";
+  return { title: `${caso.veredito ? "✔️" : "🔎"} ${caso.codigo} · ${nome(NOME_TIPO, caso.tipo, ctx)} · ${caso.categoria}`, description: linhas.join("\n"), colour: cor };
 }
+const COR_CERTO = "#2ECC71", COR_ERROU = "#E74C3C";
 // Manda os casos escolhidos (ou os dados) para a DM do dono; devolve os códigos enviados.
 export async function enviarCasos(casos, { agora = Date.now() } = {}) {
   const enviados = [];
@@ -413,8 +418,34 @@ export async function aoReagir(msgId, userId, emoji, { canalId = null, agora = D
   if (e !== "✅" && e !== "❌") return true;
   if (!ehDono(userId)) return true;                                        // só o dono do bot
   if (canalId && caso.dmCanalId && canalId !== caso.dmCanalId) return true; // só na DM em que o caso foi
-  await julgar(caso.codigo, e === "✅" ? "certo" : "errou", { agora });
+  const veredito = e === "✅" ? "certo" : "errou";
+  let julgado = null;
+  try { julgado = julgar(caso.codigo, veredito, { agora }); } catch (err) { registrarErro("REVISAO:julgar", err); }
+  await confirmar(caso, julgado, veredito);
   return true;
+}
+
+// (2 nov 2026, P4.2) o dono quer saber, na hora, se o julgamento foi recebido:
+//  • gravou → a própria mensagem do caso é editada (✔️ no título, cor verde/vermelha e
+//    "Veredito … · recebido HH:MM"); com a edição feita, nada mais é enviado (R2);
+//  • gravou mas a edição falhou → uma linha curta na DM confirma;
+//  • não gravou → uma linha curta na DM avisa para reagir de novo.
+export async function confirmar(caso, julgado, veredito) {
+  const ctx = ctxDono();
+  const v = veredito === "certo" ? "✅" : "❌";
+  const linhaDm = async (texto, colour) => {
+    try {
+      const dm = await dmDoDono();
+      if (dm && cfg?.enviar) await cfg.enviar(dm, { description: texto, colour });
+    } catch (err) { registrarErro("REVISAO:confirmar", err); }
+  };
+  if (!julgado) {
+    return linhaDm(tr(ctx, `⚠️ **${caso.codigo}**: não consegui registrar o ${v} — reaja de novo.`,
+      `⚠️ **${caso.codigo}**: couldn't record the ${v} — react again.`,
+      `⚠️ **${caso.codigo}**: no pude registrar el ${v} — reacciona de nuevo.`), "#E74C3C");
+  }
+  if (await marcarNaDm(caso, julgado)) return;
+  return linhaDm(tr(ctx, `✔️ **${caso.codigo}** recebido: ${v}`, `✔️ **${caso.codigo}** received: ${v}`, `✔️ **${caso.codigo}** recibido: ${v}`), veredito === "certo" ? COR_CERTO : COR_ERROU);
 }
 
 // ── a rodada diária e o resumo ──
@@ -429,6 +460,18 @@ export function reter(agora = Date.now()) {
 // servidor; depois os IDs da mensagem saem do banco. Falhou (a mensagem sumiu etc.): os IDs
 // saem mesmo assim, e o log diz só o código do caso. A reação numa mensagem que já não está
 // no banco simplesmente não casa com caso nenhum.
+// A mensagem do caso na DM passa a mostrar o veredito (✔️, cor e "recebido HH:MM"). true = editou.
+export async function marcarNaDm(caso, julgado) {
+  if (!julgado || typeof cfg?.editar !== "function" || !caso?.dmMsgId) return false;
+  const ctx = ctxDono();
+  const emb = julgado.trecho || julgado.link || julgado.servidor ? embedDoCaso(julgado, ctx)
+    : { ...embedCurto(julgado, ctx), colour: julgado.veredito === "certo" ? COR_CERTO : COR_ERROU };
+  try { await cfg.editar(caso.dmCanalId, caso.dmMsgId, emb); return true; }
+  catch (err) {
+    console.warn(`[REVISAO] a DM do caso ${caso.codigo} não foi editada (${String(err?.type ?? err?.name ?? "erro").slice(0, 40)})`);
+    return false;
+  }
+}
 export function embedCurto(caso, ctx = ctxDono()) {
   const v = caso.veredito === "certo" ? "✅" : caso.veredito === "errou" ? "❌" : tr(ctx, "sem resposta", "no answer", "sin respuesta");
   return { description: `🔒 ${caso.codigo} · ${caso.categoria} · ${v} — ${tr(ctx, "trecho apagado", "excerpt deleted", "fragmento borrado")}`, colour: "#9B59B6" };
@@ -571,6 +614,13 @@ export function exportar(agora = Date.now()) {
 // testes
 export function _zerar() { limiaresCache.clear(); padroes.clear(); sortear = aleatorio.fracao; desligar(); }
 // Só para testes: a fila ligada (grava casos), sem cliente e sem o timer da rodada.
+// Só os testes: troca o envio à DM do dono (fn) e devolve o que havia; passar o devolvido restaura.
+export function _trocarEnvioParaTestes(fn) {
+  const antes = { enviar: cfg?.enviar ?? null, dm: dmDeTeste };
+  if (typeof fn === "function") { if (cfg) cfg.enviar = fn; dmDeTeste = { id: "DM-TESTE" }; }
+  else { if (cfg) cfg.enviar = fn?.enviar ?? null; dmDeTeste = fn?.dm ?? null; }
+  return antes;
+}
 export function _ligarParaTestes({ editar = null } = {}) { desligar(); cfg = { client: null, enviar: null, editar, semTimer: true }; }
 // Só para testes: o sorteio da amostra (inclusive o da certeza alta dentro do `registrarCaso`).
 export function _trocarSorteio(fn) { const antes = sortear; sortear = typeof fn === "function" ? fn : aleatorio.fracao; return antes; }

@@ -51,8 +51,10 @@ export async function cmdCaso(message, args, ctx) {
     if (args[1] !== undefined) {
       const veredito = normalizarArgs("caso", [String(args[1]).toLowerCase()])[0];
       if (veredito !== "certo" && veredito !== "errou") return uso();
-      revisao.julgar(codigo, veredito);
-      return responder(ctx, message.channel, `\`${codigo}\` ${veredito === "certo" ? "✅" : "❌"}`, `\`${codigo}\` ${veredito === "certo" ? "✅" : "❌"}`, null, "sucesso");
+      const julgado = revisao.julgar(codigo, veredito);
+      if (!julgado) return erro(ctx, message.channel, `\`${codigo}\`: não consegui registrar.`, `\`${codigo}\`: couldn't record it.`, `\`${codigo}\`: no pude registrarlo.`);
+      await revisao.marcarNaDm(caso, julgado);   // (2 nov 2026, P4.2) a mensagem do caso também mostra o veredito
+      return responder(ctx, message.channel, `✔️ \`${codigo}\` ${veredito === "certo" ? "✅" : "❌"}`, `✔️ \`${codigo}\` ${veredito === "certo" ? "✅" : "❌"}`, null, "sucesso");
     }
     const msg = await sendEmbed(message.channel, revisao.embedDoCaso(caso, ctx));
     if (msg?.id) {

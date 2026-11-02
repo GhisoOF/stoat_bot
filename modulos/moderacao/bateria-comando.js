@@ -6,6 +6,7 @@
 //   &bateria remover <código|ultima>                  tira um registro
 //   &bateria limpar <categoria>                       pede confirmação (código, 2 min)
 //   &bateria limpar confirmar <código>                tira todos daquela categoria
+//   &bateria avisos [on|off]                          (P4.4) os avisos da bateria na DM (bateria-avisos.js)
 //
 // Só o dono do bot, só na DM com a Judy (o nível "dono" do MAPA do visao.js: num servidor, o
 // main.js responde só a linha da DM e nada roda). Saída mínima (R1/R2): uma linha por ação;
@@ -18,6 +19,7 @@ import { carimbo } from "../core/tempo.js";
 import { erroDeUso, erro, responder } from "../core/saida.js";
 import { pedirDM } from "../core/dono.js";
 import * as aleatorio from "../core/aleatorio.js";
+import { avisosLigados, definirAvisos } from "./bateria-avisos.js";
 
 const pedidosLimpar = new Map();   // userId → { codigo, categoria, ate }
 const semAcento = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -35,6 +37,15 @@ export async function cmdBateria(message, args, ctx) {
   const uso = (pt, en, es) => erroDeUso(ctx, message.channel, "bateria", pt, en, es);
   const cat = (c) => `\`${c}\``;
   const CATEGORIA_INVALIDA = ["Categoria: 2 a 30 caracteres, só letras, números e hífen.", "Category: 2 to 30 characters, only letters, digits and hyphens.", "Categoría: de 2 a 30 caracteres, solo letras, números y guiones."];
+
+  // ── avisos [on|off] (P4.4): o estado fica na config global; padrão ligado ──
+  if (sub === "avisos") {
+    const o = String(args[1] ?? "").toLowerCase();
+    if (args.length > 2 || (o && o !== "on" && o !== "off")) return uso("Use `on` ou `off`.", "Use `on` or `off`.", "Usa `on` u `off`.");
+    if (o) definirAvisos(o === "on");
+    const l = linhaDosAvisos();
+    return responder(ctx, message.channel, l.pt, l.en, l.es, o ? "sucesso" : "info");
+  }
 
   // ── remover <código|ultima> ──
   if (sub === "remover") {
@@ -86,15 +97,16 @@ export async function cmdBateria(message, args, ctx) {
   if (!sub) {
     if (anexos.length) return uso("Diga a categoria das imagens.", "Name the images' category.", "Indica la categoría de las imágenes.");
     const { total, categorias } = bateria.contagem();
-    if (!total) return responder(ctx, message.channel, "🧪 Nenhuma imagem na bateria.", "🧪 No images in the test set.", "🧪 Ninguna imagen en la batería.", "info");
+    const av = linhaDosAvisos();   // (P4.4) o estado dos avisos, na mesma resposta
+    if (!total) return responder(ctx, message.channel, `🧪 Nenhuma imagem na bateria.\n${av.pt}`, `🧪 No images in the test set.\n${av.en}`, `🧪 Ninguna imagen en la batería.\n${av.es}`, "info");
     const MOSTRA = 40;
     const linhas = categorias.slice(0, MOSTRA).map((x) => `${cat(x.categoria)} — **${x.n}**`);
     const mais = categorias.length > MOSTRA ? categorias.length - MOSTRA : 0;
     const lista = (resto) => [...linhas, ...(mais ? [resto(mais)] : [])].join("\n");
     return responder(ctx, message.channel,
-      `🧪 **${total}**/${bateria.TETO} imagem(ns)\n${lista((m) => `… e mais ${m} categoria(s)`)}`,
-      `🧪 **${total}**/${bateria.TETO} image(s)\n${lista((m) => `… and ${m} more categor(ies)`)}`,
-      `🧪 **${total}**/${bateria.TETO} imagen(es)\n${lista((m) => `… y ${m} categoría(s) más`)}`, "info");
+      `🧪 **${total}**/${bateria.TETO} imagem(ns)\n${lista((m) => `… e mais ${m} categoria(s)`)}\n${av.pt}`,
+      `🧪 **${total}**/${bateria.TETO} image(s)\n${lista((m) => `… and ${m} more categor(ies)`)}\n${av.en}`,
+      `🧪 **${total}**/${bateria.TETO} imagen(es)\n${lista((m) => `… y ${m} categoría(s) más`)}\n${av.es}`, "info");
   }
 
   // ── <categoria> + imagens ──
@@ -121,6 +133,12 @@ export async function cmdBateria(message, args, ctx) {
     junta(2, `📥 ${r.codigos.length} image(s) in ${cat(categoria)} · ${r.total} in total`),
     junta(3, `📥 ${r.codigos.length} imagen(es) en ${cat(categoria)} · ${r.total} en total`),
     motivos.length || r.arquivo === false ? "aviso" : "sucesso");
+}
+
+// (P4.4) "Avisos da bateria: 🟢/🔴" — a resposta do `avisos` e a última linha do `&bateria`
+function linhaDosAvisos() {
+  const e = avisosLigados() ? "🟢" : "🔴";
+  return { pt: `🔔 Avisos da bateria: ${e}`, en: `🔔 Test set alerts: ${e}`, es: `🔔 Avisos de la batería: ${e}` };
 }
 
 // O arquivo da bateria não foi gravado (o banco está certo; o erro foi ao log)

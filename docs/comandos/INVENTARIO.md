@@ -4,7 +4,7 @@ Gerado por `INVENTARIO=1 node testes.mjs comandos-17out` — **não edite à mã
 reestruturação dos comandos num registro central (fase 0). A suíte `comandos-17out` compara o bot com o
 `inventario.json` desta pasta: nome que some ou muda de destino faz o teste falhar.
 
-**42 comandos · 161 nomes · 734 subcomandos em inglês · 262 telas de ajuda · 559 exemplos executados**
+**42 comandos · 161 nomes · 735 subcomandos em inglês · 262 telas de ajuda · 559 exemplos executados**
 
 ## Comandos
 
@@ -86,7 +86,7 @@ O que ainda está espalhado:
 - `automod.sentinela`: alert→alerta, alertas→alerta, alerts→alerta, antiguedad→antiguidade, baja→baixa, ban→banir, banear→banir, channel→canal, contenido→conteudo, content→conteudo, dismiss→liberar, hate→odio, high→alta, imagenes→imagens, images→imagens, low→baixa, medium→media, pfp→avatar, probar→testar, sensibilidad→sensibilidade, sensitivity→sensibilidade, simular→testar, simulate→testar, subjects→assuntos, temas→assuntos, tenure→antiguidade, test→testar, topics→assuntos
 - `autorole`: definir→set, desactivar→desativar, disable→desativar, quitar→remover, remove→remover
 - `banglobal`: accept→isentar, aceitar→isentar, adicionar→add, alert→avisar, alertar→avisar, all→lista, allow→isentar, aqui→servidor, autoimport→auto, automatic→auto, automatico→auto, ban→imediato, banidos→lista, banir→imediato, banned→lista, barrer→varrer, bypass→isentar, cautela→consenso, cautious→consenso, cego→imediato, checar→revisar, colocar→add, conferir→revisar, confirm→confirmar, consensus→consenso, contribucion→contribuicao, contribution→contribuicao, daqui→servidor, deshacer→desfazer, excecoes→ignorados, exempt→isentar, exempted→isentos, exentos→isentos, eximir→isentar, foradalista→ignorados, forget→esquecer, here→servidor, historial→historico, history→historico, ignorar→off, ignore→off, ignored→ignorados, immediate→imediato, import→importar, incluir→add, inmediato→imediato, instant→imediato, isento→isentos, list→lista, olvidar→esquecer, people→pessoas, permitir→isentar, personas→pessoas, porque→historico, quitar→remover, recordar→lembrar, reincluir→lembrar, remember→lembrar, remove→remover, revert→desfazer, reverter→desfazer, review→revisar, scan→varrer, server→servidor, sim→confirmar, sweep→varrer, tirar→remover, todos→lista, undo→desfazer, unforget→lembrar, varredura→varrer, ver→historico, view→historico, warn→avisar, yes→confirmar
-- `bateria`: clear→limpar, confirm→confirmar, delete→remover, last→ultima, latest→ultima, quitar→remover, remove→remover, vaciar→limpar
+- `bateria`: alerts→avisos, clear→limpar, confirm→confirmar, delete→remover, last→ultima, latest→ultima, quitar→remover, remove→remover, vaciar→limpar
 - `blocklist`: domains→dominios
 - `boasvindas`: borrar→limpar, channel→canal, clear→limpar, color→cor, colour→cor, default→padrao, estado→status, here→aqui, hidden→oculto, hide→oculto, image→imagem, imagen→imagem, mensajes→mensagens, message→texto, messages→mensagens, predeterminado→padrao, probar→testar, show→visivel, test→testar, text→texto, title→titulo, visible→visivel
 - `caso`: acierto→certo, correct→certo, export→exportar, fallo→errou, right→certo, wrong→errou

@@ -89,7 +89,8 @@ import * as confianca from "./modulos/moderacao/confianca.js";
 import * as revisao from "./modulos/moderacao/revisao.js";   // (31 out 2026, P3a) a amostra diária do dono do bot
 import { soDoDono, funcionaNaDM } from "./modulos/moderacao/visao.js";   // (P4) o nível "dono" de cada comando (o MAPA)
 import { pedirDM, idiomaDoDono } from "./modulos/core/dono.js";
-import * as casosStaff from "./modulos/moderacao/casos-staff.js";   // (31 out 2026, P3a) os casos duvidosos com a staff de cada servidor
+import * as casosStaff from "./modulos/moderacao/casos-staff.js";
+import * as bateriaAvisos from "./modulos/moderacao/bateria-avisos.js";   // (2 nov 2026, P4.4) os avisos da bateria na DM do dono   // (31 out 2026, P3a) os casos duvidosos com a staff de cada servidor
 import { semPingEmMassa } from "./modulos/core/seguranca.js";
 
 const PREFIXO     = "&";
@@ -109,6 +110,8 @@ let jaReiniciando = false;
 for (const sinal of ["SIGTERM", "SIGINT"]) {
   process.on(sinal, () => {
     relatorioHora.evento(null, "desligar", "deploy/restart");
+    // (P4.4) o canal interno dos avisos da bateria fecha antes de sair
+    try { bateriaAvisos.parar(); } catch (e) { console.error("[BATERIA] parar:", e?.message ?? e); }
     process.exit(0);
   });
 }
@@ -438,6 +441,10 @@ client.on("ready", async () => {
   // está no banco — e a edição das DMs que perderam o trecho — roda do mesmo jeito.
   try { revisao.configurar({ client, enviar: (canal, emb) => sendEmbed(canal, emb) }); }
   catch (e) { console.error("[REVISAO] configurar (fila desligada; a retenção do boot rodou):", e?.message ?? e); }
+  // (2 nov 2026, P4.4) o canal interno (só 127.0.0.1, com chave) por onde a bateria de teste avisa
+  // o dono: o embed vai à DM dele, como a fila de revisão. BATERIA_AVISO_PORTA=0 não sobe nada.
+  bateriaAvisos.iniciar({ client, enviar: (canal, emb) => sendEmbed(canal, emb) })
+    .catch((e) => console.error("[BATERIA] avisos:", descreverErro(e)));
   // (31 out 2026, P3a) o perfil inteiro: a bio e o banner só chegam no evento cru (a stoat.js
   // descarta o `profile` do UserUpdate)
   perfilMod.ligar({ client, criarContexto }).catch((e) => console.error("[PERFIL] ligar:", descreverErro(e)));

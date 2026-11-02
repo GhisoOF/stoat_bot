@@ -1109,6 +1109,7 @@
    "yes": "confirmar"
   },
   "bateria": {
+   "alerts": "avisos",
    "clear": "limpar",
    "confirm": "confirmar",
    "delete": "remover",
@@ -1809,6 +1810,7 @@
    "varrer": "sweep"
   },
   "bateria": {
+   "avisos": "alerts",
    "confirmar": "confirm",
    "limpar": "clear",
    "remover": "remove",
@@ -2408,6 +2410,7 @@
    "varrer": "barrer"
   },
   "bateria": {
+   "avisos": "avisos",
    "confirmar": "confirmar",
    "limpar": "vaciar",
    "remover": "quitar",

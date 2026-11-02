@@ -77,6 +77,9 @@ subida. As cópias de segurança de antes saem no prazo delas (30 dias).
 - A Judy lê os feeds RSS que o servidor cadastrou (`&rss`).
 - Webhooks: o que um serviço de fora (GitHub, Crafty…) manda ao gancho é publicado no
   canal escolhido pela staff, sem menções em massa nem links disfarçados.
+- A bateria de teste do dono do bot pode mandar resumos à DM dele por um canal interno da
+  máquina (só dentro do container, com chave; ele liga e desliga com `&bateria avisos`), sem
+  dados de usuários: a bateria usa mensagens e imagens de teste.
 - O que a Judy escreve nos canais (inclusive o canal de log de um servidor) fica no
   próprio Stoat.
 - Os **casos duvidosos** ficam com a staff do servidor onde aconteceram: o alerta, com
@@ -185,6 +188,9 @@ before go after their usual period (30 days).
 - Judy reads the RSS feeds the server added (`&rss`).
 - Webhooks: what an outside service (GitHub, Crafty…) sends to the hook is posted in the
   channel the staff chose, without mass mentions or disguised links.
+- The bot owner's test set may send summaries to their DM through a channel internal to the
+  machine (only inside the container, with a key; they turn it on and off with
+  `&testset alerts`), with no user data: the test set uses test messages and images.
 - What Judy writes in channels (including a server's log channel) stays on Stoat.
 - **Doubtful cases** stay with the staff of the server where they happened: the alert,
   with ✅/❌, goes only to that server's staff channel and never reposts the image, the
@@ -297,6 +303,9 @@ copias de seguridad de antes salen en su plazo (30 días).
 - Judy lee los feeds RSS que el servidor registró (`&rss`).
 - Webhooks: lo que un servicio externo (GitHub, Crafty…) envía al gancho se publica en el
   canal que eligió el staff, sin menciones masivas ni enlaces disfrazados.
+- La batería de prueba del dueño del bot puede enviar resúmenes a su DM por un canal interno
+  de la máquina (solo dentro del contenedor, con clave; él lo activa y desactiva con
+  `&bateria avisos`), sin datos de usuarios: la batería usa mensajes e imágenes de prueba.
 - Lo que Judy escribe en los canales (incluido el canal de log de un servidor) queda en
   el propio Stoat.
 - Los **casos dudosos** se quedan con el staff del servidor donde ocurrieron: la alerta,

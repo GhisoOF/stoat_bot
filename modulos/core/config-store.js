@@ -125,6 +125,7 @@ export const padraoGlobal = {
   debug:                false,   // (31 out 2026) o debug do automod grava o fluxo de toda mensagem: só ligado de propósito
   linkBlocklistSources: [],   // recurso pesado (milhões de domínios) — compartilhado
   linkBlocklistManual:  [],
+  bateriaAvisos:        true,    // (2 nov 2026, P4.4) os avisos da bateria na DM do dono (`&bateria avisos on|off`)
 };
 
 let templateServidor = structuredClone(padraoServidor);

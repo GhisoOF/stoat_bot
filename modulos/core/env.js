@@ -71,6 +71,22 @@ export function numero(nome, padrao, { min = -Infinity, max = Infinity, inteiro 
   return n;
 }
 
+// (2 nov 2026, P4.4) A porta INTERNA dos avisos da bateria (moderacao/bateria-avisos.js): só
+// 127.0.0.1, dentro do container, nunca publicada. Vazio = 8097; 0 desliga. A conferência
+// (porta de sistema, colisão com as outras portas do bot) fica no problemasDoEnv.
+export const PORTA_AVISOS_PADRAO = 8097;
+export const portaDosAvisos = () => numero("BATERIA_AVISO_PORTA", PORTA_AVISOS_PADRAO, { min: 0, max: 65535, inteiro: true });
+// As outras portas que o bot e os serviços dele abrem (os padrões de iniciar.js e webhooks.js)
+const PORTAS_DO_BOT = { WEBHOOK_PORTA: 8095, IA_PORTA: 8090, VOZ_PORTA: 8091, LLAMA_PORTA: 8082 };
+function problemasDaPortaDosAvisos() {
+  let porta;
+  try { porta = portaDosAvisos(); } catch (err) { return [err.message.replace(/^\.env: /, "")]; }
+  if (!porta) return [];
+  if (porta < 1024) return [`BATERIA_AVISO_PORTA=${porta} é inválido (0 desliga; senão, de 1024 a 65535)`];
+  return Object.entries(PORTAS_DO_BOT).filter(([v, padrao]) => porta === Number(String(e[v] ?? "").trim() || padrao))
+    .map(([v]) => `BATERIA_AVISO_PORTA=${porta} é a mesma porta de ${v} (escolha outra)`);
+}
+
 // Conferência do .env no boot (main.js e iniciar.js). Devolve a lista de
 // problemas; quem chama para o boot se ela não estiver vazia.
 const BOOLEANOS = ["IA", "VOZ_ATIVA"];
@@ -84,6 +100,7 @@ export function problemasDoEnv() {
     const v = (e[b] ?? "").trim().toLowerCase();
     if (v && !VALIDOS.has(v)) p.push(`${b}=${JSON.stringify(e[b])} é inválido (use 0 ou 1)`);
   }
+  p.push(...problemasDaPortaDosAvisos());
   return p;
 }
 

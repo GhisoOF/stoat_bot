@@ -25,6 +25,9 @@ const RAIZ = path.dirname(ESTE);
 // elas fixam o padrão antigo; quem testa o padrão em inglês é a
 // `reset-idioma-13out` (que troca a variável no próprio processo).
 process.env.IDIOMA_PADRAO = "pt";   // (31 out 2026) `=` e não `??=`: o shell não muda o resultado
+// (2 nov 2026, P4.4) o canal interno dos avisos da bateria fica DESLIGADO nas suítes: elas rodam em
+// paralelo e subiriam todas na 8097. Quem testa o canal (p44-avisos) liga numa porta livre.
+process.env.BATERIA_AVISO_PORTA = "0";
 // (P4) o CHAT_ANTI_ABUSO (que ficava desligado aqui) saiu com o chat IA
 
 const SUITES = {};
@@ -23138,7 +23141,8 @@ await t("★ categoria: normalizada na hora de gravar (`Símbolo Ódio` → `sim
 });
 await t("★ `&bateria` sozinho: a contagem por categoria e o total", async () => {
   const out = await diz(DONO, "&bateria");
-  assert.equal(out, "🧪 **8**/5000 imagem(ns)\n`meme` — **3**\n`anime` — **2**\n`gore` — **1**\n`praia` — **1**\n`simbolo-odio` — **1**");
+  // (2 nov 2026, P4.4) antes: sem a linha dos avisos; agora: o estado deles é a última linha
+  assert.equal(out, "🧪 **8**/5000 imagem(ns)\n`meme` — **3**\n`anime` — **2**\n`gore` — **1**\n`praia` — **1**\n`simbolo-odio` — **1**\n🔔 Avisos da bateria: 🟢");
   assert.equal(saidas.length, 1);
 });
 await t("★ remover ‹código› e `ultima` (pt/en/es): tira só aquele, e o arquivo acompanha", async () => {
@@ -23265,6 +23269,457 @@ await t("PRIVACIDADE.md: as imagens de teste do dono (só o link, a categoria e 
 });
 
 console.log(`\nP4.3 BATERIA: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// p44-avisos  (2 nov 2026, P4.4)
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p44-avisos"] = async () => {
+// (P4.4, 2 nov 2026, pedido do dono) "o bot pode ir me notificando pelo PV sobre o ocorrido [na
+// bateria] e eu posso ativar ou desativar na minha DM também?" — o lado do bot do contrato
+// _notas/CONTRATO-AVISOS.md: canal HTTP próprio SÓ em 127.0.0.1 (BATERIA_AVISO_PORTA, padrão 8097,
+// 0 desliga), chave no volume (0644, criada uma vez), POST /aviso → um embed na DM do dono (texto
+// de fora: sem menção, cortado), teto por hora (6 início/progresso, 20 no total) e
+// `&bateria avisos on|off` (só o dono, só na DM, padrão ligado).
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const http = (await import("node:http")).default, net = (await import("node:net")).default, os = (await import("node:os")).default;
+const DIR = "/tmp/p44-avisos";
+fs.rmSync(DIR, { recursive: true, force: true }); fs.mkdirSync(DIR, { recursive: true });
+const DB = `${DIR}/p44.db`, CHAVE_ARQ = `${DIR}/bateria-aviso.chave`;
+const U = (n) => `01KP44${String(n).padStart(20, "0")}`;
+const DONO = U(1), OUTRO = U(2), SID = U(100);
+// uma porta livre (o padrão 8097 pode estar em uso na máquina dos testes)
+const portaLivre = () => new Promise((ok, falha) => { const s = net.createServer(); s.on("error", falha); s.listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => ok(p)); }); });
+const PORTA = await portaLivre();
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: `${DIR}/p44.json`, SUPER_ADMINS: DONO, LOG_SEGREDO: "segredo-de-teste", BATERIA_AVISO_PORTA: String(PORTA) });
+for (const v of ["IA_MODO", "IA", "IA_SERVICO_URL", "LLM_URL", "RELATORIO_SERVIDOR", "CDN_URL", "WEBHOOK_PORTA", "IA_PORTA", "VOZ_PORTA", "LLAMA_PORTA"]) delete process.env[v];
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.stack ?? e).split("\n").slice(0, 6).join("\n     ")}`); falhou++; } };
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const mudo = async (fn) => { const o = [process.stdout.write, process.stderr.write]; process.stdout.write = process.stderr.write = () => true; try { return await fn(); } finally { [process.stdout.write, process.stderr.write] = o; } };
+// o que foi ao log (console.error/warn/info) enquanto fn roda
+const comLog = async (fn) => { const log = [], o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = (...a) => log.push(a.map(String).join(" ")); try { return { r: await fn(), log }; } finally { [console.log, console.info, console.warn, console.error] = o; } };
+
+// Um pedido HTTP cru. `pedacos`: o corpo vai em partes, sem Content-Length (chunked).
+function pedir({ porta = PORTA, host = "127.0.0.1", metodo = "POST", caminho = "/aviso", chave, tipo = "application/json", corpo = "", pedacos = null, cabecalhos = {} } = {}) {
+  return new Promise((ok, falha) => {
+    const texto = typeof corpo === "string" ? corpo : JSON.stringify(corpo);
+    const h = { ...(tipo ? { "content-type": tipo } : {}), ...(chave !== undefined ? { "x-chave": chave } : {}), ...cabecalhos };
+    if (!pedacos) h["content-length"] = Buffer.byteLength(texto);
+    const req = http.request({ host, port: porta, method: metodo, path: caminho, headers: h, agent: false }, (res) => {
+      let b = ""; res.on("data", (d) => { b += d; });
+      res.on("end", () => { let json = null; try { json = JSON.parse(b); } catch { /* corpo que não é JSON: o teste olha o texto */ } ok({ status: res.statusCode, json, texto: b, headers: res.headers }); });
+    });
+    req.on("error", falha);
+    if (pedacos) { for (const p of pedacos) req.write(p); req.end(); } else req.end(texto);
+  });
+}
+const conecta = (host, porta) => new Promise((ok) => { const s = net.connect({ host, port: porta }); s.once("connect", () => { s.destroy(); ok(true); }); s.once("error", () => ok(false)); s.setTimeout(1500, () => { s.destroy(); ok(false); }); });
+const esperar = async (cond, ms = 3000) => { const fim = Date.now() + ms; while (!cond() && Date.now() < fim) await new Promise((r) => setTimeout(r, 20)); return cond(); };
+
+const av = await import("./modulos/moderacao/bateria-avisos.js");
+const AVISO = { tipo: "fim", modo: "imagens", titulo: "Rodada terminada", linhas: ["acerto: 91%", "furos: 3 · falsos positivos: 1"], pasta: "saida/2026-11-02_23-50" };
+
+console.log("── 1. o motor (sem o bot) ──");
+await t("★ validarAviso: tipo, modo e título obrigatórios; linhas e pasta opcionais; tipo errado → null (400)", () => {
+  assert.deepEqual(av.validarAviso(AVISO), AVISO);
+  assert.deepEqual(av.validarAviso({ tipo: "inicio", modo: "texto", titulo: "x" }), { tipo: "inicio", modo: "texto", titulo: "x", linhas: [], pasta: null });
+  assert.deepEqual(av.validarAviso({ ...AVISO, extra: { a: 1 }, linhas: null, pasta: null }), { ...AVISO, linhas: [], pasta: null }, "campo a mais é ignorado");
+  for (const ruim of [null, undefined, 1, "x", [], [AVISO], { ...AVISO, tipo: "outro" }, { ...AVISO, tipo: undefined }, { ...AVISO, modo: "TEXTO" }, { ...AVISO, modo: "voz" },
+    { ...AVISO, titulo: undefined }, { ...AVISO, titulo: "" }, { ...AVISO, titulo: "  \n " }, { ...AVISO, titulo: 5 }, { ...AVISO, titulo: ["a"] },
+    { ...AVISO, linhas: "uma" }, { ...AVISO, linhas: ["a", 2] }, { ...AVISO, linhas: [{}] }, { ...AVISO, pasta: 3 }, { ...AVISO, pasta: ["x"] }, { ...AVISO, titulo: "\u0000\u0007" }]) {
+    assert.equal(av.validarAviso(ruim), null, JSON.stringify(ruim));
+  }
+  for (const tipo of av.TIPOS) for (const modo of av.MODOS) assert.ok(av.validarAviso({ tipo, modo, titulo: "x" }), `${tipo}/${modo}`);
+  assert.deepEqual(av.TIPOS, ["inicio", "progresso", "fim", "erro"]); assert.deepEqual(av.MODOS, ["texto", "simulador", "imagens", "classificadores"]);
+});
+await t("★ texto de fora: menção, cargo, @everyone/@here e link disfarçado neutralizados; uma linha só; sem caractere de controle", () => {
+  const mal = `@everyone @here <@${U(5)}> <%${U(6)}> [clique](https://mal.example/x) a\nb\r\n# título\u0000\u001b`;
+  const a = av.validarAviso({ ...AVISO, titulo: mal, linhas: [mal, `<@${U(7)}>`], pasta: `saida/\`rm\`/<@${U(8)}>` });
+  for (const txt of [a.titulo, ...a.linhas, a.pasta]) {
+    assert.doesNotMatch(txt, /@everyone|@here|<@|<%|\]\(|[\n\r\u0000-\u001f]/, JSON.stringify(txt));
+  }
+  assert.match(a.titulo, /clique \(https:\/\/mal\.example\/x\)/);
+  assert.equal(a.linhas[1], "@alguém", "nem uma menção passa (o limite é 0)");
+  assert.doesNotMatch(a.pasta, /`/, "a pasta vai num bloco de código: sem crase");
+});
+await t("★ cortes de tamanho: título 100, até 12 linhas de 200, pasta 120", () => {
+  const a = av.validarAviso({ ...AVISO, titulo: "t".repeat(300), linhas: Array.from({ length: 20 }, (_, i) => `${i}`.padEnd(500, "x")), pasta: "p".repeat(300) });
+  assert.equal(a.titulo.length, 100); assert.ok(a.titulo.endsWith("…"));
+  assert.equal(a.linhas.length, 12); assert.equal(a.linhas[11][0], "1"); assert.ok(a.linhas.every((l) => l.length === 200 && l.endsWith("…")));
+  assert.equal(a.pasta.length, 120);
+  assert.deepEqual(av.LIMITES, { titulo: 100, linhas: 12, linha: 200, pasta: 120 });
+  assert.equal(av.MAX_CORPO, 8192);
+});
+await t("★ o embed: `🧪 Bateria · ‹modo› · ‹tipo›`, o título em negrito, uma linha por item, `📁 pasta`; cor por tipo; nos 3 idiomas", () => {
+  const pt = { config: { language: "pt" } }, en = { config: { language: "en" } }, es = { config: { language: "es" } };
+  const e = av.embedDoAviso(av.validarAviso(AVISO), pt);
+  assert.equal(e.title, "🧪 Bateria · imagens · fim");
+  assert.equal(e.description, "**Rodada terminada**\nacerto: 91%\nfuros: 3 · falsos positivos: 1\n📁 `saida/2026-11-02_23-50`");
+  assert.equal(e.colour, "#3BA55D");
+  assert.equal(av.embedDoAviso(av.validarAviso({ ...AVISO, tipo: "erro" }), pt).colour, "#ED4245");
+  for (const tipo of ["inicio", "progresso"]) assert.equal(av.embedDoAviso(av.validarAviso({ ...AVISO, tipo }), pt).colour, "#99AAB5");
+  assert.equal(av.embedDoAviso(av.validarAviso({ ...AVISO, tipo: "inicio", modo: "classificadores", pasta: null }), pt).description, "**Rodada terminada**\nacerto: 91%\nfuros: 3 · falsos positivos: 1");
+  assert.equal(av.embedDoAviso(av.validarAviso({ ...AVISO, tipo: "progresso", modo: "simulador" }), en).title, "🧪 Test set · simulator · progress");
+  const tes = av.embedDoAviso(av.validarAviso({ ...AVISO, tipo: "inicio", modo: "imagens" }), es).title.replace(/[\u2063\u2064]/g, "");
+  assert.equal(tes, "🧪 Batería · imágenes · inicio");
+  assert.equal(av.embedDoAviso(av.validarAviso({ ...AVISO, tipo: "erro", modo: "texto" }), pt).title, "🧪 Bateria · texto · erro");
+});
+await t("★ o embed cabe numa mensagem (sem as páginas ◀ ▶): as últimas linhas saem com `… (+N)`, a pasta fica", async () => {
+  const { LIMITE_EMBED } = await import("./modulos/core/paginas.js");
+  const a = av.validarAviso({ ...AVISO, titulo: "T".repeat(100), linhas: Array.from({ length: 12 }, (_, i) => `${i}`.padEnd(200, "y")), pasta: "p".repeat(120) });
+  const e = av.embedDoAviso(a, { config: { language: "pt" } });
+  assert.ok(e.description.length <= LIMITE_EMBED, String(e.description.length));
+  const l = e.description.split("\n");
+  assert.match(l.at(-2), /^… \(\+\d+\)$/); assert.equal(l.at(-1), `📁 \`${"p".repeat(120)}\``);
+  assert.equal(l.length - 3 + Number(l.at(-2).match(/\d+/)[0]), 12, "as que ficaram + as cortadas = 12");
+});
+await t("★ a chave: criada uma vez (64 hex, sem quebra de linha, 0644 mesmo com umask 077), nunca regravada; nada de temporário", () => {
+  const d = `${DIR}/chave1`; fs.mkdirSync(d);
+  const antes = process.umask(0o077);
+  let k;
+  try { k = av.garantirChave(d); } finally { process.umask(antes); }
+  const arq = `${d}/bateria-aviso.chave`;
+  assert.match(k, /^[0-9a-f]{64}$/);
+  assert.equal(fs.readFileSync(arq, "utf8"), k, "só os 64 hex");
+  assert.equal(fs.statSync(arq).mode & 0o777, 0o644);
+  const st = fs.statSync(arq);
+  for (let i = 0; i < 3; i++) assert.equal(av.garantirChave(d), k);
+  const st2 = fs.statSync(arq);
+  assert.equal(st2.ino, st.ino); assert.equal(st2.mtimeMs, st.mtimeMs);
+  assert.deepEqual(fs.readdirSync(d), ["bateria-aviso.chave"]);
+  // outra pasta → outra chave (sorteio do aleatorio.js, não fixa)
+  const d2 = `${DIR}/chave2`; fs.mkdirSync(d2);
+  assert.notEqual(av.garantirChave(d2), k);
+  assert.match(fs.readFileSync("modulos/moderacao/bateria-avisos.js", "utf8"), /aleatorio\.codigo\("0123456789abcdef", 64\)/);
+});
+await t("★ a chave existente que não serve (vazia, curta, diretório): null, e o arquivo NÃO é regravado", () => {
+  const d = `${DIR}/chave3`; fs.mkdirSync(d);
+  const arq = `${d}/bateria-aviso.chave`;
+  for (const conteudo of ["", "abc", "G".repeat(64), "A".repeat(64), "a".repeat(65)]) {
+    fs.writeFileSync(arq, conteudo);
+    assert.equal(av.garantirChave(d), null, JSON.stringify(conteudo));
+    assert.equal(fs.readFileSync(arq, "utf8"), conteudo, "não regrava");
+  }
+  fs.writeFileSync(arq, `${"b".repeat(64)}\n`);
+  assert.equal(av.garantirChave(d), "b".repeat(64), "a quebra de linha no fim (editada à mão) vale");
+  fs.rmSync(arq); fs.mkdirSync(arq);
+  assert.equal(av.garantirChave(d), null);
+  assert.deepEqual(fs.readdirSync(d), ["bateria-aviso.chave"]);
+});
+await t("★ a chave confere em tempo constante (SHA-256 dos dois lados + timingSafeEqual): qualquer outra coisa é false", () => {
+  const k = "c".repeat(64);
+  assert.equal(av.chaveConfere(k, k), true);
+  for (const ruim of ["d".repeat(64), "c".repeat(63), `${k}c`, "", undefined, null, [k], k.toUpperCase()]) assert.equal(av.chaveConfere(ruim, k), false, String(ruim));
+  assert.equal(av.chaveConfere(k, ""), false);
+  const src = fs.readFileSync("modulos/moderacao/bateria-avisos.js", "utf8");
+  assert.match(src, /import \{ createHash, timingSafeEqual \} from "node:crypto"/);
+  assert.match(src, /return timingSafeEqual\(resumo\(dada\), resumo\(certa\)\)/);
+  assert.doesNotMatch(src, /x-chave"\]\s*[!=]==/, "nada de comparação com ===");
+});
+
+// ── o servidor sozinho (dublês do envio e da DM, relógio injetável) ──
+const CHAVE_T = "e".repeat(64);
+async function servidorDeTeste(op = {}) {
+  const env = [];
+  const srv = av.criarServidor({ chave: CHAVE_T, enviar: async (dm, emb) => { env.push({ dm, emb }); return { id: "M" }; }, dm: async () => ({ id: "DM" }), ligado: () => true, ...op });
+  await new Promise((ok) => srv.listen(0, "127.0.0.1", ok));
+  return { srv, env, porta: srv.address().port, fechar: () => new Promise((ok) => { srv.close(ok); srv.closeAllConnections(); }) };
+}
+await t("★ erro interno → 500 genérico (`{\"erro\":\"erro interno\"}`), sem detalhe nenhum; o detalhe vai ao log", async () => {
+  const s = await servidorDeTeste({ enviar: async () => { throw new Error("detalhe secreto /data/stoat.db ECONNRESET"); } });
+  try {
+    const { r, log } = await comLog(() => pedir({ porta: s.porta, chave: CHAVE_T, corpo: AVISO }));
+    assert.equal(r.status, 500); assert.equal(r.texto, '{"erro":"erro interno"}');
+    assert.ok(log.some((l) => l.includes("[BATERIA:aviso]") && l.includes("detalhe secreto")), log.join(" | "));
+    const r2 = await quieto(() => pedir({ porta: s.porta, chave: CHAVE_T, corpo: AVISO }));
+    assert.equal(r2.status, 500, "e o servidor continua de pé");
+    const s2 = await servidorDeTeste({ dm: async () => { throw new TypeError("x is not a function at /app/main.js:1"); } });
+    try { const r3 = await quieto(() => pedir({ porta: s2.porta, chave: CHAVE_T, corpo: AVISO })); assert.equal(r3.texto, '{"erro":"erro interno"}'); } finally { await s2.fechar(); }
+  } finally { await s.fechar(); }
+});
+await t("★ teto por hora (relógio injetável): 6 início/progresso; `fim`/`erro` passam até 20; acima → `teto`; a janela anda", async () => {
+  let agora = Date.UTC(2026, 10, 2, 12);
+  const s = await servidorDeTeste({ agora: () => agora });
+  try {
+    const manda = async (tipo) => (await pedir({ porta: s.porta, chave: CHAVE_T, corpo: { ...AVISO, tipo } })).json;
+    for (let i = 0; i < 6; i++) assert.deepEqual(await manda(i % 2 ? "progresso" : "inicio"), { enviado: true }, `#${i}`);
+    assert.deepEqual(await manda("progresso"), { enviado: false, motivo: "teto" });
+    assert.deepEqual(await manda("inicio"), { enviado: false, motivo: "teto" });
+    for (let i = 0; i < 14; i++) assert.deepEqual(await manda(i % 2 ? "erro" : "fim"), { enviado: true }, `fim/erro #${i}`);
+    assert.equal(s.env.length, 20);
+    for (const tipo of ["fim", "erro", "progresso"]) assert.deepEqual(await manda(tipo), { enviado: false, motivo: "teto" }, tipo);
+    assert.equal(s.env.length, 20, "acima do teto nada vai à DM");
+    agora += 30 * 60_000;
+    assert.deepEqual(await manda("fim"), { enviado: false, motivo: "teto" }, "meia hora depois ainda conta");
+    agora += 30 * 60_000;   // uma hora depois do primeiro: a janela libera
+    assert.deepEqual(await manda("progresso"), { enviado: true });
+    assert.equal(s.env.length, 21);
+    assert.deepEqual(av.TETO, { progresso: 6, total: 20, janelaMs: 3_600_000 });
+  } finally { await s.fechar(); }
+});
+await t("★ desligado e sem DM: 202 com o motivo, nada enviado — e não gastam o teto", async () => {
+  let ligado = false, dm = null;
+  const s = await servidorDeTeste({ ligado: () => ligado, dm: async () => dm });
+  try {
+    for (let i = 0; i < 25; i++) assert.deepEqual((await pedir({ porta: s.porta, chave: CHAVE_T, corpo: AVISO })).json, { enviado: false, motivo: "desligado" });
+    ligado = true;
+    assert.deepEqual((await pedir({ porta: s.porta, chave: CHAVE_T, corpo: AVISO })).json, { enviado: false, motivo: "sem-dm" });
+    assert.equal(s.env.length, 0);
+    dm = { id: "DM" };
+    assert.deepEqual((await pedir({ porta: s.porta, chave: CHAVE_T, corpo: AVISO })).json, { enviado: true });
+  } finally { await s.fechar(); }
+  const s2 = await servidorDeTeste({ enviar: async () => undefined });
+  try { assert.deepEqual((await pedir({ porta: s2.porta, chave: CHAVE_T, corpo: AVISO })).json, { enviado: false, motivo: "sem-dm" }, "a DM não aceitou"); }
+  finally { await s2.fechar(); }
+});
+
+// ════ o bot inteiro, com o Stoat de mentira ════
+console.log("── 2. integração (main.js) ──");
+await mudo(() => import("./main.js"));
+const store = await import("./modulos/core/config-store.js");
+const db = await import("./modulos/core/db.js");
+const c = globalThis.__client;
+const saidas = [];
+const textoDe = (p) => typeof p === "string" ? p : `${p?.embeds?.[0]?.title ?? ""}\n${p?.embeds?.[0]?.description ?? ""}${typeof p?.content === "string" ? "\n" + p.content : ""}`.trim();
+let nMsg = 0;
+const novaMsg = (canalId) => ({ id: U(90000 + ++nMsg), channelId: canalId, edit: async () => {}, delete: async () => {}, react: async () => {} });
+const canal = (id, serverId, tipo = "TextChannel") => ({ id, serverId, name: id, type: tipo, nsfw: false, enviados: [], cru: [],
+  sendMessage: async function (p) { this.cru.push(p); this.enviados.push(textoDe(p)); saidas.push(textoDe(p)); return novaMsg(id); }, fetchMessages: async () => [], deleteMessages: async () => {} });
+const CG = U(101), CL = U(102), DMID = U(700), DMOUTRO = U(701);
+const geral = canal(CG, SID), logc = canal(CL, SID);
+const dm = canal(DMID, undefined, "DirectMessage"), dmOutro = canal(DMOUTRO, undefined, "DirectMessage");
+const pessoa = (sid, uid) => ({ id: { server: sid, user: uid }, roles: [], hasPermission: () => true, user: { id: uid, username: uid }, nickname: uid, joinedAt: new Date(0) });
+c.users.set(DONO, { id: DONO, username: "dono", bot: false, openDM: async () => dm });
+c.users.set(OUTRO, { id: OUTRO, username: "outro", bot: false, openDM: async () => dmOutro });
+await quieto(() => c.emitAll("ready"));
+c.servers.set(SID, { id: SID, ownerId: OUTRO, name: "S", roles: new Map(), channels: [geral, logc], channelIds: new Set([CG, CL]), member: { roles: [] }, havePermission: () => true,
+  fetchMember: async (u) => pessoa(SID, String(u?.id ?? u?.user ?? u)), fetchMembers: async () => ({ members: [], users: [] }), fetchBans: async () => [] });
+for (const x of [geral, logc, dm, dmOutro]) c.channels.set(x.id, x);
+let nEv = 0;
+async function diz(autor, conteudo, { onde = "dm" } = {}) {
+  saidas.length = 0;
+  const ch = onde === "dm" ? (autor === DONO ? dm : dmOutro) : geral;
+  const sid = ch.serverId ?? null;
+  const ev = { id: U(20000 + ++nEv), authorId: autor, content: conteudo, serverId: sid, server: sid ? c.servers.get(sid) : undefined, channel: ch, channelId: ch.id,
+    mentionIds: [], createdAt: new Date(), author: { id: autor, username: autor, bot: false }, member: sid ? pessoa(sid, autor) : undefined, replyIds: [], attachments: [] };
+  await quieto(() => Promise.race([c.emitAll("messageCreate", ev), new Promise((r) => setTimeout(r, 6000))]));
+  return saidas.join("\n");
+}
+await diz(OUTRO, "&config idioma pt", { onde: "srv" });
+assert.ok(await esperar(() => av.escutando()), "o canal subiu no boot");
+const CHAVE = fs.readFileSync(CHAVE_ARQ, "utf8");
+const naDm = async (fn) => { const antes = dm.cru.length; const r = await fn(); return { r, novos: dm.cru.slice(antes) }; };
+
+await t("★ no boot: a chave na pasta do banco (64 hex, 0644) e o canal SÓ em 127.0.0.1, na porta do BATERIA_AVISO_PORTA", async () => {
+  assert.match(CHAVE, /^[0-9a-f]{64}$/);
+  assert.equal(fs.statSync(CHAVE_ARQ).mode & 0o777, 0o644);
+  assert.deepEqual({ ...av.endereco(), family: undefined }, { address: "127.0.0.1", port: PORTA, family: undefined });
+  assert.equal(await conecta("127.0.0.1", PORTA), true);
+  // em nenhum outro endereço da máquina (as interfaces de rede, o IPv6 local)
+  const outros = Object.values(os.networkInterfaces()).flat().filter((i) => i && !i.address.startsWith("127.")).map((i) => i.address.split("%")[0]);
+  for (const ip of [...outros, "::1"]) assert.equal(await conecta(ip, PORTA), false, `escuta em ${ip}`);
+  const src = fs.readFileSync("modulos/moderacao/bateria-avisos.js", "utf8");
+  assert.match(src, /export const ENDERECO = "127\.0\.0\.1";/);
+  assert.match(src, /srv\.listen\(porta, ENDERECO, /);
+  assert.doesNotMatch(src, /process\.env/, "nenhuma variável escolhe o endereço (a porta vem do env.js)");
+});
+await t("★ POST válido → 202 {enviado:true} e UM embed na DM do dono (título, linhas, pasta, cor)", async () => {
+  const outros = [dmOutro, geral, logc].map((x) => x.cru.length);
+  const { r, novos } = await naDm(() => pedir({ chave: CHAVE, corpo: AVISO }));
+  assert.equal(r.status, 202); assert.deepEqual(r.json, { enviado: true });
+  assert.equal(novos.length, 1);
+  assert.deepEqual(novos[0].embeds, [{ title: "🧪 Bateria · imagens · fim", description: "**Rodada terminada**\nacerto: 91%\nfuros: 3 · falsos positivos: 1\n📁 `saida/2026-11-02_23-50`", colour: "#3BA55D" }]);
+  assert.deepEqual([dmOutro, geral, logc].map((x) => x.cru.length), outros, "só a DM do dono (o primeiro de SUPER_ADMINS); nada em canal de servidor");
+});
+await t("★ título/linhas/pasta sanitizados na DM: menção e @everyone neutralizados, cortes de tamanho", async () => {
+  const { r, novos } = await naDm(() => pedir({ chave: CHAVE, corpo: { tipo: "erro", modo: "texto", titulo: `@everyone parou <@${U(9)}> ${"z".repeat(200)}`,
+    linhas: [`<%${U(10)}> @here [x](https://mal.example)`, ..."abcdefghijklmnop".split("").map((ch) => ch.repeat(250))], pasta: `saida/<@${U(11)}>` } }));
+  assert.equal(r.status, 202);
+  const e = novos[0].embeds[0];
+  assert.equal(e.title, "🧪 Bateria · texto · erro"); assert.equal(e.colour, "#ED4245");
+  assert.doesNotMatch(e.description, /@everyone|@here|<@|<%|\]\(/);
+  const l = e.description.split("\n");
+  assert.ok(l[0].length <= 104 && l[0].startsWith("**@"), l[0]);
+  assert.ok(l.slice(1, -1).every((x) => x.length <= 200));
+  assert.ok(e.description.length <= 1500);
+  assert.match(l.at(-1), /^📁 `saida\/@alguém`$/);
+});
+await t("★ chave errada, ausente ou de outro tamanho → 401, e nada na DM", async () => {
+  const { r, novos } = await naDm(async () => [
+    await pedir({ chave: "0".repeat(64), corpo: AVISO }), await pedir({ corpo: AVISO }), await pedir({ chave: CHAVE.slice(0, 63), corpo: AVISO }),
+    await pedir({ chave: `${CHAVE}0`, corpo: AVISO }), await pedir({ chave: CHAVE.toUpperCase(), corpo: AVISO })]);
+  for (const x of r) { assert.equal(x.status, 401); assert.deepEqual(x.json, { erro: "não autorizado" }); }
+  assert.deepEqual(novos, []);
+});
+await t("★ corpo acima de 8 KB → 413 (pelo Content-Length e em partes, sem ele); até 8 KB passa", async () => {
+  const grande = JSON.stringify({ ...AVISO, recheio: "x".repeat(9000) });
+  const { r, novos } = await naDm(async () => [
+    await pedir({ chave: CHAVE, corpo: grande }),
+    await pedir({ chave: CHAVE, pedacos: [grande.slice(0, 4000), grande.slice(4000)] })]);
+  for (const x of r) { assert.equal(x.status, 413); assert.deepEqual(x.json, { erro: "corpo grande demais" }); }
+  assert.deepEqual(novos, []);
+  const cabe = Buffer.byteLength(JSON.stringify({ ...AVISO, recheio: "" }));
+  const exato = JSON.stringify({ ...AVISO, recheio: "x".repeat(8192 - cabe) });
+  assert.equal(Buffer.byteLength(exato), 8192);
+  assert.equal((await pedir({ chave: CHAVE, corpo: exato })).status, 202);
+  assert.equal((await pedir({ chave: CHAVE, pedacos: [exato.slice(0, 100), exato.slice(100)] })).status, 202);
+  assert.equal((await pedir({ chave: CHAVE, corpo: JSON.stringify({ ...AVISO, recheio: "x".repeat(8193 - cabe) }) })).status, 413);
+});
+await t("★ JSON inválido, forma errada ou content-type errado → 400; nada na DM", async () => {
+  const { r, novos } = await naDm(async () => [
+    await pedir({ chave: CHAVE, corpo: "{nao é json" }), await pedir({ chave: CHAVE, corpo: "" }), await pedir({ chave: CHAVE, corpo: "null" }),
+    await pedir({ chave: CHAVE, corpo: "[]" }), await pedir({ chave: CHAVE, corpo: { ...AVISO, tipo: "rm -rf" } }), await pedir({ chave: CHAVE, corpo: { ...AVISO, linhas: [1] } }),
+    await pedir({ chave: CHAVE, corpo: AVISO, tipo: "text/plain" }), await pedir({ chave: CHAVE, corpo: AVISO, tipo: null }), await pedir({ chave: CHAVE, corpo: AVISO, tipo: "application/jsonx" })]);
+  for (const x of r) { assert.equal(x.status, 400, x.texto); assert.equal(typeof x.json?.erro, "string"); }
+  assert.deepEqual(novos, []);
+  assert.equal((await pedir({ chave: CHAVE, corpo: AVISO, tipo: "application/json; charset=utf-8" })).status, 202);
+});
+await t("★ outra rota → 404; outro método → 405 (Allow: POST) — antes da chave; nada na DM", async () => {
+  const { r, novos } = await naDm(async () => ({
+    rota: await Promise.all([["POST", "/"], ["POST", "/aviso/"], ["POST", "/avisos"], ["POST", "/gancho/1/x"], ["GET", "/saude"], ["POST", "/AVISO"]].map(([metodo, caminho]) => pedir({ metodo, caminho, chave: CHAVE, corpo: AVISO }))),
+    metodo: await Promise.all(["GET", "PUT", "DELETE", "PATCH"].map((metodo) => pedir({ metodo, chave: CHAVE, corpo: AVISO }))),
+  }));
+  for (const x of r.rota) assert.equal(x.status, 404);
+  for (const x of r.metodo) { assert.equal(x.status, 405); assert.equal(x.headers.allow, "POST"); }
+  assert.equal((await pedir({ metodo: "GET", caminho: "/nada" })).status, 404, "sem chave também");
+  assert.deepEqual(novos, []);
+  assert.equal((await pedir({ caminho: "/aviso?x=1", chave: CHAVE, corpo: AVISO })).status, 202, "query string não muda a rota");
+});
+await t("★ `&bateria avisos off` → 202 desligado e nada na DM; `on` volta; o estado aparece no `&bateria` e fica gravado", async () => {
+  assert.equal(await diz(DONO, "&bateria avisos off"), "🔔 Avisos da bateria: 🔴");
+  assert.equal(store.getGlobal().bateriaAvisos, false);
+  assert.equal(db.lerConfig("__global__").bateriaAvisos, false, "gravado no banco");
+  const { r, novos } = await naDm(() => pedir({ chave: CHAVE, corpo: AVISO }));
+  assert.equal(r.status, 202); assert.deepEqual(r.json, { enviado: false, motivo: "desligado" });
+  assert.deepEqual(novos, [], "nada na DM");
+  assert.equal(await diz(DONO, "&bateria"), "🧪 Nenhuma imagem na bateria.\n🔔 Avisos da bateria: 🔴");
+  assert.equal(await diz(DONO, "&bateria avisos"), "🔔 Avisos da bateria: 🔴", "sem on/off: só o estado");
+  assert.equal(await diz(DONO, "&testset alerts on"), "🔔 Avisos da bateria: 🟢", "em inglês (o registro traduz `alerts`)");
+  assert.equal(store.getGlobal().bateriaAvisos, true); assert.equal(db.lerConfig("__global__").bateriaAvisos, true);
+  assert.equal(await diz(DONO, "&bateria"), "🧪 Nenhuma imagem na bateria.\n🔔 Avisos da bateria: 🟢");
+  const volta = await naDm(() => pedir({ chave: CHAVE, corpo: { ...AVISO, tipo: "progresso" } }));
+  assert.deepEqual(volta.r.json, { enviado: true }); assert.equal(volta.novos.length, 1);
+  assert.match(await diz(DONO, "&bateria avisos talvez"), /^❌ Use `on` ou `off`\. · `&help bateria`$/);
+  assert.match(await diz(DONO, "&bateria avisos on agora"), /^❌ Use `on` ou `off`\./);
+  assert.equal(store.getGlobal().bateriaAvisos, true, "uso errado não muda nada");
+});
+await t("★ padrão ligado: a config global sem a chave conta como ligado", async () => {
+  assert.equal((await import("./modulos/core/config-store.js")).padraoGlobal.bateriaAvisos, true);
+  const g = store.getGlobal(); delete g.bateriaAvisos;
+  try { assert.equal(av.avisosLigados(), true); assert.match(await diz(DONO, "&bateria"), /🔔 Avisos da bateria: 🟢$/); }
+  finally { g.bateriaAvisos = true; }
+});
+await t("★ num servidor `&bateria avisos` (até do dono) dá SÓ a linha da DM e não muda nada; quem não é dono, a recusa", async () => {
+  for (const cmd of ["&bateria avisos off", "&bateria avisos", "&testset alerts off"]) {
+    const out = await diz(DONO, cmd, { onde: "srv" });
+    assert.match(out, /^🔒 Use na DM com a Judy\.$/, `${cmd} → ${out}`);
+    assert.equal(saidas.length, 1);
+  }
+  for (const onde of ["dm", "srv"]) assert.match(await diz(OUTRO, "&bateria avisos off", { onde }), /^🚫 Só o dono do bot\.$/, onde);
+  assert.equal(store.getGlobal().bateriaAvisos, true);
+  const visao = await import("./modulos/moderacao/visao.js");
+  assert.equal(visao.soDoDono("bateria", ["avisos", "off"]), true); assert.equal(visao.soDoDono("testset", ["alerts", "on"]), true);
+});
+await t("★ a ajuda (`&help bateria`) ensina o `avisos on|off` nos 3 idiomas", async () => {
+  assert.match(await diz(DONO, "&help bateria"), /`&bateria avisos on\|off` — o que a bateria avisa \(início, progresso, fim e erro\) chega como mensagem na sua DM; ligado por padrão/);
+  const reg = (await import("./modulos/comandos/bateria.js")).default;
+  assert.match(reg.ajuda.desc.en, /\{&bateria\.avisos\} on\|off` — what the test set reports/);
+  assert.match(reg.ajuda.desc.es, /\{&bateria\.avisos\} on\|off` — lo que avisa la batería/);
+  assert.match(reg.ajuda.uso.en, /alerts on\|off/); assert.match(reg.ajuda.uso.pt, /avisos on\|off/); assert.match(reg.ajuda.uso.es, /avisos on\|off/);
+});
+await t("★ reiniciar o canal: a chave NÃO é regravada (mesmo conteúdo, mesmo arquivo) e o canal volta", async () => {
+  const st = fs.statSync(CHAVE_ARQ);
+  assert.equal(av.parar(), true); assert.equal(av.escutando(), false); assert.equal(av.parar(), false);
+  assert.equal(await conecta("127.0.0.1", PORTA), false, "fechado de verdade");
+  const enviar = (canal, emb) => canal.sendMessage({ embeds: [emb] });
+  assert.ok(await quieto(() => av.iniciar({ client: c, enviar })));
+  assert.equal(av.escutando(), true);
+  assert.equal(fs.readFileSync(CHAVE_ARQ, "utf8"), CHAVE);
+  const st2 = fs.statSync(CHAVE_ARQ); assert.equal(st2.ino, st.ino); assert.equal(st2.mtimeMs, st.mtimeMs);
+  assert.equal(await quieto(() => av.iniciar({ client: c, enviar })), await quieto(() => av.iniciar({ client: c, enviar })), "chamar de novo não sobe outro");
+  assert.equal((await pedir({ chave: CHAVE, corpo: AVISO })).status, 202);
+});
+await t("★ porta ocupada: o canal não sobe, o log diz, nada quebra", async () => {
+  av.parar();
+  const ocupa = net.createServer(); await new Promise((ok) => ocupa.listen(PORTA, "127.0.0.1", ok));
+  try {
+    const { r, log } = await comLog(() => av.iniciar({ client: c, enviar: () => null }));
+    assert.equal(r, null); assert.equal(av.escutando(), false);
+    assert.ok(log.some((l) => /\[BATERIA:aviso\] o canal não subiu: EADDRINUSE/.test(l)), log.join(" | "));
+  } finally { await new Promise((ok) => ocupa.close(ok)); }
+});
+await t("★ BATERIA_AVISO_PORTA=0 não sobe nada (nem cria a chave)", async () => {
+  av.parar();
+  const d = `${DIR}/desligado`; fs.mkdirSync(d);
+  const antes = process.env.BATERIA_AVISO_PORTA;
+  process.env.BATERIA_AVISO_PORTA = "0";
+  try {
+    const { r, log } = await comLog(() => av.iniciar({ client: c, enviar: () => null, pasta: d }));
+    assert.equal(r, null); assert.equal(av.escutando(), false); assert.equal(av.endereco(), null);
+    assert.ok(log.some((l) => l.includes("canal desligado (BATERIA_AVISO_PORTA=0)")));
+    assert.deepEqual(fs.readdirSync(d), [], "sem chave");
+    assert.equal(await conecta("127.0.0.1", PORTA), false);
+    assert.equal(await quieto(() => av.iniciar({ client: c, enviar: () => null, porta: 0, pasta: d })), null);
+  } finally { process.env.BATERIA_AVISO_PORTA = antes; }
+});
+await t("★ .env: BATERIA_AVISO_PORTA validada no boot (0 ou 1024–65535, inteiro, sem colidir com as portas do bot)", async () => {
+  const env = await import("./modulos/core/env.js");
+  const antes = { ...process.env };
+  try {
+    for (const [v, extra] of [["", {}], ["0", {}], ["8097", {}], ["9000", {}], ["65535", {}], ["8095", { WEBHOOK_PORTA: "9100" }]]) {
+      Object.assign(process.env, { BATERIA_AVISO_PORTA: v, ...extra });
+      assert.deepEqual(env.problemasDoEnv(), [], `${v} ${JSON.stringify(extra)}`);
+      for (const k of Object.keys(extra)) delete process.env[k];
+    }
+    process.env.BATERIA_AVISO_PORTA = ""; assert.equal(env.portaDosAvisos(), 8097, "vazio = 8097");
+    for (const [v, re, extra] of [["80", /BATERIA_AVISO_PORTA=80 é inválido \(0 desliga; senão, de 1024 a 65535\)/], ["1023", /de 1024 a 65535/], ["abc", /BATERIA_AVISO_PORTA="abc" é inválido/],
+      ["70000", /é inválido/], ["8097.5", /é inválido/], ["-1", /é inválido/],
+      ["8095", /a mesma porta de WEBHOOK_PORTA/], ["8090", /a mesma porta de IA_PORTA/], ["8091", /a mesma porta de VOZ_PORTA/], ["8082", /a mesma porta de LLAMA_PORTA/],
+      ["9200", /a mesma porta de WEBHOOK_PORTA/, { WEBHOOK_PORTA: "9200" }]]) {
+      Object.assign(process.env, { BATERIA_AVISO_PORTA: v, ...(extra ?? {}) });
+      const p = env.problemasDoEnv();
+      assert.equal(p.length, 1, `${v}: ${p.join(" | ")}`); assert.match(p[0], re);
+      for (const k of Object.keys(extra ?? {})) delete process.env[k];
+    }
+    // o main.js e o iniciar.js param o boot com a lista (o problemasDoEnv é o mesmo nos dois)
+    assert.match(fs.readFileSync("iniciar.js", "utf8"), /const p = \[\.\.\.problemasDoEnv\(\)\];/);
+  } finally { for (const k of Object.keys(process.env)) if (!(k in antes)) delete process.env[k]; Object.assign(process.env, antes); }
+  // as portas do bot: o padrão 8097 não colide com nenhuma (iniciar.js, webhooks.js, compose)
+  const fontes = ["iniciar.js", "modulos/ferramentas/webhooks.js", "docker-compose.yml", "modulos/core/env.js", "ia-servico/servidor.js", "voz-servico/servidor.js"].map((f) => fs.readFileSync(f, "utf8")).join("\n");
+  const portas = new Set([...fontes.matchAll(/\b(80\d\d)\b/g)].map((m) => m[1]));
+  for (const p of ["8082", "8090", "8091", "8095"]) assert.ok(portas.has(p), p);
+  assert.ok(portas.has("8097"), "a 8097 é do env.js (o padrão)");
+  assert.doesNotMatch(fs.readFileSync("iniciar.js", "utf8") + fs.readFileSync("modulos/ferramentas/webhooks.js", "utf8"), /8097/);
+});
+await t("★ docker-compose.yml não publica a porta (nem cita a variável); o .env.example a documenta comentada", () => {
+  const compose = fs.readFileSync("docker-compose.yml", "utf8");
+  assert.doesNotMatch(compose, /8097|BATERIA/);
+  assert.doesNotMatch(compose, /^\s*expose:/m);
+  const portas = compose.split("\n").filter((l) => /^\s*-\s*"[^"]*:\d|^\s*-\s*"\$\{/.test(l));
+  assert.equal(portas.length, 1, portas.join("\n")); assert.match(portas[0], /WEBHOOK_PORTA/);
+  const ex = fs.readFileSync(".env.example", "utf8");
+  assert.match(ex, /\n# Porta interna por onde a bateria de teste do dono avisa o bot, que repassa à DM dele\.\n[\s\S]{0,400}\n#BATERIA_AVISO_PORTA=8097\n/);
+  assert.doesNotMatch(ex, /^BATERIA_AVISO_PORTA=/m);
+});
+await t("★ o main.js sobe o canal no boot (depois do banco) e o fecha no SIGTERM/SIGINT", () => {
+  const src = fs.readFileSync("main.js", "utf8");
+  assert.match(src, /for \(const sinal of \["SIGTERM", "SIGINT"\]\) \{\n  process\.on\(sinal, \(\) => \{[^}]*bateriaAvisos\.parar\(\)[\s\S]{0,200}process\.exit\(0\);/);
+  const i = src.indexOf("store.inicializar(CONFIG_PATH)"), j = src.indexOf("bateriaAvisos.iniciar({ client, enviar: (canal, emb) => sendEmbed(canal, emb) })");
+  assert.ok(i > 0 && j > i, "depois de abrir o banco (a chave mora na pasta dele)");
+});
+await t("PRIVACIDADE.md: a bateria pode mandar resumos à DM do dono por um canal interno, sem dados de usuários — nos 3 idiomas", () => {
+  const p = fs.readFileSync("PRIVACIDADE.md", "utf8").replace(/\n  /g, " ");
+  assert.match(p, /\n- A bateria de teste do dono do bot pode mandar resumos à DM dele por um canal interno da máquina \(só dentro do container, com chave; ele liga e desliga com `&bateria avisos`\), sem dados de usuários: a bateria usa mensagens e imagens de teste\.\n/);
+  assert.match(p, /\n- The bot owner's test set may send summaries to their DM through a channel internal to the machine \(only inside the container, with a key; they turn it on and off with `&testset alerts`\), with no user data: the test set uses test messages and images\.\n/);
+  assert.match(p, /\n- La batería de prueba del dueño del bot puede enviar resúmenes a su DM por un canal interno de la máquina \(solo dentro del contenedor, con clave; él lo activa y desactiva con `&bateria avisos`\), sin datos de usuarios: la batería usa mensajes e imágenes de prueba\.\n/);
+});
+av.parar();
+
+console.log(`\nP4.4 AVISOS: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

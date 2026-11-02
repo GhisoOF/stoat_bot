@@ -153,6 +153,7 @@ Generadas del `.env.example` (donde cada una se explica por completo).
 | `REVISAO_HORA` | `21` | A hora (UTC, 0–23) da rodada diária: resumo, limiares recalculados e os casos do dia. |
 | `REVISAO_AMOSTRA` | `0.02` | A fração das decisões dos detectores (e do que não puniram) que vira amostra (0–0.1). |
 | `RELATORIO_SERVIDOR` | — | O servidor do dono do bot. |
+| `BATERIA_AVISO_PORTA` | `8097` | Porta interna por onde a bateria de teste do dono avisa o bot, que repassa à DM dele. |
 | `WEBHOOK_BIND` | `127.0.0.1` | Em que endereço da máquina o receptor de webhooks fica: 127.0.0.1 (padrão, só a máquina; o Tailscale Funnel segue funcionando) · 172.17.0.1 (só os containers, e |
 | `WEBHOOK_SERVIDORES` | `*` | Quais servidores podem criar webhooks (ids separados por vírgula; * = todos). |
 | `WEBHOOK_MAX_POR_SERVIDOR` | `10` | Tetos do receptor: ganchos por servidor, publicações por minuto (todos os ganchos somados) e tentativas com token errado por minuto. |

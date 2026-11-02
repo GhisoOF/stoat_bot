@@ -51,19 +51,15 @@ import * as entretenimento from "./modulos/ferramentas/entretenimento.js";
 import * as jogos     from "./modulos/ferramentas/jogos.js";
 import * as servidorInfo from "./modulos/ferramentas/servidor-info.js";
 import * as srvStats   from "./modulos/core/metricas.js";
-import * as rpg        from "./modulos/game/game.js";
 import * as assuntos   from "./modulos/moderacao/assuntos.js";
-import { iaLigada, conversaLigada } from "./modulos/core/env.js";
+import * as modelo from "./modulos/moderacao/modelo.js";   // (P4) a IA que sobrou: só a moderação, num lugar só
 import * as avatarMod from "./modulos/moderacao/avatar.js";
 import * as perfilMod from "./modulos/moderacao/perfil.js";   // (31 out 2026, P3a) o perfil inteiro
-import { dirigidoAoBot } from "./modulos/ai/destinatario.js";
 import { protegerMarcadores } from "./modulos/core/marcadores.js";
-import * as chat      from "./modulos/ai/chat.js";
-import * as gating    from "./modulos/ai/gating.js";   // (P2) quando a Judy conversa: conversaAqui, falaCom
 import * as rss       from "./modulos/ferramentas/rss.js";
 import * as nivel     from "./modulos/ferramentas/nivel.js";
 import * as i18n      from "./modulos/core/i18n.js";
-import * as consentimento from "./modulos/ai/consentimento.js";
+import { subirAnexo } from "./modulos/core/anexos.js";
 import * as dbIA     from "./modulos/core/db.js";
 import * as retencao from "./modulos/core/retencao.js";
 import * as novidades from "./modulos/ferramentas/novidades.js";
@@ -91,6 +87,8 @@ import { descreverErro } from "./modulos/core/erros.js";
 import { problemasDoEnv, avisosDoEnv, numero } from "./modulos/core/env.js";
 import * as confianca from "./modulos/moderacao/confianca.js";
 import * as revisao from "./modulos/moderacao/revisao.js";   // (31 out 2026, P3a) a amostra diária do dono do bot
+import { soDoDono, funcionaNaDM } from "./modulos/moderacao/visao.js";   // (P4) o nível "dono" de cada comando (o MAPA)
+import { pedirDM, idiomaDoDono } from "./modulos/core/dono.js";
 import * as casosStaff from "./modulos/moderacao/casos-staff.js";   // (31 out 2026, P3a) os casos duvidosos com a staff de cada servidor
 import { semPingEmMassa } from "./modulos/core/seguranca.js";
 
@@ -165,9 +163,6 @@ setInterval(() => {
     reiniciar(`sem eventos do Stoat há ${Math.round(ocioso / 60000)}min (nem o heartbeat do Stoat respondeu — conexão morta de verdade)`);
   }
 }, 60000);
-
-// O histórico de conversa da IA vive 24 h (privacidade, 20 out 2026)
-setInterval(() => { try { dbIA.podarHistoricoIA(); } catch (e) { console.error("[DB] poda do histórico:", e.message); } }, 3600_000).unref?.();
 
 const HEARTBEAT_MS = numero("HEARTBEAT_MS", 300000, { min: 10000, inteiro: true }); // 5 min
 setInterval(() => {
@@ -369,17 +364,11 @@ function comandoParecido(digitado, nomes) {
 // declarado lá, uma vez, com nome, apelidos e o que ele é. O boot para se o
 // registro tiver um nome em dois comandos.
 const {
-  rotas, CANONICO, COMANDOS_GERENCIAVEIS, COMANDOS_SO_IA, COMANDOS_DE_VOZ, ESSENCIAIS, SEMPRE_LIBERADOS, TEXTO_LIVRE,
+  rotas, CANONICO, COMANDOS_GERENCIAVEIS, COMANDOS_DE_VOZ, ESSENCIAIS, SEMPRE_LIBERADOS, TEXTO_LIVRE,
 } = await registroComandos.montarTabela();
-estado.COMANDOS_SO_IA = COMANDOS_SO_IA;
 // exportado via ctx para o comando &comando consultar
 estado.CANONICO = CANONICO;
 estado.COMANDOS_GERENCIAVEIS = COMANDOS_GERENCIAVEIS;
-// Versão filtrada por servidor: esconde os comandos de IA onde ela não roda.
-estado.comandosGerenciaveisDe = (sid) => {
-  const pode = (c) => { try { return chat.comandoIAPermitido(c, sid); } catch { return false; } };
-  return COMANDOS_GERENCIAVEIS.filter((c) => !COMANDOS_SO_IA.has(c) || pode(c));
-};
 estado.rotas = rotas;
 estado.CANONICO_COMPLETO = CANONICO;
 
@@ -387,7 +376,7 @@ estado.CANONICO_COMPLETO = CANONICO;
 // inventário de comandos (`node testes.mjs comandos-17out`), que confere que
 // nenhum nome sumiu nem mudou de destino entre uma versão e outra.
 export function tabelaDeComandos() {
-  return { rotas, CANONICO, COMANDOS_GERENCIAVEIS, COMANDOS_SO_IA };
+  return { rotas, CANONICO, COMANDOS_GERENCIAVEIS };
 }
 
 let jaInicializou = false;
@@ -455,8 +444,6 @@ client.on("ready", async () => {
 
   reactionRoles.precarregarMensagens(client).catch((e) => console.error("[REACTIONROLE][boot]", e?.message));
 
-  rpg.iniciarCatalogo();   // semeia o catálogo e o ouro da era (idempotente)
-
   srvStats.marcarInicio();
   // As novidades deste pacote, no canal de log de cada servidor (P2: sempre, sem opção)
   novidades.anunciar({ client, global: store.getGlobal(), salvarGlobal: store.salvarGlobal, configDoServidor: store.configDoServidor,
@@ -472,32 +459,18 @@ client.on("ready", async () => {
   relatorioHora.evento(null, "boot", "bot iniciou");
   relatorioHora.agendar({
     client,
-    getCfg: () => store.getGlobal().relatorio,
-    enviar: async (canalId, rel) => {
-      const canal = await client.channels.fetch(canalId).catch(() => null);
-      if (!canal) return;
-      const fixo = relatorioHora.servidorDoRelatorio();
-      if (fixo && canal.serverId !== fixo) {
-        console.warn(`[RELATORIO] canal ${canalId} não é do servidor do relatório (${fixo}) — não enviado`);
-        return;
-      }
-      await sendEmbed(canal, { title: rel.title, description: rel.description, colour: COR.info });
-    },
+    // (P4, 2 nov 2026) à DM do dono do bot (relatorio.entregar); a config antiga com canal é lida sem quebrar
+    getCfg: () => relatorioHora.configDoRelatorio(store.getGlobal()),
+    enviar: (canal, emb) => sendEmbed(canal, { ...emb, colour: COR.info }),
   });
-  for (const l of chat.resumoConfigIA()) console.info(l);
+  console.info(`[IA] moderação: ${modelo.temJuiz() ? `juiz ${modelo.modeloJuiz() || "(o carregado)"}` : "sem juiz (IA=0 ou sem LLM_URL)"} · ${modelo.temServico() ? `visão ${modelo.modeloVisao() || "desligada"}` : "sem o serviço de imagens (IA_SERVICO_URL)"}`);
 
   engine.iniciarVigiaDeSilencios(criarContexto());
 
-  // CONVERSA=0 (modo enxuto): nada de IA rodando em segundo plano — memória
-  // e comentário espontâneo ficam parados. Ficam: temas proibidos, visão de imagens, relatório e RSS.
-  if (conversaLigada()) {
-    chat.iniciarMemoria();          // liga o agente de memória (extração em background)
-    chat.iniciarComentario(client); // liga o comentário espontâneo
-  }
-  // temas proibidos: o mesmo juiz (JSON, sem raciocínio, fila da conversa)
-  if (iaLigada()) assuntos.configurar({ avaliar: chat.avaliarModeracao });
-  rss.configurarResumo(chat.resumirRSS);   // RSS agendado passa a resumir com o tom da Judy
-  rss.configurarRelatorio({ linhas: chat.linhasRSS, comentario: chat.comentarioRSS, traduzir: chat.traduzirLinhasRSS });   // relatório por categoria + comentário no fim
+  // temas proibidos: o juiz (JSON, sem raciocínio) — a única IA de texto que sobrou (P4). (Revisão) só com o juiz de
+  // verdade (IA ligada E LLM_URL): sem ele, o assuntos.js decide pela nota e avisa no log, em vez de chamar um juiz
+  // que sempre falha
+  if (modelo.temJuiz()) assuntos.configurar({ avaliar: modelo.julgar });
 
   const ctx = criarContexto();    // contexto sem servidor (tarefas globais)
   engine.agendarLimpezaSpam(ctx); // limpeza periódica do rastreio de spam
@@ -575,11 +548,10 @@ async function tratarMensagem(message) {
   // Cada servidor tem sua própria config
   const serverId = message.serverId ?? message.server?.id ?? message.server?._id ?? null;
   if (!message.__lote) srvStats.registrar(serverId);   // métrica de ritmo (memória, janela deslizante)
-  if (!message.__lote) relatorioHora.mensagem(serverId, message.content, {
-    autorId: message.authorId, ehBot: !!message.author?.bot,
-    comAssunto: relatorioHora.temAssunto(client.servers.get(serverId), store.getGlobal().relatorio),
-  });
+  if (!message.__lote) relatorioHora.mensagem(serverId, { autorId: message.authorId, ehBot: !!message.author?.bot });
   const ctx = criarContexto(serverId);
+  // (P4) os comandos do dono do bot rodam na DM: lá, o idioma é o dele (o do RELATORIO_SERVIDOR, como a fila)
+  if (!serverId && ehSuperAdmin(message.authorId)) ctx.config.language = idiomaDoDono();
 
   // ── Comando também passa pelo automod (os filtros de CONTEÚDO) ──
   // Antes, qualquer mensagem que começasse com um comando de verdade pulava o
@@ -623,38 +595,8 @@ async function tratarMensagem(message) {
     catch (e) { console.error("[ASSISTENTE]", e.message); }
   }
 
-  if (!command) {
-    // A resposta à pergunta da memória ("posso lembrar de você?"): um sim/não logo
-    // depois, no mesmo canal, com ou sem mencioná-la (privacidade, 20 out 2026)
-    if (gating.conversaAqui(serverId, ctx.config)) {
-      try { if (await consentimento.tratarResposta(message, ctx)) return; }
-      catch (e) { console.error("[CONSENTIMENTO]", e.message); }
-    }
-    const meuId = client.user?.id;
-    // Responder a uma mensagem dela com @OutraPessoa no texto é falar com a
-    // outra pessoa — o "ping" da resposta não conta (ver destinatario.js).
-    const mencionado = dirigidoAoBot({ conteudo: message.content, mentionIds: message.mentionIds, botId: meuId });
-    // (21 out 2026) quem pediu "não fale comigo" (`&chat sair`) é ignorado pela IA em silêncio
-    if (mencionado && gating.conversaAqui(serverId, ctx.config) && gating.falaCom(message.authorId)) {
-      // O AUTOMOD VEM ANTES DA IA. Antes, mencionar a Judy pulava a moderação
-      // inteira — o ataque de 2 out 2026 colava "@Judy" em cada mensagem de
-      // emoji + ofensa racial, e nenhum filtro rodava (e ainda ganhava XP).
-      if (await engine.runAutomod(message, ctx)) return;
-      const pergunta = (message.content || "").replace(new RegExp(`<@${meuId}>`, "g"), "").trim();
-      // A pergunta entra no fio do canal (antes só a RESPOSTA dela entrava, e
-      // o modelo via respostas soltas sem saber o que tinham perguntado).
-      chat.registrarNoCanal(message.channelId, {
-        id: message.id, nome: message.author?.username ?? message.member?.nickname ?? message.authorId,
-        userId: message.authorId, texto: message.content, respondeuAId: message.replyIds?.[0] ?? null,
-      });
-      // conversa com a IA conta XP (é interação legítima)
-      try { await nivel.aoMensagem(message, { ...ctx, client }); }
-      catch (e) { console.error("[NIVEL]", e.message); }
-      await chat.conversar(message, pergunta, ctx);
-      return;
-    }
-  }
-
+  // (P4, 2 nov 2026) o chat IA saiu: mencionar a Judy é uma mensagem como outra
+  // qualquer (passa pelo automod, conta XP) — ela não responde.
   if (!handler) {
     if (await engine.runAutomod(message, ctx)) return;
     // (P2, 31 out 2026) o &modia saiu: temas por IA são do `&automod sentinela assuntos` (dentro do runAutomod)
@@ -666,37 +608,9 @@ async function tratarMensagem(message) {
 
     try { await ttsVoz.aoMensagem(message, ctx); }
     catch (e) { console.error("[TTS]", e.message); }
-
-    // o que quem pediu silêncio escreve não vai para a IA (nem memória, nem o fio do canal)
-    if (gating.conversaAqui(serverId, ctx.config) && gating.falaCom(message.authorId)) {
-      const nome = message.author?.username ?? message.member?.nickname ?? message.authorId;
-      // (31 out 2026) a memória só aprende do que é dito à Judy: a resposta a uma
-      // mensagem dela (mesmo sem o ping) conta. Só o cache local, sem ir à API.
-      const respondeAJudy = (message.replyIds ?? []).some((id) => client.messages?.get?.(id)?.authorId === client.user?.id);
-      chat.observarMensagem({
-        serverId, userId: message.authorId, nome,
-        texto: message.content, ehBot: !!message.author?.bot, paraJudy: respondeAJudy,
-      });
-      // Cache do canal: registra o fio da conversa (quem falou, a quem respondeu).
-      // (era `reply_ids`, que a stoat.js não tem: o "respondendo a" nunca aparecia)
-      chat.registrarNoCanal(message.channelId, {
-        id: message.id, nome, userId: message.authorId, texto: message.content,
-        respondeuAId: message.replyIds?.[0] ?? null, respondeuA: message.replyIds?.length ? "uma mensagem anterior" : null,
-      });
-      if (!message.author?.bot) {
-        chat.observarParaComentario(message, { ...ctx, client });
-      }
-    }
-  }
-
-  if (!command) {
-    chat.talvezResponderLivre(message, { ...ctx, client }).catch(() => {});
   }
 
   if (!command) return;            // mensagem normal, sem prefixo
-
-  // (P2, pedido da IA) `&chat <pergunta>` / `&ia <pergunta>`: o &chat saiu como comando, a conversa fica
-  if (!handler && command && await chat.conversarPorAtalho(message, command, ctx)) return;
 
   if (!handler) {                  // tinha prefixo, mas o comando não existe
     // (P2) o bot cresce pelo uso: a palavra (normalizada, sem o resto da mensagem) entra
@@ -705,13 +619,13 @@ async function tratarMensagem(message) {
       try { dbIA.contarPalavraTentada(serverId, command); }
       catch (e) { console.error("[PALAVRAS]", e?.message); }
     }
-    // "&gams follower ficha" → "você quis dizer &game?" (o mais parecido, até 2 letras de diferença)
+    // "&xo top" → "você quis dizer &xp?" (o mais parecido, até 2 letras de diferença)
     // "&ship @a @b" → "&entretenimento ship @a @b": o subcomando só existe dentro da família
     // "&regras" → "&servidor regras" (idem cargos, canais, faq)
     const daFamilia = entretenimento.subcomandoDe(command) ? `entretenimento ${command}`
       : servidorInfo.subcomandoDe(command) ? `servidor ${command}` : null;
     // (P2) os nomes antigos que viraram atalho (`&comando`, `&log`) também são sugeridos
-    // (revisão P2) nunca o próprio nome: `&chat oi` sem IA sugeria `&chat oi` (o `chat` é cabeça de atalho)
+    // (revisão P2) nunca o próprio nome (um atalho que é cabeça de si mesmo não sugere a si mesmo)
     const parecido = daFamilia ?? comandoParecido(command, [...Object.keys(rotas), ...aliases.NOMES_DE_ATALHO].filter((n) => n !== command));
     // o resto também: `&comado destivar ping` sugeria `&comando destivar ping`,
     // com o erro do subcomando intacto (17 out 2026)
@@ -748,22 +662,19 @@ async function tratarMensagem(message) {
 
   const canonico = CANONICO[command] ?? command;
 
-  // comandos da IA só nos servidores da conversa
-  if (COMANDOS_SO_IA.has(canonico) && !chat.comandoIAPermitido(canonico, serverId)) {
-    return sendEmbed(message.channel, tr(ctx, {
-      title: "🚫 Não existe aqui",
-      description: `\`${aliases.citar(canonico, "pt", PREFIXO)}\` não existe neste servidor.\n\nVeja o que existe por aqui com \`${aliases.citar("help", "pt", PREFIXO)}\`.`,
-      colour: COR.aviso,
-    }, {
-      title: "🚫 Not a command here",
-      description: `\`${aliases.citar(canonico, "en", PREFIXO)}\` doesn't exist on this server.\n\nSee what's available here with \`${aliases.citar("help", "en", PREFIXO)}\`.`,
-      colour: COR.aviso,
-    }, {
-      title: "🚫 No existe aquí",
-      description: `\`${aliases.citar(canonico, "es", PREFIXO)}\` no existe en este servidor.\n\nMira lo que hay por aquí con \`${aliases.citar("help", "es", PREFIXO)}\`.`,
-      colour: COR.aviso,
-    }));
+  // (P4, 2 nov 2026, decisão do dono) comando ou subcomando só do dono do bot (o MAPA do visao.js):
+  // só na DM com a Judy. Num servidor, o dono recebe uma linha e NADA roda (nem log, nem o handler);
+  // para quem não é o dono nada muda (o handler recusa, como sempre).
+  if (serverId && ehSuperAdmin(message.authorId) && soDoDono(canonico, args)) {
+    return sendEmbed(message.channel, pedirDM(ctx));
   }
+  // (P4, revisão) e o contrário: na DM não há servidor — o comando de staff/configuração (ou de membro
+  // que depende de servidor) respondia sucesso falso ali. Só uma linha, e nada roda (visao.funcionaNaDM).
+  if (!serverId && !funcionaNaDM(canonico, args)) {
+    return sendEmbed(message.channel, tr(ctx, { description: "🏠 Use num servidor.", colour: COR.aviso },
+      { description: "🏠 Use it in a server.", colour: COR.aviso }, { description: "🏠 Úsalo en un servidor.", colour: COR.aviso }));
+  }
+
   // (revisão P2) o nome salvo pode ser o antigo (`repete` → `&embed`, `iniciativa` → `&rolar init`)
   if (!ESSENCIAIS.has(canonico) && aliases.estaDesativado(ctx.config.comandosDesativados, canonico, aliases.normalizarArgs(canonico, args, CANONICO))) {
     await log.registrar(ctx, "comandos", {
@@ -861,19 +772,15 @@ function ehCanalDeVoz(message) {
   // fica sabendo pelo log (categoria própria, sempre ligada).
   const donoDoServidor = message.server?.ownerId ?? client.servers.get(serverId)?.ownerId ?? null;
   if (serverId && ehSuperAdmin(message.authorId) && donoDoServidor !== message.authorId) {
-    const linha = `\`${PREFIXO}${command}${args.length ? " " + args.join(" ") : ""}\``.slice(0, 300);
-    await log.registrar(ctx, "dono", {
-      titulo: "🛠️ Comando do dono do bot", descricao: `<@${message.authorId}> · <#${message.channelId}>\n${linha}`,
-      en: { titulo: "🛠️ Bot owner command", descricao: `<@${message.authorId}> · <#${message.channelId}>\n${linha}` },
-      es: { titulo: "🛠️ Comando del dueño del bot", descricao: `<@${message.authorId}> · <#${message.channelId}>\n${linha}` },
-    });
+    const linha = `\`${PREFIXO}${command}${args.length ? " " + args.join(" ") : ""}\``;
+    await log.registrarComandoDoDono(ctx, { autorId: message.authorId, canalId: message.channelId, linha });
   }
 
   const argsFinais = aliases.normalizarArgs(canonico, args, CANONICO);
 
   // `<grupo>`, `<@pessoa>`, `‹cargo›` copiados da ajuda ao pé da letra (12 out
   // 2026: "as pessoas não estão sabendo usar o bot"). Comando de texto livre
-  // fica de fora (falar de <div> no &chat é legítimo); o &automod tem a cola
+  // fica de fora (falar de <div> num &embed é legítimo); o &automod tem a cola
   // dele, com os grupos.
   const marcador = TEXTO_LIVRE.has(canonico) ? null
     : args.find((a) => /^[<‹][^<>‹›@#%:]{1,30}[>›]$/.test(a) && !/^<[@#%]/.test(a));
@@ -901,11 +808,6 @@ function ehCanalDeVoz(message) {
 
   try {
     await handler(message, argsFinais, ctx);
-    // Conversar com a IA via comando (&chat) também conta XP — é interação.
-    if ((CANONICO[command] ?? command) === "chat") {
-      try { await nivel.aoMensagem(message, { ...ctx, client }); }
-      catch (e) { console.error("[NIVEL]", e.message); }
-    }
   } catch (err) {
     console.error(`[CMD:${command}] Erro:`, err);
     await sendEmbed(message.channel, tr(ctx, {
@@ -951,8 +853,6 @@ client.on("messageReactionAdd", async (...a) => {
     if (await paginas.aoReagir(msgId, userId, emoji, a0)) return;
     // Jogo da velha (&entretenimento velha): 1️⃣–9️⃣ no tabuleiro é a jogada.
     if (await jogos.aoReagir(msgId, userId, emoji)) return;
-    // RPG (&game): ✅ no convite de co-op e no desafio de duelo (só quem foi convidado conta)
-    if (await rpg.aoReagir(msgId, userId, emoji)) return;
     // (P2) ✅ do dono do bot na prévia do `&servidores aviso`: publica no log de cada servidor
     if (await servidoresPainel.aoReagirAviso(msgId, userId, emoji, { client, criarContexto })) return;
     // (P3a) ✅/❌ do dono do bot num caso da fila de revisão (só na DM em que o caso foi)
@@ -983,7 +883,6 @@ client.events.on("event", async (ev) => {
     const editor = { id: ev.id, channelId: ev.channel_id,
       edit: (data) => client.api.patch(`/channels/${ev.channel_id}/messages/${ev.id}`, data) };
     if (ev.type === "MessageReact" && await tickets.aoReagir({ id: ev.id }, ev.user_id, ev.emoji_id, { client, criarContexto })) return;
-    if (ev.type === "MessageReact" && await rpg.aoReagir(ev.id, ev.user_id, ev.emoji_id)) return;
     if (ev.type === "MessageReact" && await revisao.aoReagir(ev.id, ev.user_id, ev.emoji_id, { canalId: ev.channel_id ?? null })) return;   // (P3a)
     if (ev.type === "MessageReact" && await casosStaff.aoReagir(ev.id, ev.user_id, ev.emoji_id, { client, criarContexto })) return;   // (P3a)
     await paginas.aoReagir(ev.id, ev.user_id, ev.emoji_id, editor);
@@ -1239,7 +1138,7 @@ client.on("messageDelete", async (message) => {
     // a mesma imagem (tamanho + dimensões) só uma vez.
     const anexosApagados = message?.attachments ?? [];
     const freio = log.freioDeResgate(`${serverId}:${message?.authorId}`, anexosApagados);
-    const { ids: midias, perdidas } = await log.resgatarMidias(freio.resgatar, { subir: chat.subirAnexo });
+    const { ids: midias, perdidas } = await log.resgatarMidias(freio.resgatar, { subir: subirAnexo });
     const notaMidia =
       (midias.length ? `\n**Mídia:** ${midias.length} anexo(s) resgatado(s) abaixo` : "") +
       (perdidas.length ? `\n**Mídia não recuperável:** ${perdidas.join(", ")}` : "") +

@@ -1,11 +1,6 @@
 {
-  "ia-servico/ferramentas/gerar-imagem.js": 4,
   "iniciar.js": 2,
   "main.js": 3,
-  "modulos/ai/chat.js": 6,
-  "modulos/ai/consentimento.js": 2,
-  "modulos/ai/ficha.js": 4,
-  "modulos/core/db.js": 7,
   "modulos/core/erros.js": 1,
   "modulos/core/hierarquia.js": 1,
   "modulos/core/ids.js": 3,

@@ -185,12 +185,6 @@ async function chamar(rota, corpo = null, metodo = "POST") {
   return dados;
 }
 
-export async function falarNaCall(config, texto, ctx) {
-  const c = garantirConfig(config);
-  if (!c.ativo || !c.canalVoz) return { ok: false, erro: "desligado" };
-  return chamar("/falar", { canalVoz: c.canalVoz, texto, voz: c.voz });
-}
-
 export async function aoMensagem(message, ctx) {
   try {
     const serverId = ctx.serverId;

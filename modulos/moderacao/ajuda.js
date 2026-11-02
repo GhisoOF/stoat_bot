@@ -5,10 +5,10 @@
 //   &help <comando>          a página do comando (uso, permissão, descrição, exemplo, parâmetros)
 //   &help <comando> <parte>  a página de uma parte (`ajuda.paginas` no registro)
 //
-// O comando vence o grupo (`&help xp`, `&help game` abriam o grupo — o bug do P1), e um
-// atalho de mais palavras vence o comando (`&help chat sair` → `&privacidade chat sair`).
-// Cada um vê só o que pode usar aqui (visao.js): membro, staff ou dono do bot; sem IA ou
-// sem voz no servidor, os comandos deles somem.
+// O comando vence o grupo (`&help xp` abria o grupo — o bug do P1), e um
+// atalho de mais palavras vence o comando (`&help xp sair` → `&privacidade xp sair`).
+// Cada um vê só o que pode usar aqui (visao.js): membro, staff ou dono do bot; sem voz
+// no servidor, os comandos dela somem.
 
 import * as visaoMod from "./visao.js";
 import { tr, idiomaDe } from "../core/i18n.js";
@@ -62,10 +62,8 @@ export async function cmdHelp(message, args, ctx) {
     const sub = pedido.caminho?.[0] ?? pedido.resto?.[0] ?? "";
     const barrado = barrar(id, String(sub).toLowerCase());
     if (barrado) return sendEmbed(message.channel, barrado);
-    // página marcada `soDono` no registro (ex.: `&help game admin`): só o dono do bot a vê
+    // página marcada `soDono` no registro: só o dono do bot a vê
     if (visao.nivel !== "dono" && (pedido.caminho ?? []).some((_, i) => noDaPagina(id, pedido.caminho.slice(0, i + 1))?.soDono)) return naoAchei(sub);
-    // página marcada `recurso: "ia"` (ex.: `&help config ia`, `&help chat`): onde a IA não roda, como se não existisse
-    if (!visao.ia && (pedido.caminho ?? []).some((_, i) => noDaPagina(id, pedido.caminho.slice(0, i + 1))?.recurso === "ia")) return naoAchei(args[0]);
     // a parte pedida não tem página própria: se é um subcomando do comando, a página dele
     // explica; se nem isso, diz quais partes existem
     if (pedido.resto?.length && !pedido.caminho?.length && !ehSubcomando(id, pedido.resto[0])) {
@@ -103,7 +101,7 @@ export async function cmdHelp(message, args, ctx) {
     if (visaoMod.podeVer(visao, id, sub)) return null;
     const nome = `\`${citar(id, lang, P)}\``;
     const recurso = visaoMod.recursoDoComando(id);
-    if ((recurso === "ia" && !visao.ia) || (recurso === "voz" && !visao.voz)) {
+    if (recurso === "voz" && !visao.voz) {
       // (integração P2) com título: quem lê a tela (e o teste que pula a página restrita) vê o 🚫 na 1ª linha
       return { colour: COR.aviso, title: tr(ctx, "🚫 Não disponível aqui", "🚫 Not available here", "🚫 No disponible aquí"), description: tr(ctx, `${nome} não está disponível neste servidor.`, `${nome} isn't available on this server.`, `${nome} no está disponible en este servidor.`) };
     }

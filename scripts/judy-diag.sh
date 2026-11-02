@@ -10,7 +10,7 @@
 #    judy-diag.sh              → diagnóstico completo (padrão)
 #    judy-diag.sh logs         → acompanha o log do container ao vivo
 #    judy-diag.sh logs voz     → só as linhas de voz/TTS/música
-#    judy-diag.sh logs ia      → só as linhas de IA/chat/ferramentas
+#    judy-diag.sh logs ia      → só as linhas da IA da moderação
 #    judy-diag.sh erros        → só as linhas de erro das últimas 24h
 #    judy-diag.sh reiniciar    → reinicia o container
 #    judy-diag.sh falar "oi"   → testa a síntese do Piper direto
@@ -93,7 +93,7 @@ diagnostico() {
   titulo "Configuração que CHEGOU ao container"
   # O .env inteiro entra pelo env_file; o que vale é o que está aqui dentro.
   docker exec "$CONTAINER" printenv 2>/dev/null \
-    | grep -E '^(IA|IA_MODO|MODELO|MODELO_VISAO|LLM_URL|VOZ_ATIVA|IMAGEM|SD_MODELO_TIPO|SEARXNG_URL|LLAMA_CTX)=' \
+    | grep -E '^(IA|IA_MODO|MODELO|MODELO_MODERACAO|MODELO_VISAO|LLM_URL|VOZ_ATIVA|LLAMA_CTX)=' \
     | sed 's/^/   /' || aviso "não consegui ler o ambiente do container"
 
   titulo "Erros recentes"
@@ -120,7 +120,7 @@ logs() {
   local filtro=""
   case "${1:-tudo}" in
     voz) filtro='\[(VOZ|TTS|MUSICA)\]' ;;
-    ia)  filtro='\[(IA|CHAT|FERRAMENTA)\]' ;;
+    ia)  filtro='\[(IA|MODELO|IMAGEM|AVATAR|ASSUNTOS)\]' ;;
   esac
   echo "Acompanhando ${1:-tudo} em $CONTAINER (Ctrl-C para sair)"
   if [ -n "$filtro" ]; then

@@ -90,16 +90,9 @@ export const padraoServidor = {
   // ── Curadoria RSS ──
   rss: { canalId: null, horario: "21:00", fuso: null, urgentes: [] },   // (P2.3) fuso: a cidade do `&rss horario 13:00 <cidade>`   // (P2, ferramentas) o telejornal: hora local e os termos urgentes
   autorole: { roleId: null },   // cargo dado automaticamente a quem entra
-  chatLivre: { canais: [], modo: "relevante" },    // "relevante" = só o que julgar importante; "todas" = toda mensagem
-  comentarioEspontaneo: {
-    canalId:    null,     // canal único onde ela comenta (null = desligado)
-    porDia:     4,        // teto de comentários espontâneos por dia
-    minParaFalar: 4,      // quantas mensagens de conversa antes de considerar comentar
-  },
   // ── (P2, 31 out 2026) o que os módulos já gravavam e o padrão não declarava ──
   // Declarado aqui para a tela do &config sair inteira deste molde (nenhuma chave fora).
   // Os valores são os mesmos que cada módulo já assumia quando faltava a chave.
-  ia: { chat: null, imagem: null },   // a escolha do servidor (null = o padrão do .env); `&assistente ia|imagem`
   tts: {
     ativo: false, canalVoz: null, canalTexto: null, voz: null, cooldown: null, anunciarNome: true,
     dicionario: {}, expandir: true, efeito: null, tom: null, filtro: true, porMinuto: null,
@@ -159,13 +152,29 @@ function mesclarServidor(salvo, tpl) {
   return cfg;
 }
 
+// (P4, 2 nov 2026) Comandos que saíram do bot: o nome (e os apelidos antigos) some das
+// listas salvas — desativados e livres — sem quebrar a config de quem os tinha.
+export const COMANDOS_QUE_SAIRAM = new Set(["game", "rpg", "juego", "personagem", "character"]);
+const semOsQueSairam = (lista) => (Array.isArray(lista) ? lista : []).filter((c) => !COMANDOS_QUE_SAIRAM.has(String(c).toLowerCase()));
+// (P4, 2 nov 2026, área da IA) As chaves do chat IA que saiu: a escolha do servidor
+// (`ia.chat`/`ia.imagem`), a conversa livre, o comentário espontâneo e a persona antiga
+// por servidor. A config salva que as tem continua abrindo; elas só não voltam.
+export const CHAVES_QUE_SAIRAM = ["ia", "chatLivre", "comentarioEspontaneo", "persona"];
+// e os nomes do chat IA nas listas salvas (o `&comando desativar chat` de antes)
+for (const c of ["chat", "ia", "personalidade", "personality", "personalidad"]) COMANDOS_QUE_SAIRAM.add(c);
+const semChavesQueSairam = (salvo) => {
+  const o = { ...(salvo ?? {}) };
+  for (const k of CHAVES_QUE_SAIRAM) delete o[k];
+  return o;
+};
+
 function mesclarServidorBruto(salvo, tpl) {
   const am = tpl.automod;
   const s  = salvo.automod ?? {};
   const lg = salvo.log ?? {};
   return {
     ...structuredClone(tpl),
-    ...salvo,
+    ...semChavesQueSairam(salvo),
     log: {
       ...tpl.log, ...lg,
       eventos: { ...tpl.log.eventos, ...(lg.eventos ?? {}) },
@@ -174,14 +183,14 @@ function mesclarServidorBruto(salvo, tpl) {
       ...tpl.banGlobal, ...(salvo.banGlobal ?? {}),
       isentos: [...(salvo.banGlobal?.isentos ?? [])],
     },
-    comandosDesativados: [...(salvo.comandosDesativados ?? tpl.comandosDesativados)],
+    comandosDesativados: semOsQueSairam(salvo.comandosDesativados ?? tpl.comandosDesativados),
     rss: { ...tpl.rss, ...(salvo.rss ?? {}) },
     autorole: { ...tpl.autorole, ...(salvo.autorole ?? {}) },
-    chatLivre: { ...tpl.chatLivre, ...(salvo.chatLivre ?? {}) },
     acesso: {
       ...tpl.acesso,
       ...(salvo.acesso ?? {}),
       canais: { ...tpl.acesso.canais, ...(salvo.acesso?.canais ?? {}) },
+      livres: semOsQueSairam(salvo.acesso?.livres ?? tpl.acesso.livres),
     },
     xp: { ...tpl.xp, ...(salvo.xp ?? salvo.game ?? {}) },
     automod: {
@@ -227,8 +236,6 @@ export function desligarModulos(cfg) {
   if (cfg.xp) cfg.xp.enabled = false;
   if (cfg.moderacaoIA) cfg.moderacaoIA.ativa = false;
   if (cfg.banGlobal) cfg.banGlobal.modo = "off";
-  if (cfg.chatLivre) cfg.chatLivre.canais = [];
-  if (cfg.comentarioEspontaneo) cfg.comentarioEspontaneo.canalId = null;
   if (cfg.log) cfg.log.canalId = null;
   if (cfg.rss) cfg.rss.canalId = null;
   if (cfg.autorole) cfg.autorole.roleId = null;
@@ -311,6 +318,9 @@ export function inicializar(configPathLegado, dbPath) {
 
   if (gSalvo && tplSalvo) {
     cfgGlobal        = { ...structuredClone(padraoGlobal), ...gSalvo };
+    delete cfgGlobal.persona;   // (P4) a persona do chat IA saiu (some do banco na próxima gravação)
+    // (P4) o `&servidores relatorio assuntos` saiu com o relatório escrito pelo modelo: a chave fica fora
+    if (cfgGlobal.relatorio && typeof cfgGlobal.relatorio === "object") delete cfgGlobal.relatorio.assuntos;
     // (31 out 2026, R9) o debug nasceu ligado e ficou gravado assim no banco: o log
     // copiava trecho de toda mensagem. Uma vez só, volta ao padrão novo (desligado);
     // quem quiser o liga de novo pelo &automod debug on.

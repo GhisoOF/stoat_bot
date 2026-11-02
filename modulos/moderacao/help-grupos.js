@@ -31,12 +31,6 @@ export const GRUPOS = {
     nome: { pt: "diversao", en: "fun", es: "diversion" },
     apelidos: ["diversão", "diversión"],
   },
-  rpg: {
-    emoji: "🎲",
-    titulo: { pt: "RPG", en: "RPG", es: "RPG" },
-    nome: { pt: "rpg", en: "rpg", es: "rpg" },
-    apelidos: ["jogo", "juego"],
-  },
   diagnostico: {
     emoji: "🩺",
     titulo: { pt: "Diagnóstico", en: "Diagnostics", es: "Diagnóstico" },
@@ -53,7 +47,7 @@ export const GRUPOS = {
 };
 
 // Ordem fixa dos grupos no índice.
-export const ORDEM = ["comecar", "proteger", "personalizar", "diversao", "rpg", "diagnostico", "dono"];
+export const ORDEM = ["comecar", "proteger", "personalizar", "diversao", "diagnostico", "dono"];
 
 // Nome digitado (qualquer idioma, apelido) → chave do grupo, ou null.
 const POR_NOME = (() => {

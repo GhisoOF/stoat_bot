@@ -18,7 +18,7 @@
 // `expulsar` ou `banir`. A staff é sempre avisada quando há ação — e o alerta
 // nunca republica a imagem nem o texto.
 
-import { chaveServicoIA } from "../ai/servicos.js";
+import * as modelo from "./modelo.js";   // (P4) a IA da moderação, num lugar só
 import * as log from "../core/log.js";
 import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
 import * as db from "../core/db.js";
@@ -45,13 +45,12 @@ export const tempoDoAvatar = (cfg) => Math.min(MAX_TIMEOUT_MS, lerDuracao(cfg?.t
 // o que apitou (perfil.js devolve a voz na troca) — o teto é o do próprio Stoat.
 export const ATE_TROCAR_MS = MAX_TIMEOUT_MS;
 
-const iaUrl = () => (process.env.IA_SERVICO_URL || "").replace(/\/$/, "");
 const CDN = () => (process.env.CDN_URL || "https://cdn.stoatusercontent.com").replace(/\/$/, "");
 
 // As IMAGENS do perfil precisam do modelo de visão; o texto do perfil não (perfil.ligado).
-export const temVisao = () => !!iaUrl();
+export const temVisao = () => modelo.temServico();
 export function ligado(config) {
-  return config?.automod?.antiAvatar?.enabled !== false && !!iaUrl();
+  return config?.automod?.antiAvatar?.enabled !== false && modelo.temServico();
 }
 
 // File da stoat.js (`id`, `tag`) ou o objeto cru da API (`_id`, `tag`). O banner
@@ -142,14 +141,7 @@ export function notaDaFoto(descricao, { riscoModelo = false, recusou = false } =
 // ── Análise (uma por vez; a mesma foto, uma vez só) ─────────────────────────
 // Num raid entram muitas contas juntas, e a mesma foto vale em vários
 // servidores: o resultado fica guardado por foto por 6 h.
-let analisar = async (url) => {
-  const chave = chaveServicoIA();
-  const resp = await fetch(`${iaUrl()}/moderar-imagem`, {
-    method: "POST", headers: { "Content-Type": "application/json", ...(chave ? { "x-chave": chave } : {}) },
-    body: JSON.stringify({ url }), signal: AbortSignal.timeout(120_000),
-  });
-  return resp.json().catch(() => ({}));
-};
+let analisar = (url) => modelo.descreverImagem(url);
 export function _trocarAnalise(fn) { const antes = analisar; analisar = fn; return antes; }
 
 const CACHE_MS = 6 * 3600_000, FILA_MAX = 30, CACHE_MAX = 2000;
@@ -189,18 +181,11 @@ export function analisarFoto(arquivo, agora = Date.now()) {
 // ── O hash da imagem (dHash 8×8), pelo ia-servico (/hash-imagem) ─────────────
 // Barato (sem modelo) e determinístico: vem ANTES do modelo — o que o dono já
 // julgou não gasta GPU. O arquivo do CDN nunca muda: o hash fica 24 h.
-let hashear = async (url) => {
-  const chave = chaveServicoIA();
-  const resp = await fetch(`${iaUrl()}/hash-imagem`, {
-    method: "POST", headers: { "Content-Type": "application/json", ...(chave ? { "x-chave": chave } : {}) },
-    body: JSON.stringify({ url }), signal: AbortSignal.timeout(30_000),
-  });
-  return resp.json().catch(() => ({}));
-};
+let hashear = (url) => modelo.hashImagem(url);
 export function _trocarHash(fn) { const antes = hashear; hashear = fn; return antes; }
 const hashes = new Map();   // id da foto → { t, promessa }
 export function hashDaFoto(arquivo, agora = Date.now()) {
-  if (!arquivo?.id || !iaUrl()) return Promise.resolve(null);
+  if (!arquivo?.id || !modelo.temServico()) return Promise.resolve(null);
   podar(hashes, 24 * 3600_000, agora);
   const guardado = hashes.get(arquivo.id);
   if (guardado) return guardado.promessa;

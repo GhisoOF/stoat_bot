@@ -64,7 +64,7 @@ export const NOME_PARA_ID_TELA = (() => {
 export const SUB = DO_REGISTRO.sub;
 
 // ── Atalhos (P2, 31 out 2026): apelido que aponta para DENTRO de outra família ──
-// Declarados no comando de destino (`atalhos: { "chat sair|leave": "privacidade chat sair" }`):
+// Declarados no comando de destino (`atalhos: { "xp sair|leave": "privacidade xp sair" }`):
 // cada posição da chave aceita alternativas com `|`; o valor é o id + subcomandos internos.
 // Vence a chave mais longa. Ver `_notas/registro-ajuda.md` (Formato de redirecionamento).
 export const ATALHOS = REGISTRO.flatMap((c) => Object.entries(c.atalhos ?? {}).map(([chave, destino]) => ({
@@ -481,11 +481,11 @@ export function nomeExibido(canonico, lang) {
 // registro. Referência que não existe (comando ou subcomando) é ERRO na hora — o
 // texto quebrado não chega à tela em silêncio, como o `${P}…` escrito à mão chegava.
 export function citar(ref, lang = "pt", prefixo = "&") {
-  // (P2) caminho que virou atalho (`log.canal` → `config.log.canal`, `chat.sair` →
-  // `privacidade.chat.sair`): o texto antigo continua valendo e mostra o caminho novo
+  // (P2) caminho que virou atalho (`log.canal` → `config.log.canal`, `xp.sair` →
+  // `privacidade.xp.sair`): o texto antigo continua valendo e mostra o caminho novo
   const at = resolverAtalho(String(ref ?? "").split("."));
   if (at) {
-    // o destino pode trazer um valor (`chat.on` → `assistente ia on`): o que não é
+    // o destino pode trazer um valor (`log.relatorio` → `config log relatorio`): o que não é
     // subcomando vai no fim, como está
     const cam = [at.comando, ...at.args];
     for (let n = cam.length; n >= 1; n--) {

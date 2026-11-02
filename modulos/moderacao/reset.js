@@ -13,8 +13,7 @@
 // automod (tudo desligado, como servidor novo), punição, log, boas-vindas e
 // adeus, cargo automático, staff e acesso, comandos desativados, ajustes do
 // XP, do TTS, dos tickets, da IA, regras/FAQ e o idioma (o padrão do bot).
-// Os DADOS ficam: níveis de XP, avisos, saldos, personagens do RPG, cargos por
-// reação, webhooks, feeds RSS, tickets abertos e a lista global de bans —
+// Os DADOS ficam: níveis de XP, avisos, saldos, cargos por reação, webhooks, feeds RSS, tickets abertos e a lista global de bans —
 // apagar isso não tem volta, e cada um tem o próprio comando.
 
 import * as store from "../core/config-store.js";
@@ -123,7 +122,7 @@ export async function cmdReset(message, args, ctx) {
       "automod (tudo desligado), punição, canal de log, boas-vindas/adeus, cargo automático, staff e acesso,",
       "comandos desativados, ajustes de XP/TTS/tickets/IA, regras e FAQ, e o idioma (inglês).",
       "",
-      "**Fica:** níveis de XP, avisos, saldos, personagens do RPG, cargos por reação, webhooks,",
+      "**Fica:** níveis de XP, avisos, saldos, cargos por reação, webhooks,",
       "feeds RSS, tickets abertos e a lista global de bans.",
       "",
       `Para confirmar, em até 2 min: \`${citar("reset.confirmar", "pt", P)} ${codigo}\``,
@@ -133,7 +132,7 @@ export async function cmdReset(message, args, ctx) {
       "automod (all off), punishment, log channel, welcome/goodbye, autorole, staff roles and access,",
       "disabled commands, XP/TTS/ticket/AI settings, rules and FAQ, and the language (English).",
       "",
-      "**Stays:** members' XP levels, warnings, balances, RPG characters, reaction roles, webhooks,",
+      "**Stays:** members' XP levels, warnings, balances, reaction roles, webhooks,",
       "RSS feeds, open tickets and the global ban list.",
       "",
       `To confirm, within 2 min: \`${citar("reset.confirmar", "en", P)} ${codigo}\``,
@@ -143,7 +142,7 @@ export async function cmdReset(message, args, ctx) {
       "automod (todo desactivado), castigo, canal de registro, bienvenida/despedida, rol automático, staff y acceso,",
       "comandos desactivados, ajustes de XP/TTS/tickets/IA, reglas y FAQ, y el idioma (inglés).",
       "",
-      "**Se queda:** niveles de XP, avisos, saldos, personajes del RPG, roles por reacción, webhooks,",
+      "**Se queda:** niveles de XP, avisos, saldos, roles por reacción, webhooks,",
       "feeds RSS, tickets abiertos y la lista global de bans.",
       "",
       `Para confirmar, en un plazo de 2 min: \`${citar("reset.confirmar", "es", P)} ${codigo}\``,

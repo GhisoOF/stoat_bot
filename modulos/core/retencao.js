@@ -16,26 +16,10 @@ const colunas = (tabela) => d().prepare(`PRAGMA table_info(${tabela})`).all().ma
 const contar = (sql, ...p) => d().prepare(sql).get(...p)?.n ?? 0;
 
 // ── A pessoa ──
-// Cada grupo: rótulo (pt/en/es) e o que apaga. A ordem importa no RPG (os itens
-// dos companheiros antes dos companheiros).
+// Cada grupo: rótulo (pt/en/es) e o que apaga.
 const DA_PESSOA = [
-  { id: "ia", rotulo: { pt: "memória da IA (fatos, perfil, conversa)", en: "AI memory (facts, profile, conversation)", es: "memoria de la IA (datos, perfil, conversación)" },
-    partes: [["ia_fatos_pessoa", "userId = ?"], ["ia_perfil", "userId = ?"], ["ia_memoria", "userId = ?"], ["ia_historico", "userId = ?"]] },
   { id: "xp", rotulo: { pt: "XP e nível", en: "XP and level", es: "XP y nivel" }, partes: [["xp_usuarios", "userId = ?"]] },
   { id: "economia", rotulo: { pt: "saldo da economia", en: "economy balance", es: "saldo de la economía" }, partes: [["eco_saldos", "userId = ?"]] },
-  { id: "rpg", rotulo: { pt: "personagem do RPG (itens, moedas, companheiros, ofertas)", en: "RPG character (items, coins, companions, offers)", es: "personaje del RPG (objetos, monedas, compañeros, ofertas)" },
-    // Só o que é DELA. O companheiro que ela trocou (donoOriginal = ela, donoId = outro)
-    // e a proposta que outro fez a ela (alvoId = ela — o item do autor está em custódia
-    // nela) são do outro jogador: ver `desligarDaPessoa`. (20 out 2026, revisão do P2:
-    // antes o apagar levava junto o companheiro e o item em custódia de outra pessoa.)
-    partes: [
-      ["rpg_follower_itens", "followerId IN (SELECT id FROM rpg_followers WHERE donoId = ?)"],
-      ["rpg_followers", "donoId = ?"],
-      ["rpg_ofertas", "autorId = ?"],
-      ["rpg_personagem", "userId = ?"], ["rpg_inventario", "userId = ?"], ["rpg_equipado", "userId = ?"],
-      ["rpg_carteira", "userId = ?"], ["rpg_magias", "userId = ?"], ["rpg_unicos", "userId = ?"],
-      ["rpg_espera", "userId = ?"], ["rpg_dungeon_ativos", "userId = ?"],
-    ] },
 ];
 const REVISAO_ROTULO = {
   pt: "casos na amostra do dono do bot (o caso fica, sem você)",
@@ -54,36 +38,12 @@ export const FICA_DA_PESSOA = {
   es: "advertencias, sanciones y la lista global de bans — son registros de moderación de los servidores",
 };
 
-// O que cita a pessoa em registros de OUTRO jogador: o registro fica, sem ela.
-// A proposta aberta que outro fez a ela é cancelada e o item (ou as moedas) em
-// custódia volta ao autor — como o `&game mercado cancelar` faria.
-function desligarDaPessoa(u, apagar) {
-  let n = 0;
-  if (existe("rpg_ofertas")) {
-    if (!apagar) n += contar("SELECT COUNT(*) n FROM rpg_ofertas WHERE alvoId = ? AND autorId <> ?", u, u);
-    else {
-      for (const of of d().prepare("SELECT * FROM rpg_ofertas WHERE alvoId = ? AND autorId <> ? AND estado = 'aberta'").all(u, u)) {
-        if (of.itemOferecido) db.darItem(of.serverId, of.autorId, of.itemOferecido);
-        if (of.moedaOferecida) db.creditar(of.serverId, of.autorId, of.moedaOferecida, of.qtdOferecida);
-        db.fecharOferta(of.id, "cancelada");
-      }
-      n += d().prepare("UPDATE rpg_ofertas SET alvoId = NULL WHERE alvoId = ? AND autorId <> ?").run(u, u).changes ?? 0;
-    }
-  }
-  if (existe("rpg_followers")) {
-    n += apagar
-      ? (d().prepare("UPDATE rpg_followers SET donoOriginal = NULL WHERE donoOriginal = ? AND (donoId IS NULL OR donoId <> ?)").run(u, u).changes ?? 0)
-      : contar("SELECT COUNT(*) n FROM rpg_followers WHERE donoOriginal = ? AND (donoId IS NULL OR donoId <> ?)", u, u);
-  }
-  return n;
-}
-
 // Quanto há de cada grupo (para a tela de confirmação) ou apaga (apagar: true)
 export function dadosDaPessoa(userId, { apagar = false } = {}) {
   const u = String(userId);
   const r = [];
   for (const g of DA_PESSOA) {
-    let n = g.id === "rpg" ? desligarDaPessoa(u, apagar) : 0;
+    let n = 0;
     for (const [tabela, onde, vezes = 1] of g.partes) {
       if (!existe(tabela)) continue;
       const p = Array(vezes).fill(u);
@@ -101,7 +61,6 @@ export function dadosDaPessoa(userId, { apagar = false } = {}) {
   // (31 out 2026, P3a, staff) os casos duvidosos dela que esperam a staff de um servidor saem
   // (o julgado já não tem a pessoa: só impressão, categoria, nota, veredito e servidor)
   if (existe("staff_casos")) r.push({ id: "staff", rotulo: STAFF_ROTULO, n: db.staffDaPessoa(u, { apagar }) });
-  if (apagar) db.setConsentimento(u, { memoria: false, fioGlobal: false, respondido: true });   // a escolha dela fica: não perguntar de novo
   return r;
 }
 
@@ -116,7 +75,7 @@ export function desmarcarSaida(serverId) {
 }
 export const saidaDe = (serverId) => d().prepare("SELECT saiuEm FROM servidores_saida WHERE serverId = ?").get(String(serverId))?.saiuEm ?? null;
 
-// Tudo o que tem `serverId` (config, XP, tickets, ganchos, feeds, punições, IA…),
+// Tudo o que tem `serverId` (config, XP, tickets, ganchos, feeds, punições…),
 // e o que ficou órfão disso (as notícias já vistas dos feeds apagados).
 export function apagarDadosDoServidor(serverId) {
   const sid = String(serverId);

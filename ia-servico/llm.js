@@ -2,9 +2,10 @@
 // ia-servico (31 out 2026, P1). Antes eram dois (o laço de ferramentas e a visão),
 // cada um com o seu timeout e o seu tratamento de erro — e o do laço ainda mandava
 // `Authorization` para um provedor online, que foi removido: o modelo é sempre o
-// local, e nada da conversa, das ferramentas ou das imagens sai da máquina.
+// local, e nada da moderação nem das imagens sai da máquina.
 
-export const LLM_URL = (process.env.LLM_URL || "").replace(/\/$/, "");
+import { llmUrl } from "../modulos/moderacao/modelo-enderecos.js";
+export const LLM_URL = llmUrl();   // (P4, revisão) a mesma leitura do bot (modelo-enderecos.js)
 
 // POST /v1/chat/completions; devolve o JSON. Erro HTTP vira exceção com o status
 // e o começo do corpo (vai para o log do serviço, não para a tela).

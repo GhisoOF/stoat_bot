@@ -1,13 +1,12 @@
 
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes } from "node:crypto";
-import { iaLigada, conversaLigada, imagemLigada, modoIA, numero, problemasDoEnv, avisosDoEnv, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
+import { iaLigada, modoIA, numero, problemasDoEnv, avisosDoEnv, MODELO_LOCAL_PADRAO } from "./modulos/core/env.js";
 import { avisoSemTrava } from "./modulos/core/modelos-sem-trava.js";
 import { montarConfigSwap, flagsDoLlama, modeloValido } from "./modulos/core/llama-swap-config.js";
-import { arquivosParaBaixar, tipoDoModelo, imagemPedida } from "./modulos/core/imagem-modelo.js";
 
 const LLAMA_BIN = process.env.LLAMA_BIN || "/usr/local/bin/llama-server";
 const SWAP_BIN = process.env.SWAP_BIN || "/usr/local/bin/llama-swap";
@@ -21,15 +20,17 @@ const SWAP_BIN = process.env.SWAP_BIN || "/usr/local/bin/llama-swap";
 const ENV_BASE = ["PATH", "HOME", "LANG", "LC_ALL", "TZ", "TMPDIR", "NODE_ENV",
   "HTTPS_PROXY", "HTTP_PROXY", "NO_PROXY", "https_proxy", "http_proxy", "no_proxy", "SSL_CERT_FILE", "SSL_CERT_DIR", "LD_LIBRARY_PATH"];
 // os ajustes de GPU que quem hospeda põe no .env (Vulkan, ROCm, CUDA): não são
-// segredo, e o llama e o sd.cpp precisam deles (mesma lista do modulos/ai/servicos.js)
+// segredo, e o llama precisa deles
 const GPU = ["GGML_*", "VK_*", "MESA_*", "RADV_*", "HSA_*", "ROC*", "HIP_*", "CUDA_*", "AMD_*"];
 export const ENV_FILHO = {
   // llama-server e llama-swap (que repassa o seu ambiente ao llama-server)
   llama: ["LLAMA_CACHE", "HF_TOKEN", ...GPU],
   curl: [],
-  iaServico: ["IA_CHAVE", "IA_SERVICO_CHAVE", "IMAGEM*", "SD_*", "LLM_*", "SEARXNG_*", "GITHUB_*", "CODIGO_*",
-    "RSS_*", "REDE_*", "CALC_TIMEOUT_MS", "CDN_URL", "CONTINUAR_MAX", "DNS_FALLBACK", "FERRAMENTAS_OFF",
-    "MAX_TOKENS", "MAX_VOLTAS_FERRAMENTA", "NUM_CTX", ...GPU],
+  // (P4) só a moderação: a visão (IMAGEM_* são os tetos do download/da reescrita) e o hash.
+  // Sem os ajustes de GPU: eram do gerador de imagem (sd.cpp), que saiu; a visão roda no
+  // llama-server. IA_SERVICO_URL: o modelo.js (de onde vem a chave) lê também a URL — não é segredo
+  iaServico: ["IA_CHAVE", "IA_SERVICO_CHAVE", "IA_SERVICO_URL", "IMAGEM_HOSTS_PERMITIDOS", "IMAGEM_LADO_VISAO", "IMAGEM_MAX_BYTES",
+    "IMAGEM_MAX_PIXELS", "IMAGEM_TIMEOUT_MS", "LLM_*", "CDN_URL", "DNS_FALLBACK"],
   // o voz-servico entra na call com a conta do bot: é o único que leva o BOT_TOKEN
   vozServico: ["BOT_TOKEN", "VOZ_*", "TTS_*", "PIPER_*", "MUSICA_*", "SPOTIFY_*", "LIVEKIT_*", "STOAT_API", "YTDLP_BIN"],
 };
@@ -65,7 +66,7 @@ export function problemasDoBoot() {
   const tentar = (fn) => { try { fn(); } catch (e) { p.push(e.message.replace(/^\.env: /, "")); } };
   tentar(() => flagsDoLlama(process.env.LLAMA_FLAGS));
   tentar(() => numero("LLAMA_NGL", 999, { min: 0, max: 9999, inteiro: true }));
-  for (const v of ["LLAMA_CTX", "LLAMA_CTX_MODERACAO"]) tentar(() => numero(v, 4096, { min: 256, max: 4_194_304, inteiro: true }));
+  for (const v of ["LLAMA_CTX", "LLAMA_CTX_MODERACAO"]) tentar(() => numero(v, 8192, { min: 256, max: 4_194_304, inteiro: true }));
   for (const v of ["LLAMA_PORTA", "IA_PORTA", "VOZ_PORTA"]) tentar(() => numero(v, 8082, { min: 1024, max: 65535, inteiro: true }));
   tentar(() => numero("IA_TTL", 3600, { min: 1, max: 604_800, inteiro: true }));
   if (!/^\/[\w.\/-]+$/.test(LLAMA_BIN)) p.push("LLAMA_BIN tem de ser um caminho absoluto simples");
@@ -75,7 +76,6 @@ export function problemasDoBoot() {
     for (const [v, m] of Object.entries(modelos)) {
       if (m && !modeloValido(m)) p.push(`${v}: use usuario/repositorio:quantizacao do Hugging Face (ex.: ${MODELO_LOCAL_PADRAO})`);
     }
-    if (imagemLigada() && imagemPedida()) tentar(() => arquivosParaBaixar());
   }
   if (process.env.VOZ_ATIVA === "1") {
     const ruins = [...vozesPedidas(), ...(process.env.PIPER_VOZ ? [process.env.PIPER_VOZ] : [])].filter((n) => !urlDaVoz(n));
@@ -84,25 +84,25 @@ export function problemasDoBoot() {
   return p;
 }
 
-// ── A IA local: o plano (31 out 2026, P2) ─────────────────────────────────
+// ── A IA local: o plano (31 out 2026, P2; P4, 2 nov 2026) ──────────────────
 // O que sobe e com que nomes. null = nada de IA local (IA=0, sem IA_MODO=local ou
-// IA_EMBUTIDA=0 com LLM_URL externo). Os nomes são o que o bot pede ao llama-swap
-// ("conversa", "visao", "moderacao"); com o llama-server direto (sem llama-swap na
-// imagem) só existe um modelo, e todo papel cai nele.
+// IA_EMBUTIDA=0 com LLM_URL externo). (P4) O chat IA saiu: sobram dois papéis, os da
+// moderação — o JUIZ dos temas proibidos (MODELO_MODERACAO, ou o MODELO, ou o padrão)
+// e a VISÃO das imagens (MODELO_VISAO, opcional). Os nomes são o que o bot pede ao
+// llama-swap ("moderacao", "visao"); com o llama-server direto (sem llama-swap na
+// imagem) só existe um modelo — o juiz — e não há visão.
 export function planoDaIA(env = process.env, { swapBin = SWAP_BIN, existe = existsSync } = {}) {
   if (!iaLigada() || modoIA() !== "local") return null;
-  const conversa = env.MODELO || MODELO_LOCAL_PADRAO;
+  const juiz = (env.MODELO_MODERACAO || "").trim() || env.MODELO || MODELO_LOCAL_PADRAO;
   const visao = env.MODELO_VISAO || env.LLM_MODEL_VISAO || null;
-  const moderacao = (env.MODELO_MODERACAO || "").trim() || null;
   const temSwap = existe(swapBin);
   const nomes = temSwap
-    ? { conversa: "conversa", visao: "visao", moderacao: "moderacao" }
-    : { conversa: env.LLM_MODEL || "conversa", visao: env.LLM_MODEL || "conversa", moderacao: env.LLM_MODEL || "conversa" };
+    ? { juiz: "moderacao", visao: "visao" }
+    : { juiz: env.LLM_MODEL || "moderacao", visao: null };
   return {
-    conversa, visao: temSwap ? visao : null, moderacao: temSwap ? moderacao : null, swap: temSwap, nomes,
+    juiz, visao: temSwap ? visao : null, swap: temSwap, nomes,
     cache: env.LLAMA_CACHE || "/data/modelos",
-    imagem: imagemLigada() && imagemPedida(env),
-    ttl: numero("IA_TTL", 3600),
+    ttl: numero("IA_TTL", 300),
   };
 }
 
@@ -156,45 +156,6 @@ function baixarModelo(m, cache) {
   });
 }
 
-// Os arquivos do gerador de imagem (só com IMAGEM=1): as URLs saem do mesmo lugar
-// que o gerador usa (modulos/core/imagem-modelo.js), já conferidas no problemasDoBoot.
-function baixarArquivoSD(rotulo, url, SD_DIR) {
-  return new Promise((res) => {
-    let nome; try { nome = url.split("/").pop().split("?")[0]; } catch { nome = "modelo"; }
-    const destino = join(SD_DIR, nome);
-    const marca = `${SD_DIR}/.pronto-${nome.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    if (existsSync(destino) && existsSync(marca)) return res(true);
-    try { mkdirSync(SD_DIR, { recursive: true }); } catch { /* já existe; o curl acusa se não der */ }
-    console.info(`[INICIAR] baixando ${rotulo} (${nome})…`);
-    const tmp = `${destino}.baixando`;
-    // até 20 GiB e 6 h por arquivo (o maior hoje, a difusão Q8 do Qwen, tem 7,6 GB)
-    const p = spawn("curl", [...curlSeguro(6 * 3600, 20 * 1024 ** 3), url, "-o", tmp],
-      { stdio: ["ignore", "ignore", "inherit"], env: envDoFilho(ENV_FILHO.curl) });
-    filhos.add(p);
-    let bytesAntes = 0, quando = Date.now();
-    const progresso = setInterval(() => {
-      let agora = 0; try { agora = statSync(tmp).size; } catch { /* o curl ainda não criou o arquivo */ }
-      const vel = Math.max(0, (agora - bytesAntes) / ((Date.now() - quando) / 1000));
-      console.info(`[INICIAR] ${rotulo}: ${(agora / 1e9).toFixed(2)} GB no disco (${(vel / 1e6).toFixed(1)} MB/s)`);
-      bytesAntes = agora; quando = Date.now();
-    }, 10_000);
-    progresso.unref?.();
-    p.on("error", (e) => { clearInterval(progresso); filhos.delete(p); console.error(`[INICIAR] ${rotulo}: ${e.message}`); res(false); });
-    p.on("exit", (c) => {
-      clearInterval(progresso); filhos.delete(p);
-      if (c === 0) {
-        try { renameSync(tmp, destino); writeFileSync(marca, new Date().toISOString()); } catch (e) { console.warn(`[INICIAR] ${rotulo}: ${e.message}`); }
-        console.info(`[INICIAR] ${rotulo} pronto no disco.`);
-        res(true);
-      } else {
-        try { unlinkSync(tmp); } catch { /* não chegou a criar */ }
-        console.error(`[INICIAR] download de ${rotulo} falhou (saída ${c}) — a ferramenta gerar_imagem tentará de novo sob demanda.`);
-        res(false);
-      }
-    });
-  });
-}
-
 // Depois do bot: os downloads e o servidor de modelos.
 async function subirIA(plano) {
   const ngl = String(numero("LLAMA_NGL", 999));
@@ -211,11 +172,11 @@ async function subirIA(plano) {
   if (!plano.swap) {
     // Sem llama-swap na imagem: o llama-server direto (baixa o modelo no primeiro
     // arranque pelo -hf; fica carregado — sem TTL).
-    console.warn(`[INICIAR] ${SWAP_BIN} não existe nesta imagem — llama-server direto, um modelo só, sem TTL (sem visão nem modelo de moderação).`);
-    console.info(`[INICIAR] IA local: ${plano.conversa} (primeiro arranque baixa o modelo — pode demorar)`);
+    console.warn(`[INICIAR] ${SWAP_BIN} não existe nesta imagem — llama-server direto, um modelo só (o juiz), sem TTL e sem visão.`);
+    console.info(`[INICIAR] IA local: ${plano.juiz} (primeiro arranque baixa o modelo — pode demorar)`);
     // -ngl: camadas na GPU. 999 = "tudo o que couber"; sem GPU, ele cai para CPU sozinho.
     subirBin("llama", LLAMA_BIN,
-      ["-hf", plano.conversa, "--host", "127.0.0.1", "--port", portaLlama, "-c", ctx, "-ngl", ngl, "--jinja", ...flagsExtra],
+      ["-hf", plano.juiz, "--host", "127.0.0.1", "--port", portaLlama, "-c", ctx, "-ngl", ngl, "--jinja", ...flagsExtra],
       envDoFilho(ENV_FILHO.llama, { LLAMA_CACHE: cache }));
     return;
   }
@@ -224,32 +185,22 @@ async function subirIA(plano) {
   // Antes, o download era refém do primeiro pedido: o llama-swap só ligava o
   // servidor sob demanda, o pedido estourava o timeout, o swap matava o servidor
   // e o download morria junto. Aqui cada modelo baixa até o fim, com progresso.
-  const { conversa, visao, moderacao } = plano;
-  for (const m of [...new Set([conversa, visao, moderacao].filter(Boolean))]) {
+  const { juiz, visao } = plano;
+  for (const m of [...new Set([juiz, visao].filter(Boolean))]) {
     if (encerrando) return;
     await baixarModelo(m, cache);
   }
-
-  // ── O gerador de imagem: só com IMAGEM=1 ──
-  if (plano.imagem && !encerrando) {
-    const SD_DIR = process.env.SD_MODELOS_DIR || "/data/modelos-sd";
-    console.info(`[INICIAR] gerador de imagem: ${tipoDoModelo()}`);
-    for (const [rotulo, url] of arquivosParaBaixar()) {
-      if (encerrando) return;
-      await baixarArquivoSD(rotulo, url, SD_DIR);
-    }
-  }
   if (encerrando) return;
 
-  // ── O llama-swap: um modelo ou três, sempre com o TTL de verdade ──
+  // ── O llama-swap: um modelo ou dois, sempre com o TTL de verdade ──
   const cfg = process.env.LLAMA_SWAP_YAML || "/data/llama-swap.yaml";
   const extra = flagsExtra.join(" ");
   const comando = (m, c = ctx) => `${LLAMA_BIN} -hf ${m} --host 127.0.0.1 --port \${PORT} -c ${c} -ngl ${ngl} --jinja${extra ? " " + extra : ""}`;
-  // IA_TTL: quanto tempo o modelo fica na memória sem uso (s). Padrão 1 h; no modo
-  // enxuto (CONVERSA=0) 5 min — a RAM/GPU volta para o resto da máquina.
+  // IA_TTL: quanto tempo o modelo fica na memória sem uso (s). Padrão 5 min (os pedidos
+  // da moderação são esporádicos): a RAM/GPU volta para o resto da máquina.
   const ttl = plano.ttl;
-  writeFileSync(cfg, montarConfigSwap({ conversa, visao, moderacao, comando, ttlConversa: ttl, ttlVisao: Math.min(600, ttl), ctxModeracao: process.env.LLAMA_CTX_MODERACAO || "4096" }));
-  console.info(`[INICIAR] IA local (llama-swap, ttl ${ttl}s): conversa=${conversa} · visão=${!visao ? "nenhuma" : visao === conversa ? "o mesmo modelo (apelido, sem 2ª cópia)" : visao}${moderacao ? ` · moderação=${moderacao === conversa ? "o mesmo modelo" : `${moderacao} (fica carregado junto)`}` : ""}`);
+  writeFileSync(cfg, montarConfigSwap({ juiz, visao, comando, ttlJuiz: ttl, ttlVisao: Math.min(600, ttl), ctxJuiz: process.env.LLAMA_CTX_MODERACAO || null, ctx }));
+  console.info(`[INICIAR] IA local (llama-swap, ttl ${ttl}s): juiz=${juiz} · visão=${!visao ? "nenhuma" : visao === juiz ? "o mesmo modelo (apelido, sem 2ª cópia)" : `${visao} (fica carregado junto)`}`);
   subirBin("llama-swap", SWAP_BIN, ["-config", cfg, "-listen", `127.0.0.1:${portaLlama}`],
     envDoFilho(ENV_FILHO.llama, { LLAMA_CACHE: cache }));
 }
@@ -336,40 +287,27 @@ if (PRINCIPAL) {
   if (IA_EMBUTIDA && !process.env.IA_SERVICO_CHAVE && !process.env.IA_CHAVE) process.env.IA_SERVICO_CHAVE = randomBytes(24).toString("hex");
   if (VOZ_ATIVA && !process.env.VOZ_CHAVE) process.env.VOZ_CHAVE = randomBytes(24).toString("hex");
 
-  // ler_codigo de fábrica: o código do próprio bot já está na imagem (este
-  // diretório, só leitura). Quem definir GITHUB_REPO ou CODIGO_DIR no .env
-  // continua mandando. O ler_codigo já ignora dotfiles e bloqueia .env/token/.db.
-  if (!process.env.CODIGO_DIR && !process.env.GITHUB_REPO) {
-    process.env.CODIGO_DIR = process.cwd();
-    console.info(`[INICIAR] ler_codigo: lendo o próprio código em ${process.cwd()} (defina GITHUB_REPO ou CODIGO_DIR para mudar).`);
-  }
-
-  if (iaLigada() && !conversaLigada()) {
-    console.info(`[INICIAR] CONVERSA=0 — modo enxuto: IA só para moderação, relatório e RSS (sem chat, sem gerar imagem; contexto ${process.env.LLAMA_CTX}, modelo sai da memória após ${process.env.IA_TTL}s parado).`);
-  }
   // (22 out 2026) sem modo +18: avisa se o .env aponta para um modelo sem trava
   if (iaLigada()) { const aviso = avisoSemTrava(); if (aviso) console.warn(aviso); }
-  // (P2) nomes de modelo que saíram: valem como sinônimo, com aviso
+  // (P2) nomes de modelo que saíram: valem como sinônimo, com aviso; (P4) as variáveis do chat IA
   for (const a of avisosDoEnv()) console.warn(`[INICIAR] .env: ${a}`);
 
-  // ── A IA local (31 out 2026, P2, R11) ────────────────────────────────────
+  // ── A IA local (31 out 2026, P2, R11; P4: só a moderação) ─────────────────
   // Antes: o bot só conectava ao Stoat depois de baixar TODOS os modelos — num
   // volume novo, a moderação ficava horas fora do ar esperando gigabytes. E com
   // um modelo só, o llama-server subia direto (sem llama-swap): carregado para
   // sempre, o IA_TTL não valia. Agora:
-  //   1. os nomes que o bot usa (LLM_MODEL=conversa, visao, moderacao) são
-  //      decididos AQUI, antes de o bot subir;
+  //   1. os nomes que o bot usa (LLM_MODEL_JUIZ=moderacao, LLM_MODEL_VISAO=visao)
+  //      são decididos AQUI, antes de o bot subir;
   //   2. o bot sobe e conecta;
   //   3. os modelos baixam em seguida (o bot já está no ar; a IA responde
   //      quando o llama-swap subir);
   //   4. sempre o llama-swap (com o TTL de verdade), mesmo com um modelo só; o
-  //      llama-server direto só quando a imagem não tem o llama-swap;
-  //   5. o gerador de imagem só baixa com IMAGEM=1.
+  //      llama-server direto só quando a imagem não tem o llama-swap.
   const plano = planoDaIA();
   if (plano) {
-    process.env.LLM_MODEL = plano.nomes.conversa;
+    process.env.LLM_MODEL_JUIZ = plano.nomes.juiz;
     if (plano.visao) process.env.LLM_MODEL_VISAO = plano.nomes.visao;
-    if (plano.moderacao) process.env.LLM_MODEL_JUIZ = plano.nomes.moderacao;
   }
 
   if (IA_EMBUTIDA) subir("ia-servico", "./ia-servico", "servidor.js", { ambiente: ENV_FILHO.iaServico, env: { PORTA: process.env.IA_PORTA || "8090" } });

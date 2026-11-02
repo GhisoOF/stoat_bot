@@ -1,8 +1,8 @@
 // prioridade.js — quem passa na frente quando a Judy está no limite (13 out 2026).
 //
 // Pedido de Ghieh: com a Judy em vários servidores, quando ela estiver no
-// máximo (fila de conversas cheia, músicas demais tocando ao mesmo tempo), o
-// dono do bot e o servidor dele vêm primeiro.
+// máximo (músicas demais tocando ao mesmo tempo), o dono do bot e o servidor
+// dele vêm primeiro. (P4, 2 nov 2026: a fila das conversas saiu com o chat IA.)
 //
 //   2 — o dono do bot (DONO / SUPER_ADMINS), em qualquer servidor
 //   1 — o servidor do dono: o que ele criou (ownerId é um SUPER_ADMIN), os de

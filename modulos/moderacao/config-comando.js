@@ -18,21 +18,19 @@ import { nomeModo, nomeSens, nomeAcaoTema, nomeAcaoAvatar } from "../core/nomes-
 import { subExibido } from "../core/aliases.js";
 import * as db from "../core/db.js";
 import { servidorNaLista } from "../core/env.js";
+import * as modelo from "./modelo.js";   // (P4) a IA num ponto só
 // (namespace: módulos de outras áreas mudam no P2; um nome que sumir não derruba o boot)
 import * as economiaMod from "../ferramentas/economia.js";
-import * as gating from "../ai/gating.js";
-import * as iaMod from "../ai/conversa-config.js";   // &config ia (o handler é da área da IA)
 // a CHAVE do padraoServidor (`config.language`), não o subcomando em inglês (o registro traduz `language` → `idioma`)
 const CHAVE_IDIOMA = "language";
 const ECO_PADRAO = economiaMod.PADRAO ?? { nome: "Moeda", simbolo: "🪙", ganhoMin: 10, ganhoMax: 30, intervaloMs: 3600e3 };
-const iaNoEnv = (sid) => !!gating.iaNoEnv?.(sid), conversaAqui = (sid, c) => !!gating.conversaAqui?.(sid, c), imagemAqui = (sid, c) => !!gating.imagemAqui?.(sid, c);
 
 const SENSIBILIDADE = { baixa: "baixa (limiar 7,5/10)", media: "média (limiar 6,5/10)", alta: "alta (limiar 5,5/10)" };
 const SENSIBILIDADE_EN = { baixa: "low (threshold 7.5/10)", media: "medium (threshold 6.5/10)", alta: "high (threshold 5.5/10)" };
 const SENSIBILIDADE_ES = { baixa: "baja (umbral 7,5/10)", media: "media (umbral 6,5/10)", alta: "alta (umbral 5,5/10)" };
 
 // ── As partes (os comandos que o &config absorveu) ──
-const PARTES = { log: cmdLog, idioma: cmdIdioma, acesso: cmdAcesso, comando: cmdComando, ia: (m, a, c) => iaMod.cmdConfigIA(m, a, c) };
+const PARTES = { log: cmdLog, idioma: cmdIdioma, acesso: cmdAcesso, comando: cmdComando };
 
 export async function cmdConfig(message, args, ctx) {
   const parte = String(args[0] ?? "").toLowerCase();
@@ -72,7 +70,9 @@ const ehObj = (v) => v && typeof v === "object" && !Array.isArray(v);
 const ID = /^[0-9A-Z]{20,32}$/;
 const ehCanal = (k) => /^(canal|canais|canaisLiberados|alertChannelId|logCanal|canalAnuncio|canalId|canalVoz|canalTexto|regrasCanal)$/.test(k);
 const ehCargo = (k) => /^(roleId|silenceRoleId|cargoEquipe|cargosStaff|cargos)$/.test(k);
-const visaoNoEnv = () => !!(process.env.LLM_MODEL_VISAO || process.env.MODELO_VISAO || process.env.LLM_MODEL_MODERACAO || process.env.MODELO_MODERACAO);
+// (P4) o mesmo que o &info e o &debug olham: o LLM_MODEL_VISAO (o env.js copia o MODELO_VISAO
+// e o LLM_MODEL_MODERACAO antigo para ele no boot; o MODELO_MODERACAO agora é o juiz, não a visão)
+const visaoNoEnv = () => !!modelo.modeloVisao();
 
 export function telaDoConfig(config, { lang = "pt", serverId = null, P = "&" } = {}) {
   const T = (pt, en, es) => (lang === "es" ? es : lang === "en" ? en : pt);
@@ -101,7 +101,6 @@ export function telaDoConfig(config, { lang = "pt", serverId = null, P = "&" } =
       const L = lang === "es" ? "es" : lang;
       if (k === "modo" && cam[1] === "punicao") return `\`${nomeModo(v, L)}\``;
       if (k === "modo" && cam[0] === "acesso") return `\`${subExibido("config.acesso", v, L)}\``;
-      if (k === "modo" && cam[0] === "chatLivre") return `\`${subExibido("config.ia", v, L)}\``;
       if (k === "acao" && cam[1] === "antiAvatar") return `\`${nomeAcaoAvatar(v, L)}\``;
       if (k === "sensibilidade" || k === "sensitivity") return `\`${nomeSens(v, L)}\``;
       if (cam[2] === "acoes") return `\`${nomeAcaoTema(v, L)}\``;
@@ -157,9 +156,6 @@ export function telaDoConfig(config, { lang = "pt", serverId = null, P = "&" } =
   const resumoProprio = {
     boasVindas: (v) => (v?.ativo && v?.canalId ? `🟢 <#${v.canalId}>` : "🔴"),
     adeus: (v) => (v?.ativo && v?.canalId ? `🟢 <#${v.canalId}>` : "🔴"),
-    // a escolha do servidor (null = o padrão de quem hospeda): mostra o que vale de fato
-    ia: () => (!iaNoEnv(serverId) ? T("_indisponível neste servidor_", "_not available on this server_", "_no disponible en este servidor_")
-      : `${rotulo(["ia", "chat"], lang)} ${conversaAqui(serverId, config) ? "🟢" : "🔴"} · ${rotulo(["ia", "imagem"], lang)} ${imagemAqui(serverId, config) ? "🟢" : "🔴"}`),
     economia: (v) => { const e = { ...ECO_PADRAO, ...(v ?? {}) }; return `${e.simbolo} ${v?.nome ?? T(ECO_PADRAO.nome, "Coin", "Moneda")} · +${e.ganhoMin}–${e.ganhoMax} / ${Math.round(e.intervaloMs / 60000)} min`; },
   };
 
@@ -244,7 +240,8 @@ export function descreverFiltro(am, chave, lang = "pt", estado = {}) {
       const ativos = Object.entries(am.antiAssuntos?.acoes ?? {}).filter(([, a]) => a && a !== "off");
       return ativos.length ? ativos.map(([t, a]) => `${t} → ${a}`).join(", ") : T("nenhum tema ligado", "no topic on", "ningún tema activado");
     },
-    antiAvatar:      () => T(`ao entrar e ao trocar → ${am.antiAvatar?.acao ?? "silenciar"}${semVisao ? " (só o texto)" : ""}`, `on join and on change → ${am.antiAvatar?.acao ?? "silenciar"}${semVisao ? " (text only)" : ""}`, `al entrar y al cambiarlo → ${am.antiAvatar?.acao ?? "silenciar"}${semVisao ? " (solo el texto)" : ""}`),
+    // (P4, revisão) `semVisao` era uma variável de outra função (telaDoConfig): aqui dava ReferenceError
+    antiAvatar:      () => { const semVisao = !visaoNoEnv(); return T(`ao entrar e ao trocar → ${am.antiAvatar?.acao ?? "silenciar"}${semVisao ? " (só o texto)" : ""}`, `on join and on change → ${am.antiAvatar?.acao ?? "silenciar"}${semVisao ? " (text only)" : ""}`, `al entrar y al cambiarlo → ${am.antiAvatar?.acao ?? "silenciar"}${semVisao ? " (solo el texto)" : ""}`); },
     antiInvite:      () => T("bloqueia convites", "blocks invites", "bloquea invitaciones"),
     antiMassMention: () => T(`máx. ${am.antiMassMention.maxMentions} menções`, `max ${am.antiMassMention.maxMentions} mentions`, `máx. ${am.antiMassMention.maxMentions} menciones`),
     antiCaps:        () => T(`≥${am.antiCaps.minLength} caracteres e ${Math.round(am.antiCaps.threshold * 100)}% maiúsculas; título (#) em maiúsculas ou só risada`, `≥${am.antiCaps.minLength} chars and ${Math.round(am.antiCaps.threshold * 100)}% uppercase; a heading (#) in caps or just laughter`, `≥${am.antiCaps.minLength} caracteres y ${Math.round(am.antiCaps.threshold * 100)}% mayúsculas; título (#) en mayúsculas o solo risa`),

@@ -4,21 +4,17 @@
 //   &tutorial            o que dá para fazer e por onde começar (a 1ª página)
 //   &tutorial <n>        uma página do guia: a abertura e os conceitos, em ordem
 //   &tutorial <conceito> permissoes · ids · canais · protecao — o que atravessa os comandos
-//   &tutorial rpg        a wiki do RPG, gerada dos dados do jogo (modulos/game/wiki.js)
 // As áreas antigas que só repetiam um comando (moderacao, logs, cargos, xp, mensagens,
-// noticias, aventura, economia, ajustes, ia) levam à página do `&help` do comando.
+// noticias, economia, ajustes, ia) levam à página do `&help` do comando.
 
 import * as visaoMod from "./visao.js";
 import { citar, citarInterno, trechoPronto, subExibido } from "../core/aliases.js";
 import { idiomaDe } from "../core/i18n.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 import { cmdHelp } from "./ajuda.js";
-// (namespace: a wiki é da área do RPG; se a função ainda não existir, a área diz que está vazia)
-import * as wikiRpg from "../game/game.js";
-import { iaNoEnv } from "../ai/gating.js";
 
 // Os conceitos, nos três idiomas (as citações valem no idioma da tela; o espanhol sai pronto)
-function CONCEITOS(P, lang = "pt", comIA = false) {
+function CONCEITOS(P, lang = "pt") {
   if (lang === "es") return {
     permissoes: {
       titulo: "🔑 Permisos del bot",
@@ -30,7 +26,7 @@ function CONCEITOS(P, lang = "pt", comIA = false) {
         "**Esenciales**",
         "• `ViewChannel`, `ReadMessageHistory` — ver y leer los canales",
         "• `SendMessage`, `SendEmbeds` — responder",
-        `• \`React\` — reacciones (roles por reacción${comIA ? ", el 👀 de Judy" : ""})`,
+        `• \`React\` — reacciones (roles por reacción)`,
         "• `BypassSlowmode` — responder al momento en canales con modo lento (sin él, espera su turno)",
         "",
         "**Para moderar**",
@@ -140,7 +136,7 @@ function CONCEITOS(P, lang = "pt", comIA = false) {
         "**Essentials**",
         "• `ViewChannel`, `ReadMessageHistory` — see and read the channels",
         "• `SendMessage`, `SendEmbeds` — reply",
-        `• \`React\` — reactions (reaction roles${comIA ? ", Judy's 👀" : ""})`,
+        `• \`React\` — reactions (reaction roles)`,
         "• `BypassSlowmode` — answer right away in slowmode channels (without it she waits her turn)",
         "",
         "**To moderate**",
@@ -250,7 +246,7 @@ function CONCEITOS(P, lang = "pt", comIA = false) {
         "**Essenciais**",
         "• `ViewChannel`, `ReadMessageHistory` — ver e ler os canais",
         "• `SendMessage`, `SendEmbeds` — responder",
-        `• \`React\` — reações (cargos por reação${comIA ? ", 👀 da Judy" : ""})`,
+        `• \`React\` — reações (cargos por reação)`,
         "• `BypassSlowmode` (Ignorar modo lento) — responder na hora em canal com modo lento (sem ela, espera a vez)",
         "",
         "**Para moderar**",
@@ -353,11 +349,11 @@ function CONCEITOS(P, lang = "pt", comIA = false) {
 export const ORDEM_CONCEITOS = ["permissoes", "ids", "canais", "protecao"];
 
 // A abertura do guia
-function ABERTURA(P, lang = "pt", comIA = false) {
+function ABERTURA(P, lang = "pt") {
   if (lang === "es") return [
     { title: "📚 Tutorial — lo que puedes hacer",
       linhas: [
-        `El bot modera (filtros automáticos, avisos, bans), recibe a quien llega (bienvenida, roles) y anima el servidor (XP, economía, juegos, RPG, música)${comIA ? ". Y Judy conversa, si el staff lo activa" : ""}.`,
+        `El bot modera (filtros automáticos, avisos, bans), recibe a quien llega (bienvenida, roles) y anima el servidor (XP, economía, juegos, música).`,
         "",
         "**Por dónde empezar**",
         `1. \`${citar("assistente", "es", P)}\` — configuración guiada: yo pregunto, tú respondes`,
@@ -366,13 +362,13 @@ function ABERTURA(P, lang = "pt", comIA = false) {
         "",
         "**Conceptos**",
         `\`${citar("tutorial", "es", P)} permisos\` · \`${citar("tutorial", "es", P)} ids\` · \`${citar("tutorial", "es", P)} canales\` · \`${citar("tutorial", "es", P)} proteccion\``,
-        `**RPG:** \`${citar("tutorial", "es", P)} rpg\` · **Comandos:** \`${citar("help", "es", P)}\``,
+        `**Comandos:** \`${citar("help", "es", P)}\``,
       ] },
   ];
   if (lang === "en") return [
     { title: "📚 Tutorial — what you can do",
       linhas: [
-        `The bot moderates (automatic filters, warnings, bans), welcomes newcomers (welcome messages, roles) and livens up the server (XP, economy, games, RPG, music)${comIA ? ". And Judy chats, if the staff turns it on" : ""}.`,
+        `The bot moderates (automatic filters, warnings, bans), welcomes newcomers (welcome messages, roles) and livens up the server (XP, economy, games, music).`,
         "",
         "**Where to start**",
         `1. \`${citarInterno("assistente", P)}\` — guided setup: I ask, you answer`,
@@ -381,13 +377,13 @@ function ABERTURA(P, lang = "pt", comIA = false) {
         "",
         "**Concepts**",
         `\`${citarInterno("tutorial", P)} permissions\` · \`${citarInterno("tutorial", P)} ids\` · \`${citarInterno("tutorial", P)} channels\` · \`${citarInterno("tutorial", P)} protection\``,
-        `**RPG:** \`${citarInterno("tutorial", P)} rpg\` · **Commands:** \`${citarInterno("help", P)}\``,
+        `**Commands:** \`${citarInterno("help", P)}\``,
       ] },
   ];
   return [
     { title: "📚 Tutorial — o que dá para fazer",
       linhas: [
-        `O bot modera (filtros automáticos, avisos, bans), recebe quem chega (boas-vindas, cargos) e anima o servidor (XP, economia, jogos, RPG, música)${comIA ? ". E a Judy conversa, se a staff ligar" : ""}.`,
+        `O bot modera (filtros automáticos, avisos, bans), recebe quem chega (boas-vindas, cargos) e anima o servidor (XP, economia, jogos, música).`,
         "",
         "**Por onde começar**",
         `1. \`${citarInterno("assistente", P)}\` — configuração guiada: eu pergunto, você responde`,
@@ -396,7 +392,7 @@ function ABERTURA(P, lang = "pt", comIA = false) {
         "",
         "**Conceitos**",
         `\`${citarInterno("tutorial", P)} permissoes\` · \`${citarInterno("tutorial", P)} ids\` · \`${citarInterno("tutorial", P)} canais\` · \`${citarInterno("tutorial", P)} protecao\``,
-        `**RPG:** \`${citarInterno("tutorial", P)} rpg\` · **Comandos:** \`${citarInterno("help", P)}\``,
+        `**Comandos:** \`${citarInterno("help", P)}\``,
       ] },
   ];
 }
@@ -404,31 +400,28 @@ function ABERTURA(P, lang = "pt", comIA = false) {
 // área antiga → o `&help` que explica (o tutorial não repete o comando)
 export const AREAS_QUE_SAO_COMANDO = {
   moderacao: ["automod"], logs: ["config", "log"], cargos: ["reactionrole"], xp: ["xp"], mensagens: ["boasvindas"],
-  noticias: ["rss"], aventura: ["game"], economia: ["economia"], ajustes: ["config"], ia: ["config", "ia"],
+  noticias: ["rss"], economia: ["economia"], ajustes: ["config"],
+  // (P4) o chat IA saiu: a IA que sobrou é a da moderação — os temas do sentinela
+  ia: ["automod", "sentinela", "assuntos"],
 };
 // nome digitado (inglês, espanhol, apelido) → chave
 const NOMES = {
   permissions: "permissoes", permisos: "permissoes", "permissões": "permissoes", perms: "permissoes",
   channels: "canais", canales: "canais", canal: "canais",
   protection: "protecao", proteccion: "protecao", "protección": "protecao", "proteção": "protecao", protect: "protecao", proteger: "protecao",
-  wiki: "rpg", jogo: "rpg", juego: "rpg", game: "rpg", mercado: "rpg", market: "rpg",
   mention: "ids", mentions: "ids", mencoes: "ids", "menções": "ids", mencion: "ids", menciones: "ids", id: "ids",
   moderation: "moderacao", "moderação": "moderacao", moderacion: "moderacao", log: "logs", roles: "cargos", levels: "xp", nivel: "xp",
-  messages: "mensagens", mensajes: "mensagens", news: "noticias", "notícias": "noticias", adventure: "aventura", economy: "economia",
-  settings: "ajustes", ai: "ia", rpgwiki: "rpg",
+  messages: "mensagens", mensajes: "mensagens", news: "noticias", "notícias": "noticias", economy: "economia",
+  settings: "ajustes", ai: "ia",
 };
 
-// As páginas do guia (abertura + conceitos) e a wiki, no idioma; para o teste e o README
-export function paginasDoGuia(P = "&", lang = "pt", comIA = false) {
-  const c = CONCEITOS(P, lang, comIA);
+// As páginas do guia (abertura + conceitos), no idioma; para o teste e o README
+export function paginasDoGuia(P = "&", lang = "pt") {
+  const c = CONCEITOS(P, lang);
   return [
-    ...ABERTURA(P, lang, comIA).map((p) => ({ chave: null, titulo: p.title, linhas: p.linhas })),
+    ...ABERTURA(P, lang).map((p) => ({ chave: null, titulo: p.title, linhas: p.linhas })),
     ...ORDEM_CONCEITOS.map((k) => ({ chave: k, titulo: c[k].titulo, linhas: c[k].corpo })),
   ];
-}
-export function paginasDaWiki(P = "&", lang = "pt") {
-  try { return (wikiRpg.paginasWikiRpg?.(lang, P) ?? []).map((p) => ({ chave: "rpg", titulo: p.titulo, linhas: String(p.texto ?? "").split("\n") })); }
-  catch (e) { console.error("[TUTORIAL] wiki do RPG:", e?.message); return []; }
 }
 
 export async function cmdTutorial(message, args, ctx) {
@@ -446,22 +439,14 @@ export async function cmdTutorial(message, args, ctx) {
     return enviarPaginado(ctx, message.channel, { paginas: pgs, autorId: message.authorId, paginaInicial: Math.min(Math.max(inicial, 0), pgs.length - 1), comandoPagina, colour: COR.info });
   };
 
-  // área antiga que é um comando: a página do &help dele. A `ia` onde a conversa não existe
-  // (o .env não a deixa rodar neste servidor) é só a moderação por IA: os temas do sentinela.
-  if (chave === "ia" && !iaNoEnv(ctx.serverId)) return cmdHelp(message, ["automod", "sentinela", "assuntos"], ctx);
+  // área antiga que é um comando: a página do &help dele
   if (chave && AREAS_QUE_SAO_COMANDO[chave]) return cmdHelp(message, AREAS_QUE_SAO_COMANDO[chave], ctx);
 
-  if (chave === "rpg") {
-    const wiki = paginasDaWiki(P, lang);
-    if (!wiki.length) return sendEmbed(message.channel, { colour: COR.aviso, description: ({ pt: "📭 A wiki do RPG ainda está vazia.", en: "📭 The RPG wiki is still empty.", es: "📭 La wiki del RPG aún está vacía." })[lang] });
-    return enviar(wiki);
-  }
-
-  const guia = paginasDoGuia(P, lang, visao.ia);
+  const guia = paginasDoGuia(P, lang);
   if (chave) {
     const i = guia.findIndex((p) => p.chave === chave);
     if (i < 0) {
-      const nomes = [...ORDEM_CONCEITOS, "rpg"].map((k) => `\`${subExibido("tutorial", k, lang)}\``).join(" · ");
+      const nomes = ORDEM_CONCEITOS.map((k) => `\`${subExibido("tutorial", k, lang)}\``).join(" · ");
       return sendEmbed(message.channel, { colour: COR.aviso, description: pronta(({ pt: `❓ Não conheço \`${pedido.slice(0, 30)}\`. ${nomes}`, en: `❓ I don't know \`${pedido.slice(0, 30)}\`. ${nomes}`, es: `❓ No conozco \`${pedido.slice(0, 30)}\`. ${nomes}` })[lang]) });
     }
     return enviar([guia[i]]);

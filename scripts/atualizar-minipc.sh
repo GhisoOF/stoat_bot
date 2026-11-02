@@ -49,11 +49,6 @@ avis() { printf '\033[33m! %s\033[0m\n' "$1"; }
 cd "$REPO"
 mkdir -p "$BACKUPS"
 
-# (31 out 2026) o docker-compose.yml exige SEARXNG_SECRET no .env: sem ele nem o
-# `docker compose stop` do backup roda. Melhor parar aqui, antes de tudo.
-if [ "$ACAO" != "lista" ] && ! grep -qE '^SEARXNG_SECRET=.' .env 2>/dev/null; then
-  erro "falta SEARXNG_SECRET no $REPO/.env — gere com: echo \"SEARXNG_SECRET=\$(openssl rand -hex 32)\" >> $REPO/.env"
-fi
 # (31 out 2026) o receptor de webhooks passou a ficar só em 127.0.0.1 por padrão.
 # Quem recebe pela rede de casa ou pela ponte do Docker (Crafty) precisa dizer.
 if [ "$ACAO" != "lista" ] && ! grep -qE '^WEBHOOK_BIND=' .env 2>/dev/null; then
@@ -74,13 +69,15 @@ fazer_backup() {
   local vol arq
   vol="$(volume)"
   arq="$BACKUPS/stoat-data-$(date '+%Y%m%d-%H%M%S').tgz"
-  info "parando o container para copiar o banco com segurança"
-  docker compose stop >/dev/null
+  info "parando o container $CONTAINER para copiar o banco com segurança"
+  # (P4, revisão) pelo NOME, sem o compose: antes do pull o compose é o antigo, que exigia
+  # variáveis que o dono já pode ter tirado do .env (SEARXNG_SECRET) — e o script morria aqui
+  docker stop "$CONTAINER" >/dev/null 2>&1 || avis "o container $CONTAINER não estava de pé"
   info "copiando o volume $vol"
   # (31 out 2026) só o banco e a config: o volume inteiro tem os modelos (dezenas de GB)
   docker run --rm -v "$vol":/data:ro -v "$BACKUPS":/b alpine \
     sh -c "cd /data && tar czf '/b/$(basename "$arq")' \$(ls -d stoat.db* automod-config.json log-segredo.key 2>/dev/null)" \
-    || erro "o backup falhou — NADA foi atualizado (suba de novo com: docker compose up -d)"
+    || erro "o backup falhou — NADA foi atualizado (suba de novo com: docker start $CONTAINER)"
   # (P2.4) `grep -q` sai no primeiro achado, o tar leva SIGPIPE e o `pipefail` dava "não tem o stoat.db"
   tar tzf "$arq" | grep 'stoat\.db$' >/dev/null || erro "o backup não tem o stoat.db: $arq — NADA foi atualizado"
   okay "backup: $arq ($(du -h "$arq" | cut -f1))"
@@ -98,7 +95,7 @@ case "$ACAO" in
 
   backup)
     fazer_backup
-    docker compose up -d >/dev/null && okay "container de volta"
+    docker start "$CONTAINER" >/dev/null && okay "container de volta"
     exit 0 ;;
 
   restaurar)
@@ -114,7 +111,7 @@ case "$ACAO" in
       || erro "a restauração falhou — o banco de antes está em $ULTIMO_BACKUP"
     okay "banco restaurado de $(basename "$ARQ")"
     avis "se o código também tem de voltar: git log --oneline -10  →  git reset --hard <commit>  (e depois docker compose up -d --build)"
-    docker compose up -d >/dev/null && okay "container de volta"
+    docker start "$CONTAINER" >/dev/null && okay "container de volta"
     exit 0 ;;
 
   tudo) ;;
@@ -143,14 +140,15 @@ fazer_backup
 if [ "${REALINHAR:-0}" = "1" ]; then
   git reset -q --hard origin/main
 else
-  git pull -q --ff-only || erro "git pull falhou — o banco está salvo em $ULTIMO_BACKUP; suba de novo com: docker compose up -d"
+  git pull -q --ff-only || erro "git pull falhou — o banco está salvo em $ULTIMO_BACKUP; suba de novo com: docker start $CONTAINER"
 fi
 okay "código em $(git log -1 --format='%h %s' | cut -c1-80)"
 
 # ── 4. Reconstruir e subir ──
-info "docker compose up -d --build (pode levar alguns minutos)"
+info "docker compose up -d --build --remove-orphans (pode levar alguns minutos)"
 INICIO="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
-docker compose up -d --build
+# (P4) --remove-orphans: o container do SearXNG (a busca do chat IA, que saiu) para e some
+docker compose up -d --build --remove-orphans
 
 # ── 5. A subida: o bot leva ~3 min (confere/baixa modelos antes) ──
 info "acompanhando a subida (até 6 min; Ctrl+C só para de olhar — o bot continua)"
@@ -158,18 +156,11 @@ FIM=$(( $(date +%s) + 360 ))
 VISTO=""
 while [ "$(date +%s)" -lt "$FIM" ]; do
   LOG="$(docker logs --since "$INICIO" "$CONTAINER" 2>&1 || true)"
-  if grep -q 'falha na migração v4' <<<"$LOG"; then
-    printf '%s\n' "$LOG" | grep -E '\[RPG\]' | tail -5
-    printf '\n\033[31m✗ a migração do RPG falhou — o &game fica "em manutenção", o resto do bot segue.\033[0m\n'
-    printf '  Nada do jogo foi gravado. Mande este log para análise. Backup: %s\n' "$ULTIMO_BACKUP"
-    exit 1
-  fi
-  NOVO="$(printf '%s' "$LOG" | grep -E '\[RPG\]|\[DB\] Banco aberto|Logged in as' | tail -8 || true)"
+  NOVO="$(printf '%s' "$LOG" | grep -E '\[DB\] P4|\[DB\] Banco aberto|Logged in as' | tail -8 || true)"
   if [ "$NOVO" != "$VISTO" ]; then printf '%s\n' "$NOVO" | sed 's/^/   /'; VISTO="$NOVO"; fi
-  # "catálogo pronto" vem depois do login; a migração roda logo em seguida
-  if grep -q '\[RPG\] catálogo pronto' <<<"$LOG"; then
+  # o login é o fim da subida (o banco abre e migra antes dele)
+  if grep -q 'Logged in as' <<<"$LOG"; then
     sleep 5
-    docker logs --since "$INICIO" "$CONTAINER" 2>&1 | grep 'falha na migração v4' >/dev/null && continue
     break
   fi
   if [ "$(docker inspect "$CONTAINER" --format '{{.State.Running}}' 2>/dev/null)" != "true" ]; then

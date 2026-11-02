@@ -6,7 +6,8 @@
 //   &caso exportar                         arquivo sem nome nem ID (imagem só como hash)
 //
 // Só o dono do bot, só na DM com a Judy. Num servidor (mesmo o dele) o `&caso` não mostra
-// NADA da fila — nem código, nem contagem: uma linha pedindo a DM (31 out 2026, P3a, revisão).
+// NADA da fila — nem código, nem contagem: uma linha pedindo a DM (31 out 2026, P3a, revisão;
+// desde o P4 essa linha sai do main.js, para todos os comandos de dono).
 // (31 out 2026, P3a, staff — R13) Saíram `&caso perdeu` (o dono apontava o que o bot deixou
 // passar num servidor) e `&caso servidor <id> rigido|padrao` (configuração de servidor): os
 // casos e a regra de cada servidor são da staff dele.
@@ -24,10 +25,8 @@ export async function cmdCaso(message, args, ctx) {
   if (!ctx.ehSuperAdmin?.(message.authorId)) {
     return sendEmbed(message.channel, { colour: COR.erro, description: tr(ctx, "🚫 Só o dono do bot.", "🚫 Bot owner only.", "🚫 Solo el dueño del bot.") });
   }
-  const aqui = ctx.serverId ?? message.serverId ?? message.channel?.serverId ?? null;
-  if (aqui) {
-    return sendEmbed(message.channel, { colour: COR.info, description: tr(ctx, "🔒 Use na DM com a Judy.", "🔒 Use it in your DM with Judy.", "🔒 Úsalo por DM con Judy.") });
-  }
+  // (P4, 2 nov 2026) num servidor, o `&caso` do dono não chega aqui: o main.js responde só a linha
+  // da DM (core/dono.js → pedirDM), como para todo comando de dono (o MAPA do visao.js)
   const sub = String(args[0] ?? "").toLowerCase();
 
   // ── &caso: os próximos agora ──

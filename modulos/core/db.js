@@ -1,5 +1,7 @@
 
 import { DatabaseSync } from "node:sqlite";
+import { existsSync, rmSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 let db = null;
 
@@ -211,93 +213,11 @@ export function abrirBanco(caminho) {
   // (Privacidade P3, 20 out 2026) Quem saiu do XP neste servidor (`&xp sair`):
   // o XP dela é apagado e não volta a contar até `&xp entrar`.
   db.exec(`CREATE TABLE IF NOT EXISTS xp_fora (serverId TEXT NOT NULL, userId TEXT NOT NULL, em TEXT NOT NULL, PRIMARY KEY (serverId, userId))`);
-  // (IA) memória persistente por usuário (global — vale em qualquer servidor)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS ia_memoria (
-      userId     TEXT PRIMARY KEY,
-      nome       TEXT,
-      fatos      TEXT,           -- JSON: lista de fatos que a IA aprendeu
-      atualizado TEXT
-    )
-  `);
-  // (IA) histórico curto de conversa por usuário (para continuidade)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS ia_historico (
-      userId    TEXT NOT NULL,
-      papel     TEXT NOT NULL,   -- 'user' ou 'assistant'
-      conteudo  TEXT NOT NULL,
-      momento   TEXT NOT NULL
-    )
-  `);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_iahist_user ON ia_historico (userId, momento)`);
-  for (const [col, tipo] of [["serverId", "TEXT"], ["canalId", "TEXT"]]) {
-    try { db.exec(`ALTER TABLE ia_historico ADD COLUMN ${col} ${tipo}`); } catch { /* já existe */ }
-  }
-  try { db.exec(`DELETE FROM ia_historico WHERE serverId IS NULL`); } catch {}
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_iahist_escopo ON ia_historico (userId, serverId, canalId, momento)`);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS ia_fatos_pessoa (
-      id        INTEGER PRIMARY KEY AUTOINCREMENT,
-      serverId  TEXT NOT NULL,
-      userId    TEXT NOT NULL,
-      fato      TEXT NOT NULL,
-      confianca REAL NOT NULL DEFAULT 0.5,   -- 0..1; fatos repetidos sobem
-      vezes     INTEGER NOT NULL DEFAULT 1,  -- quantas vezes foi observado
-      momento   TEXT NOT NULL
-    )
-  `);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_fatospessoa ON ia_fatos_pessoa (serverId, userId)`);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS ia_fatos_servidor (
-      id        INTEGER PRIMARY KEY AUTOINCREMENT,
-      serverId  TEXT NOT NULL,
-      fato      TEXT NOT NULL,
-      confianca REAL NOT NULL DEFAULT 0.5,
-      vezes     INTEGER NOT NULL DEFAULT 1,
-      momento   TEXT NOT NULL
-    )
-  `);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_fatosservidor ON ia_fatos_servidor (serverId)`);
-  try {
-    const cols = prep("PRAGMA table_info(ia_fatos_pessoa)").all().map((c) => c.name);
-    if (!cols.includes("categoria")) {
-      db.exec("ALTER TABLE ia_fatos_pessoa ADD COLUMN categoria TEXT DEFAULT 'geral'");
-    }
-  } catch (e) { console.error("[DB] migração categoria:", e.message); }
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS ia_perfil (
-      serverId    TEXT NOT NULL,
-      userId      TEXT NOT NULL,
-      nome        TEXT,
-      bio         TEXT,
-      grupos      TEXT,
-      jogos       TEXT,
-      status      TEXT,
-      entrou      TEXT,
-      cuidado     INTEGER NOT NULL DEFAULT 0,   -- 1 = tratar com gentileza extra (opt-in)
-      atualizado  TEXT,
-      PRIMARY KEY (serverId, userId)
-    )
-  `);
-  // (Privacidade, 20 out 2026) O consentimento de cada pessoa para a memória da IA.
-  // Vale em TODOS os servidores (a Judy é como uma usuária: a pessoa aceita uma vez).
-  // Sem linha = nunca respondeu; memoria 0 com respondidoEm = recusou.
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS ia_consentimento (
-      userId       TEXT PRIMARY KEY,
-      memoria      INTEGER NOT NULL DEFAULT 0,   -- 1 = aceitou que a Judy lembre dela
-      fioGlobal    INTEGER NOT NULL DEFAULT 0,   -- 1 = a conversa continua entre servidores e canais
-      perguntadoEm TEXT,
-      respondidoEm TEXT
-    )
-  `);
-  // (21 out 2026) Quem pediu "não fale comigo" (`&chat sair`): a Judy não conversa com
-  // a pessoa nem leva o que ela escreve ao modelo, em nenhum servidor.
-  db.exec(`CREATE TABLE IF NOT EXISTS ia_silencio (userId TEXT PRIMARY KEY, desde TEXT NOT NULL)`);
   // (Privacidade P2, 20 out 2026) Servidores de onde a Judy saiu: os dados deles
   // somem 30 dias depois (se ela voltar antes, nada é apagado).
   db.exec(`CREATE TABLE IF NOT EXISTS servidores_saida (serverId TEXT PRIMARY KEY, saiuEm TEXT NOT NULL)`);
-  // Migrações que rodam UMA vez por banco (o nome fica gravado aqui).
+  // Migrações que rodavam UMA vez por banco (o nome fica gravado aqui). (P4) a única
+  // (a da memória da IA) saiu com o chat; a tabela fica com as marcas antigas.
   db.exec(`CREATE TABLE IF NOT EXISTS migracoes (nome TEXT PRIMARY KEY, em TEXT NOT NULL)`);
   // (Game) cargos de nível: qual cargo dar em qual nível
   db.exec(`
@@ -309,270 +229,17 @@ export function abrirBanco(caminho) {
     )
   `);
 
-  // ── RPG: personagem (por servidor) ──
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_personagem (
-      serverId    TEXT NOT NULL,
-      userId      TEXT NOT NULL,
-      nome        TEXT,
-      nivel       INTEGER NOT NULL DEFAULT 1,
-      xp          INTEGER NOT NULL DEFAULT 0,
-      pontos      REAL    NOT NULL DEFAULT 0,   -- livres para distribuir
-      forca       INTEGER NOT NULL DEFAULT 1,
-      destreza    INTEGER NOT NULL DEFAULT 1,
-      resistencia INTEGER NOT NULL DEFAULT 1,
-      agilidade   INTEGER NOT NULL DEFAULT 1,
-      vida        INTEGER NOT NULL DEFAULT 1,
-      mana        INTEGER NOT NULL DEFAULT 1,
-      inteligencia INTEGER NOT NULL DEFAULT 1,
-      sorte       INTEGER NOT NULL DEFAULT 1,
-      carisma     INTEGER NOT NULL DEFAULT 1,
-      criadoEm    INTEGER NOT NULL,
-      PRIMARY KEY (serverId, userId)
-    )
-  `);
-
-  // ── RPG: catálogo de itens (global — a curadoria é do dono do bot) ──
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_itens (
-      id        TEXT PRIMARY KEY,
-      nome      TEXT NOT NULL,
-      slot      TEXT NOT NULL,        -- arma | capacete | armadura | acessorio
-      raridade  TEXT NOT NULL,        -- comum | incomum | raro | epico | lendario
-      bonus     TEXT NOT NULL,        -- JSON: { atributo: valor }
-      origem    TEXT NOT NULL DEFAULT 'generico',
-      infinito  INTEGER NOT NULL DEFAULT 0,
-      precoBase INTEGER NOT NULL DEFAULT 10,
-      ativo     INTEGER NOT NULL DEFAULT 1   -- 0 = descontinuado (some do drop, quem tem mantém)
-    )
-  `);
-  // ── RPG: inventário e equipamento (por servidor) ──
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_inventario (
-      serverId   TEXT NOT NULL,
-      userId     TEXT NOT NULL,
-      itemId     TEXT NOT NULL,
-      quantidade INTEGER NOT NULL DEFAULT 1,
-      PRIMARY KEY (serverId, userId, itemId)
-    )
-  `);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_equipado (
-      serverId TEXT NOT NULL,
-      userId   TEXT NOT NULL,
-      slot     TEXT NOT NULL,          -- arma, capacete, armadura, acessorio1..3
-      itemId   TEXT NOT NULL,
-      PRIMARY KEY (serverId, userId, slot)
-    )
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_follower_itens (
-      followerId INTEGER NOT NULL,
-      itemId     TEXT NOT NULL,
-      criadoEm   INTEGER NOT NULL,
-      PRIMARY KEY (followerId, itemId)
-    )
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_magias (
-      serverId  TEXT NOT NULL,
-      userId    TEXT NOT NULL,
-      magiaId   TEXT NOT NULL,
-      criadoEm  INTEGER NOT NULL,
-      PRIMARY KEY (serverId, userId, magiaId)
-    )
-  `);
-
-  // ── RPG: followers ──
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_followers_catalogo (
-      id        TEXT PRIMARY KEY,
-      nome      TEXT NOT NULL,
-      classe    TEXT NOT NULL,
-      raridade  TEXT NOT NULL,
-      preco     INTEGER NOT NULL DEFAULT 0,     -- 0 = não vendido (só dungeon)
-      soDungeon INTEGER NOT NULL DEFAULT 0,
-      fotos     TEXT NOT NULL DEFAULT '[]',     -- JSON: [url, ...]
-      origem    TEXT NOT NULL DEFAULT 'generico',
-      ativo     INTEGER NOT NULL DEFAULT 1
-    )
-  `);
-  // Instâncias: cada follower recrutado é uma linha própria (tem nível e energia)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_followers (
-      id          INTEGER PRIMARY KEY AUTOINCREMENT,
-      serverId    TEXT NOT NULL,
-      donoId      TEXT,                          -- null = está na dungeon, sem dono
-      catalogoId  TEXT NOT NULL,
-      nivel       INTEGER NOT NULL DEFAULT 1,
-      energia     REAL    NOT NULL DEFAULT 5,
-      energiaEm   INTEGER NOT NULL DEFAULT 0,    -- quando a energia foi atualizada
-      naParty     INTEGER NOT NULL DEFAULT 0,
-      capturado   INTEGER NOT NULL DEFAULT 0,    -- 1 = caiu e está na dungeon
-      donoOriginal TEXT,                         -- para a chance maior no resgate
-      capturadoEm INTEGER NOT NULL DEFAULT 0
-    )
-  `);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_folw_dono ON rpg_followers (serverId, donoId)`);
-
-  // ── RPG: moedas e mercado do jogo ──
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_moedas (
-      serverId   TEXT NOT NULL,
-      id         TEXT NOT NULL,
-      nome       TEXT NOT NULL,
-      simbolo    TEXT NOT NULL DEFAULT '🪙',
-      finita     INTEGER NOT NULL DEFAULT 1,
-      mercado    REAL NOT NULL DEFAULT 10000,   -- quanto o mercado tem agora
-      dungeon    REAL NOT NULL DEFAULT 0,       -- o pote acumulado
-      pSuave     REAL NOT NULL DEFAULT 0.5,     -- P suavizado (média móvel)
-      pEm        INTEGER NOT NULL DEFAULT 0,
-      padrao     INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (serverId, id)
-    )
-  `);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_carteira (
-      serverId   TEXT NOT NULL,
-      userId     TEXT NOT NULL,
-      moedaId    TEXT NOT NULL,
-      quantidade REAL NOT NULL DEFAULT 0,
-      PRIMARY KEY (serverId, userId, moedaId)
-    )
-  `);
-  // Estoque de itens FINITOS no mercado (os infinitos nem entram aqui)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_estoque (
-      serverId   TEXT NOT NULL,
-      itemId     TEXT NOT NULL,
-      quantidade INTEGER NOT NULL DEFAULT 0,
-      base       INTEGER NOT NULL DEFAULT 10,
-      PRIMARY KEY (serverId, itemId)
-    )
-  `);
-
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_ofertas (
-      id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      serverId      TEXT NOT NULL,
-      tipo          TEXT NOT NULL,          -- venda | cambio | troca
-      autorId       TEXT NOT NULL,
-      alvoId        TEXT,                   -- troca direcionada a alguém
-      itemOferecido TEXT,
-      moedaOferecida TEXT,
-      qtdOferecida  REAL NOT NULL DEFAULT 0,
-      itemPedido    TEXT,
-      moedaPedida   TEXT,
-      qtdPedida     REAL NOT NULL DEFAULT 0,
-      estado        TEXT NOT NULL DEFAULT 'aberta',
-      valorFinal    REAL NOT NULL DEFAULT 0,
-      criadoEm      INTEGER NOT NULL,
-      fechadoEm     INTEGER NOT NULL DEFAULT 0
-    )
-  `);
-  db.exec(`CREATE INDEX IF NOT EXISTS idx_ofertas_srv ON rpg_ofertas (serverId, estado)`);
-
-  // Campos de configuração da moeda (migração: adiciona se faltar)
-  try {
-    const cols = prep("PRAGMA table_info(rpg_moedas)").all().map((c) => c.name);
-    if (!cols.includes("dificuldade"))   db.exec("ALTER TABLE rpg_moedas ADD COLUMN dificuldade REAL NOT NULL DEFAULT 1");
-    if (!cols.includes("suprimentoBase")) db.exec("ALTER TABLE rpg_moedas ADD COLUMN suprimentoBase REAL NOT NULL DEFAULT 10000");
-    if (!cols.includes("nivelMin"))      db.exec("ALTER TABLE rpg_moedas ADD COLUMN nivelMin INTEGER NOT NULL DEFAULT 1");
-  } catch (e) { console.error("[DB] migração moedas:", e.message); }
-
-  // Colunas de missão no personagem (migração: adiciona se faltar)
-  try {
-    const cols = prep("PRAGMA table_info(rpg_personagem)").all().map((c) => c.name);
-    if (!cols.includes("ultimaMissao"))   db.exec("ALTER TABLE rpg_personagem ADD COLUMN ultimaMissao INTEGER NOT NULL DEFAULT 0");
-    if (!cols.includes("recuperandoAte")) db.exec("ALTER TABLE rpg_personagem ADD COLUMN recuperandoAte INTEGER NOT NULL DEFAULT 0");
-    if (!cols.includes("missoesFeitas"))  db.exec("ALTER TABLE rpg_personagem ADD COLUMN missoesFeitas INTEGER NOT NULL DEFAULT 0");
-  } catch (e) { console.error("[DB] migração missões:", e.message); }
-
-  // RPG v4 (9 out 2026): progresso dentro do nível (D11), classe do jogador
-  // e evolucionador (D24), histórico das histórias; itens e companheiros com
-  // dados próprios (dano, defesa, implante, contrato…); tabelas de únicos,
-  // esperas e das dungeons (D8).
-  try {
-    const addCol = (tabela, col, tipo) => {
-      const cols = prep(`PRAGMA table_info(${tabela})`).all().map((c) => c.name);
-      if (!cols.includes(col)) db.exec(`ALTER TABLE ${tabela} ADD COLUMN ${col} ${tipo}`);
-    };
-    addCol("rpg_personagem", "progresso", "REAL NOT NULL DEFAULT 0");
-    addCol("rpg_personagem", "classe", "TEXT");
-    addCol("rpg_personagem", "evoluirAuto", "INTEGER NOT NULL DEFAULT 0");
-    addCol("rpg_personagem", "historia", "TEXT");
-    addCol("rpg_itens", "dados", "TEXT NOT NULL DEFAULT '{}'");
-    addCol("rpg_itens", "nomeEN", "TEXT");
-    addCol("rpg_itens", "obra", "TEXT");
-    addCol("rpg_itens", "especial", "INTEGER NOT NULL DEFAULT 0");
-    addCol("rpg_itens", "dif", "INTEGER NOT NULL DEFAULT 1");
-    addCol("rpg_followers_catalogo", "dados", "TEXT NOT NULL DEFAULT '{}'");
-    addCol("rpg_followers", "dungeonId", "TEXT");
-  } catch (e) { console.error("[DB] migração RPG v4:", e.message); }
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_unicos (
-      userId TEXT NOT NULL,
-      chave  TEXT NOT NULL,          -- especial:<id> · chefe:<id> · item:<id> · companheiro:<id>
-      em     INTEGER NOT NULL,
-      PRIMARY KEY (userId, chave)
-    )
-  `);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_espera (
-      userId TEXT NOT NULL,
-      chave  TEXT NOT NULL,          -- chefe:<id> (24 h, D19) · especial:<id> (2 h até o 1º êxito)
-      ate    INTEGER NOT NULL,
-      PRIMARY KEY (userId, chave)
-    )
-  `);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_dungeons (
-      id         TEXT PRIMARY KEY,
-      ouro       REAL NOT NULL DEFAULT 0,
-      cristal    REAL NOT NULL DEFAULT 0,
-      renovadoEm INTEGER NOT NULL DEFAULT 0
-    )
-  `);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS rpg_dungeon_ativos (
-      dungeonId TEXT NOT NULL,
-      userId    TEXT NOT NULL,
-      nivel     INTEGER NOT NULL DEFAULT 1,
-      em        INTEGER NOT NULL,
-      PRIMARY KEY (dungeonId, userId)
-    )
-  `);
-
   // Tickets: categoria e quem fechou. Na ABERTURA do banco — um SELECT * já
   // preparado antes do ALTER TABLE não enxerga a coluna nova.
   try { colunasTicket(); } catch (e) { console.error("[DB] migração tickets:", e.message); }
 
   migrarTabelasGame();   // XP: game_* → xp_* (preserva os dados)
-
-  // (Privacidade, 20 out 2026, decisão do Ghieh) A memória da IA sobre as pessoas
-  // foi juntada sem consentimento — a Judy observava toda mensagem. Apaga tudo uma
-  // vez e começa de novo: daqui em diante, só de quem aceitar (ia_consentimento).
-  rodarUmaVez("2026-10-20-memoria-ia-sem-consentimento", () => {
-    const n = {};
-    for (const t of ["ia_fatos_pessoa", "ia_fatos_servidor", "ia_perfil", "ia_memoria", "ia_historico"]) {
-      n[t] = prep(`DELETE FROM ${t}`).run().changes ?? 0;
-    }
-    console.info(`[DB] privacidade: memória antiga da IA apagada — ${Object.entries(n).map(([t, q]) => `${t} ${q}`).join(", ")}`);
-  });
-  podarHistoricoIA();
+  removerRpg();          // (P4, 2 nov 2026) o RPG saiu: as tabelas rpg_* e as marcas __rpg_*__
+  removerChatIA();       // (P4, 2 nov 2026) o chat IA saiu: as tabelas ia_* (memória, histórico, consentimento…)
+  removerTetoDeImagens(DB_PATH);   // (P4, revisão) e a contagem do teto de imagens geradas, ao lado do banco
 
   console.info("[DB] Banco aberto em", DB_PATH);
   return db;
-}
-
-// Roda `fn` uma única vez neste banco (a marca fica na tabela migracoes).
-export function rodarUmaVez(nome, fn) {
-  if (prep("SELECT 1 FROM migracoes WHERE nome = ?").get(nome)) return false;
-  fn();
-  prep("INSERT INTO migracoes (nome, em) VALUES (?, ?)").run(nome, new Date().toISOString());
-  return true;
 }
 
 export function lerConfig(serverId) {
@@ -988,241 +655,6 @@ export function cargoDoNivel(serverId, nivel) {
   return prep("SELECT roleId FROM xp_cargos WHERE serverId = ? AND nivel = ?").get(serverId, nivel)?.roleId ?? null;
 }
 
-export function getMemoria(userId) {
-  const r = prep("SELECT nome, fatos, atualizado FROM ia_memoria WHERE userId = ?").get(userId);
-  if (!r) return { nome: null, fatos: [], atualizado: null };
-  let fatos = [];
-  try { fatos = JSON.parse(r.fatos || "[]"); } catch {}
-  return { nome: r.nome, fatos, atualizado: r.atualizado };
-}
-
-export function setMemoria(userId, { nome, fatos }) {
-  const fatosJson = JSON.stringify((fatos || []).slice(-20));  // guarda os últimos 20 fatos
-  prep(`INSERT INTO ia_memoria (userId, nome, fatos, atualizado)
-              VALUES (?, ?, ?, ?)
-              ON CONFLICT(userId) DO UPDATE SET nome = COALESCE(?, nome), fatos = ?, atualizado = ?`)
-    .run(userId, nome ?? null, fatosJson, new Date().toISOString(), nome ?? null, fatosJson, new Date().toISOString());
-}
-
-export function limparMemoria(userId) {
-  return prep("DELETE FROM ia_memoria WHERE userId = ?").run(userId).changes ?? 0;
-}
-
-export function addHistorico(userId, papel, conteudo, { serverId = null, canalId = null } = {}) {
-  prep("INSERT INTO ia_historico (userId, serverId, canalId, papel, conteudo, momento) VALUES (?, ?, ?, ?, ?, ?)")
-    .run(userId, serverId, canalId, papel, conteudo.slice(0, 2000), new Date().toISOString());
-  // mantém só as últimas 12 entradas (6 trocas) por usuário EM CADA CANAL
-  prep(`DELETE FROM ia_historico WHERE userId = ? AND canalId IS ? AND rowid NOT IN (
-    SELECT rowid FROM ia_historico WHERE userId = ? AND canalId IS ? ORDER BY momento DESC LIMIT 12
-  )`).run(userId, canalId, userId, canalId);
-}
-
-// `global`: a pessoa escolheu que a conversa continue entre servidores e canais
-// (&privacidade fio global) — o fio é dela, não do canal. (31 out 2026, P1, R9) De
-// OUTRO canal vêm só as falas DELA: a resposta da Judy noutro servidor (que pode citar
-// gente e coisas de lá) não atravessa; deste canal, a conversa inteira.
-export function getHistorico(userId, limite = 6, { canalId = null, minutos = 30, global = false } = {}) {
-  const desde = new Date(Date.now() - minutos * 60_000).toISOString();
-  const linhas = global
-    ? prep(`SELECT papel, conteudo FROM ia_historico
-      WHERE userId = ? AND momento >= ? AND (papel = 'user' OR canalId IS ?)
-      ORDER BY momento DESC LIMIT ?`).all(userId, desde, canalId, limite * 2)
-    : prep(`SELECT papel, conteudo FROM ia_historico
-      WHERE userId = ? AND canalId IS ? AND momento >= ?
-      ORDER BY momento DESC LIMIT ?`).all(userId, canalId, desde, limite * 2);
-  return linhas.reverse();   // cronológico (mais antigo primeiro)
-}
-
-// O histórico de conversa vive 24 h (privacidade, 20 out 2026): a conversa só usa
-// os últimos minutos, e o texto que alguém escreveu não fica guardado à toa.
-export const HISTORICO_HORAS = 24;
-export function podarHistoricoIA(horas = HISTORICO_HORAS) {
-  const limite = new Date(Date.now() - horas * 3600_000).toISOString();
-  return prep("DELETE FROM ia_historico WHERE momento < ?").run(limite).changes ?? 0;
-}
-
-// ── Consentimento (privacidade, 20 out 2026) ──
-export function getConsentimento(userId) {
-  return prep("SELECT memoria, fioGlobal, perguntadoEm, respondidoEm FROM ia_consentimento WHERE userId = ?").get(String(userId)) ?? null;
-}
-export const temMemoriaConsentida = (userId) => getConsentimento(userId)?.memoria === 1;
-export function setConsentimento(userId, { memoria, fioGlobal, perguntado = false, respondido = false } = {}) {
-  const a = getConsentimento(userId) ?? { memoria: 0, fioGlobal: 0, perguntadoEm: null, respondidoEm: null };
-  const agora = new Date().toISOString();
-  const n = {
-    memoria: memoria == null ? a.memoria : (memoria ? 1 : 0),
-    fioGlobal: fioGlobal == null ? a.fioGlobal : (fioGlobal ? 1 : 0),
-    perguntadoEm: perguntado ? agora : a.perguntadoEm,
-    respondidoEm: respondido ? agora : a.respondidoEm,
-  };
-  prep(`INSERT INTO ia_consentimento (userId, memoria, fioGlobal, perguntadoEm, respondidoEm) VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(userId) DO UPDATE SET memoria=excluded.memoria, fioGlobal=excluded.fioGlobal,
-      perguntadoEm=excluded.perguntadoEm, respondidoEm=excluded.respondidoEm`)
-    .run(String(userId), n.memoria, n.fioGlobal, n.perguntadoEm, n.respondidoEm);
-  return getConsentimento(userId);
-}
-
-// ── "Não fale comigo" (21 out 2026) ──
-export function iaSilenciada(userId) {
-  return !!prep("SELECT 1 FROM ia_silencio WHERE userId = ?").get(String(userId));
-}
-export function setIaSilenciada(userId, sim) {
-  if (sim) prep("INSERT INTO ia_silencio (userId, desde) VALUES (?, ?) ON CONFLICT(userId) DO NOTHING").run(String(userId), new Date().toISOString());
-  else prep("DELETE FROM ia_silencio WHERE userId = ?").run(String(userId));
-  return iaSilenciada(userId);
-}
-
-// Quem desliga a memória perde tudo o que a IA sabia dela, em TODOS os servidores.
-// A marca de "tratar com gentileza" fica (é escolha à parte, não memória).
-export function apagarMemoriaDaPessoaGlobal(userId) {
-  const u = String(userId);
-  const fatos = prep("DELETE FROM ia_fatos_pessoa WHERE userId = ?").run(u).changes ?? 0;
-  const perfil = prep("DELETE FROM ia_perfil WHERE userId = ? AND cuidado = 0").run(u).changes ?? 0;
-  prep("UPDATE ia_perfil SET nome = NULL, bio = NULL, grupos = NULL, jogos = NULL, status = NULL, entrou = NULL WHERE userId = ?").run(u);
-  const memoria = prep("DELETE FROM ia_memoria WHERE userId = ?").run(u).changes ?? 0;
-  return { fatos, perfil, memoria };
-}
-
-// O que a IA guarda de alguém (o &privacidade mostra)
-export function resumoIADaPessoa(userId, serverId = null) {
-  const u = String(userId);
-  const um = (sql, ...p) => prep(sql).get(...p)?.n ?? 0;
-  return {
-    fatosAqui: serverId ? um("SELECT COUNT(*) n FROM ia_fatos_pessoa WHERE userId = ? AND serverId = ?", u, serverId) : 0,
-    fatosTotal: um("SELECT COUNT(*) n FROM ia_fatos_pessoa WHERE userId = ?", u),
-    perfis: um("SELECT COUNT(*) n FROM ia_perfil WHERE userId = ? AND (bio IS NOT NULL OR status IS NOT NULL)", u),
-    memoria: (() => { try { return JSON.parse(prep("SELECT fatos FROM ia_memoria WHERE userId = ?").get(u)?.fatos ?? "[]").length; } catch { return 0; } })(),
-    historico: um("SELECT COUNT(*) n FROM ia_historico WHERE userId = ?", u),
-  };
-}
-
-export function limparHistorico(userId, { serverId = null } = {}) {
-  return serverId
-    ? prep("DELETE FROM ia_historico WHERE userId = ? AND serverId = ?").run(userId, serverId).changes ?? 0
-    : prep("DELETE FROM ia_historico WHERE userId = ?").run(userId).changes ?? 0;
-}
-
-// Usado pelo `&chat esquecer tudo`: o histórico do servidor inteiro.
-export function limparHistoricoServidor(serverId) {
-  return prep("DELETE FROM ia_historico WHERE serverId = ?").run(serverId).changes ?? 0;
-}
-
-export function addFatoPessoa(serverId, userId, fato, confianca = 0.5, categoria = "geral") {
-  const f = String(fato || "").trim();
-  if (!f) return;
-  const existentes = prep(
-    "SELECT id, fato, confianca, vezes FROM ia_fatos_pessoa WHERE serverId = ? AND userId = ?"
-  ).all(serverId, userId);
-  const norm = (s) => s.toLowerCase().replace(/\s+/g, " ").trim();
-  const parecido = existentes.find((e) => {
-    const a = norm(e.fato), b = norm(f);
-    return a === b || a.includes(b) || b.includes(a);
-  });
-  const agora = new Date().toISOString();
-  if (parecido) {
-    const novaConf = Math.min(1, parecido.confianca + 0.15);
-    prep("UPDATE ia_fatos_pessoa SET confianca = ?, vezes = vezes + 1, momento = ? WHERE id = ?")
-      .run(novaConf, agora, parecido.id);
-  } else {
-    prep("INSERT INTO ia_fatos_pessoa (serverId, userId, fato, confianca, vezes, momento, categoria) VALUES (?, ?, ?, ?, 1, ?, ?)")
-      .run(serverId, userId, f, confianca, agora, categoria);
-  }
-}
-
-// Fatos de uma pessoa, dos mais confiáveis para os menos. `minConf` filtra ruído.
-export function getFatosPessoa(serverId, userId, { limite = 12, minConf = 0.4 } = {}) {
-  return prep(
-    `SELECT fato, confianca, vezes, categoria, momento FROM ia_fatos_pessoa
-     WHERE serverId = ? AND userId = ? AND confianca >= ?
-     ORDER BY confianca DESC, vezes DESC, momento DESC LIMIT ?`
-  ).all(serverId, userId, minConf, limite);
-}
-
-// ── Perfil do usuário (cartão: bio, grupos, jogos, status + flag de cuidado) ──
-export function getPerfil(serverId, userId) {
-  return prep("SELECT * FROM ia_perfil WHERE serverId = ? AND userId = ?").get(serverId, userId) || null;
-}
-
-export function setPerfil(serverId, userId, dados = {}) {
-  const atual = getPerfil(serverId, userId) || {};
-  const merge = {
-    nome:   dados.nome   ?? atual.nome   ?? null,
-    bio:    dados.bio    ?? atual.bio    ?? null,
-    grupos: dados.grupos ?? atual.grupos ?? null,
-    jogos:  dados.jogos  ?? atual.jogos  ?? null,
-    status: dados.status ?? atual.status ?? null,
-    entrou: dados.entrou ?? atual.entrou ?? null,
-    cuidado: dados.cuidado != null ? (dados.cuidado ? 1 : 0) : (atual.cuidado ?? 0),
-  };
-  prep(`INSERT INTO ia_perfil (serverId, userId, nome, bio, grupos, jogos, status, entrou, cuidado, atualizado)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(serverId, userId) DO UPDATE SET
-      nome=excluded.nome, bio=excluded.bio, grupos=excluded.grupos, jogos=excluded.jogos,
-      status=excluded.status, entrou=excluded.entrou, cuidado=excluded.cuidado, atualizado=excluded.atualizado`)
-    .run(serverId, userId, merge.nome, merge.bio, merge.grupos, merge.jogos, merge.status, merge.entrou, merge.cuidado, new Date().toISOString());
-  return getPerfil(serverId, userId);
-}
-
-// Flag opt-in "tratar com gentileza extra" (acessibilidade; controlada por comando).
-export function setCuidado(serverId, userId, ligado) {
-  setPerfil(serverId, userId, { cuidado: ligado ? 1 : 0 });
-  return !!ligado;
-}
-
-// Apaga TUDO que a IA sabe de uma pessoa (fatos + perfil + histórico) — é a própria
-// pessoa que pede (`&chat esquecer`). (31 out 2026, P1, Reparo) Sem `catch {}`: se um
-// DELETE falha, quem pediu ouve "não consegui", não "apagado".
-export function apagarTudoDaPessoa(serverId, userId) {
-  const f = prep("DELETE FROM ia_fatos_pessoa WHERE serverId = ? AND userId = ?").run(serverId, userId).changes ?? 0;
-  const p = prep("DELETE FROM ia_perfil WHERE serverId = ? AND userId = ?").run(serverId, userId).changes ?? 0;
-  const h = prep("DELETE FROM ia_historico WHERE userId = ?").run(userId).changes ?? 0;
-  const m = prep("DELETE FROM ia_memoria WHERE userId = ?").run(userId).changes ?? 0;
-  return { fatos: f, perfil: p, historico: h, memoria: m };
-}
-
-// Apaga TODA a memória da IA DESTE servidor (fatos de pessoas, de servidor, perfis e
-// o histórico de conversa daqui). (31 out 2026, P1, R9) Só o que tem o serverId dele:
-// a ia_memoria é global (de cada pessoa, em todos os servidores) — a staff de UM
-// servidor não apaga o que a pessoa construiu nos outros; quem quer, apaga a sua com
-// `&chat esquecer` ou `&privacidade memoria off`.
-export function apagarMemoriaServidor(serverId) {
-  const fp = prep("DELETE FROM ia_fatos_pessoa WHERE serverId = ?").run(serverId).changes ?? 0;
-  const fs = prep("DELETE FROM ia_fatos_servidor WHERE serverId = ?").run(serverId).changes ?? 0;
-  const pf = prep("DELETE FROM ia_perfil WHERE serverId = ?").run(serverId).changes ?? 0;
-  const hi = prep("DELETE FROM ia_historico WHERE serverId = ?").run(serverId).changes ?? 0;
-  return { fatosPessoa: fp, fatosServidor: fs, perfis: pf, historico: hi };
-}
-
-export function addFatoServidor(serverId, fato, confianca = 0.5) {
-  const f = String(fato || "").trim();
-  if (!f) return;
-  const existentes = prep(
-    "SELECT id, fato, confianca FROM ia_fatos_servidor WHERE serverId = ?"
-  ).all(serverId);
-  const norm = (s) => s.toLowerCase().replace(/\s+/g, " ").trim();
-  const parecido = existentes.find((e) => {
-    const a = norm(e.fato), b = norm(f);
-    return a === b || a.includes(b) || b.includes(a);
-  });
-  const agora = new Date().toISOString();
-  if (parecido) {
-    const novaConf = Math.min(1, parecido.confianca + 0.15);
-    prep("UPDATE ia_fatos_servidor SET confianca = ?, vezes = vezes + 1, momento = ? WHERE id = ?")
-      .run(novaConf, agora, parecido.id);
-  } else {
-    prep("INSERT INTO ia_fatos_servidor (serverId, fato, confianca, vezes, momento) VALUES (?, ?, ?, 1, ?)")
-      .run(serverId, f, confianca, agora);
-  }
-}
-
-export function getFatosServidor(serverId, { limite = 15, minConf = 0.4 } = {}) {
-  return prep(
-    `SELECT fato, confianca, vezes FROM ia_fatos_servidor
-     WHERE serverId = ? AND confianca >= ?
-     ORDER BY confianca DESC, vezes DESC, momento DESC LIMIT ?`
-  ).all(serverId, minConf, limite);
-}
-
 function migrarTabelasGame() {
   for (const [antiga, nova] of [["game_xp", "xp_usuarios"], ["game_cargos", "xp_cargos"]]) {
     try {
@@ -1240,375 +672,9 @@ function migrarTabelasGame() {
   }
 }
 
-export const ATRIBUTOS = ["forca", "destreza", "resistencia", "agilidade",
-  "vida", "mana", "inteligencia", "sorte", "carisma"];
-
-export function getPersonagem(serverId, userId) {
-  return prep("SELECT * FROM rpg_personagem WHERE serverId = ? AND userId = ?")
-    .get(serverId, userId) ?? null;
-}
-
-export function criarPersonagem(serverId, userId, nome) {
-  prep(`INSERT INTO rpg_personagem (serverId, userId, nome, criadoEm)
-              VALUES (?, ?, ?, ?)`).run(serverId, userId, nome ?? null, Date.now());
-  return getPersonagem(serverId, userId);
-}
-
-const COLUNAS_OK = new Set([...ATRIBUTOS, "nome", "nivel", "xp", "pontos",
-  "ultimaMissao", "recuperandoAte", "missoesFeitas", "progresso", "classe", "evoluirAuto", "historia"]);
-export function salvarPersonagem(serverId, userId, campos = {}) {
-  const entradas = Object.entries(campos).filter(([k]) => COLUNAS_OK.has(k));
-  if (!entradas.length) return getPersonagem(serverId, userId);
-  const sets = entradas.map(([k]) => `${k} = ?`).join(", ");
-  prep(`UPDATE rpg_personagem SET ${sets} WHERE serverId = ? AND userId = ?`)
-    .run(...entradas.map(([, v]) => v), serverId, userId);
-  return getPersonagem(serverId, userId);
-}
-
-
-export function listarPersonagens(serverId, limite = 10) {
-  return prep(`SELECT userId, nome, nivel, xp, progresso FROM rpg_personagem
-    WHERE serverId = ? ORDER BY nivel DESC, progresso DESC, xp DESC LIMIT ?`).all(serverId, limite);
-}
-
-// Vagas equipáveis (v4): as duas mãos (D14), cabeça e corpo, três acessórios e
-// 3 + 3 implantes (D23). O catálogo usa os slots "mao", "capacete", "armadura",
-// "acessorio", "implante" (e "contrato"/"pergaminho", que não se equipam).
-export const SLOTS = ["mao1", "mao2", "capacete", "armadura", "acessorio1", "acessorio2", "acessorio3",
-  "bio1", "bio2", "bio3", "ciber1", "ciber2", "ciber3"];
-
-export function aprenderMagia(serverId, userId, magiaId) {
-  prep(`INSERT OR IGNORE INTO rpg_magias (serverId, userId, magiaId, criadoEm)
-    VALUES (?, ?, ?, ?)`).run(serverId, userId, magiaId, Date.now());
-  return true;
-}
-export function listarMagias(serverId, userId) {
-  return prep(`SELECT magiaId, criadoEm FROM rpg_magias
-    WHERE serverId = ? AND userId = ? ORDER BY criadoEm`).all(serverId, userId);
-}
-export function limparMagias(serverId, userId = null) {
-  return userId
-    ? prep(`DELETE FROM rpg_magias WHERE serverId = ? AND userId = ?`).run(serverId, userId).changes
-    : prep(`DELETE FROM rpg_magias WHERE serverId = ?`).run(serverId).changes;
-}
-export const RARIDADES = ["comum", "incomum", "raro", "epico", "lendario", "mitico", "celestial", "divino", "primordial", "supremo"];
-
-// ── Catálogo ──
-export function upsertItem(item) {
-  prep(`INSERT INTO rpg_itens (id, nome, slot, raridade, bonus, origem, infinito, precoBase, ativo, dados, nomeEN, obra, especial, dif)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      nome=excluded.nome, slot=excluded.slot, raridade=excluded.raridade,
-      bonus=excluded.bonus, origem=excluded.origem,
-      infinito=excluded.infinito, precoBase=excluded.precoBase,
-      dados=excluded.dados, nomeEN=excluded.nomeEN, obra=excluded.obra,
-      especial=excluded.especial, dif=excluded.dif`)
-    .run(item.id, item.nome, item.slot, item.raridade,
-         JSON.stringify(item.bonus ?? {}), item.origem ?? "generico",
-         item.infinito ? 1 : 0, item.precoBase ?? 10,
-         JSON.stringify(item.dados ?? {}), item.nomeEN ?? null, item.obra ?? null,
-         item.especial ? 1 : 0, item.dif ?? 1);
-}
-
-function hidratarItem(r) {
-  if (!r) return null;
-  let bonus = {}, dados = {};
-  try { bonus = JSON.parse(r.bonus ?? "{}"); } catch {}
-  try { dados = JSON.parse(r.dados ?? "{}"); } catch {}
-  return { ...r, bonus, dados, infinito: !!r.infinito, ativo: !!r.ativo, especial: !!r.especial };
-}
-
-export function getItem(id) {
-  return hidratarItem(prep("SELECT * FROM rpg_itens WHERE id = ?").get(id));
-}
-
-const semAcentoDb = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
-export function acharItemPorNome(txt) {
-  const alvo = semAcentoDb(txt);   // "espada temperada", "lamina aurora" acham com ou sem acento
-  if (!alvo) return null;
-  const todos = prep("SELECT * FROM rpg_itens").all().map(hidratarItem);
-  return todos.find((i) => i.id === alvo)
-      ?? todos.find((i) => semAcentoDb(i.nome) === alvo)
-      ?? todos.find((i) => semAcentoDb(i.nomeEN) === alvo)
-      ?? todos.find((i) => semAcentoDb(i.nome).includes(alvo))
-      ?? todos.find((i) => semAcentoDb(i.nomeEN).includes(alvo))
-      ?? null;
-}
-
-export function listarItens({ slot = null, raridade = null, apenasAtivos = true } = {}) {
-  let sql = "SELECT * FROM rpg_itens WHERE 1=1";
-  const p = [];
-  if (apenasAtivos) sql += " AND ativo = 1";
-  if (slot) { sql += " AND slot = ?"; p.push(slot); }
-  if (raridade) { sql += " AND raridade = ?"; p.push(raridade); }
-  sql += " ORDER BY dif, nome";
-  return prep(sql).all(...p).map(hidratarItem);
-}
-
-// ── Inventário ──
-export function darItem(serverId, userId, itemId, qtd = 1) {
-  prep(`INSERT INTO rpg_inventario (serverId, userId, itemId, quantidade)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT(serverId, userId, itemId) DO UPDATE SET quantidade = quantidade + excluded.quantidade`)
-    .run(serverId, userId, itemId, qtd);
-}
-
-export function tirarItem(serverId, userId, itemId, qtd = 1) {
-  const atual = prep("SELECT quantidade FROM rpg_inventario WHERE serverId=? AND userId=? AND itemId=?")
-    .get(serverId, userId, itemId)?.quantidade ?? 0;
-  if (atual <= qtd) {
-    prep("DELETE FROM rpg_inventario WHERE serverId=? AND userId=? AND itemId=?")
-      .run(serverId, userId, itemId);
-    return atual;
-  }
-  prep("UPDATE rpg_inventario SET quantidade = quantidade - ? WHERE serverId=? AND userId=? AND itemId=?")
-    .run(qtd, serverId, userId, itemId);
-  return qtd;
-}
-
-export function getInventario(serverId, userId) {
-  const linhas = prep("SELECT itemId, quantidade FROM rpg_inventario WHERE serverId=? AND userId=?")
-    .all(serverId, userId);
-  return linhas.map((l) => ({ ...getItem(l.itemId), quantidade: l.quantidade }))
-    .filter((x) => x.id);
-}
-
-export function temItem(serverId, userId, itemId) {
-  return (prep("SELECT quantidade FROM rpg_inventario WHERE serverId=? AND userId=? AND itemId=?")
-    .get(serverId, userId, itemId)?.quantidade ?? 0) > 0;
-}
-
-// ── Equipamento ──
-export function equipar(serverId, userId, slot, itemId) {
-  prep(`INSERT INTO rpg_equipado (serverId, userId, slot, itemId) VALUES (?, ?, ?, ?)
-    ON CONFLICT(serverId, userId, slot) DO UPDATE SET itemId = excluded.itemId`)
-    .run(serverId, userId, slot, itemId);
-}
-
-export function desequipar(serverId, userId, slot) {
-  return prep("DELETE FROM rpg_equipado WHERE serverId=? AND userId=? AND slot=?")
-    .run(serverId, userId, slot).changes ?? 0;
-}
-
-export function getEquipado(serverId, userId) {
-  const linhas = prep("SELECT slot, itemId FROM rpg_equipado WHERE serverId=? AND userId=?")
-    .all(serverId, userId);
-  const out = {};
-  for (const l of linhas) {
-    const item = getItem(l.itemId);
-    if (item) out[l.slot] = item;
-  }
-  return out;
-}
-
-// Onde este item está equipado (se estiver)
-
-export function upsertFollowerCatalogo(f) {
-  prep(`INSERT INTO rpg_followers_catalogo (id, nome, classe, raridade, preco, soDungeon, fotos, origem, ativo, dados)
-    VALUES (?, ?, ?, ?, ?, ?, COALESCE((SELECT fotos FROM rpg_followers_catalogo WHERE id = ?), '[]'), ?, 1, ?)
-    ON CONFLICT(id) DO UPDATE SET nome=excluded.nome, classe=excluded.classe,
-      raridade=excluded.raridade, preco=excluded.preco, soDungeon=excluded.soDungeon,
-      origem=excluded.origem, dados=excluded.dados`)
-    .run(f.id, f.nome, f.classe, f.raridade, f.preco ?? 0, f.soDungeon ? 1 : 0, f.id, f.origem ?? "generico", JSON.stringify(f.dados ?? {}));
-}
-
-function hidratarFollower(r) {
-  if (!r) return null;
-  let fotos = [], dados = {};
-  try { fotos = JSON.parse(r.fotos ?? "[]"); } catch {}
-  try { dados = JSON.parse(r.dados ?? "{}"); } catch {}
-  return { ...r, fotos, dados, soDungeon: !!r.soDungeon, ativo: !!r.ativo };
-}
-
-export function getFollowerCatalogo(id) {
-  return hidratarFollower(prep("SELECT * FROM rpg_followers_catalogo WHERE id = ?").get(id));
-}
-
-export function acharFollowerCatalogo(txt) {
-  const alvo = semAcentoDb(txt);
-  if (!alvo) return null;
-  const todos = prep("SELECT * FROM rpg_followers_catalogo WHERE ativo = 1").all().map(hidratarFollower);
-  return todos.find((f) => f.id === alvo)
-      ?? todos.find((f) => semAcentoDb(f.nome) === alvo)
-      ?? todos.find((f) => semAcentoDb(f.dados?.nomeEN) === alvo)
-      ?? todos.find((f) => semAcentoDb(f.nome).includes(alvo))
-      ?? todos.find((f) => semAcentoDb(f.dados?.nomeEN).includes(alvo))
-      ?? null;
-}
-
-export function listarFollowersCatalogo({ soVendidos = false } = {}) {
-  let sql = "SELECT * FROM rpg_followers_catalogo WHERE ativo = 1";
-  if (soVendidos) sql += " AND soDungeon = 0 AND preco > 0";
-  return prep(sql + " ORDER BY raridade, nome").all().map(hidratarFollower);
-}
-
-// ── Instâncias ──
-export function recrutarFollower(serverId, donoId, catalogoId, nivel = 1) {
-  const r = prep(`INSERT INTO rpg_followers (serverId, donoId, catalogoId, nivel, energia, energiaEm, donoOriginal)
-    VALUES (?, ?, ?, ?, 5, ?, ?)`).run(serverId, donoId, catalogoId, nivel, Date.now(), donoId);
-  return getFollower(r.lastInsertRowid);
-}
-
-export function getFollower(id) {
-  return prep("SELECT * FROM rpg_followers WHERE id = ?").get(id) ?? null;
-}
-
-export function listarFollowersDe(serverId, donoId) {
-  return prep("SELECT * FROM rpg_followers WHERE serverId=? AND donoId=? AND capturado=0 ORDER BY naParty DESC, nivel DESC")
-    .all(serverId, donoId);
-}
-
-export function getParty(serverId, donoId) {
-  return prep("SELECT * FROM rpg_followers WHERE serverId=? AND donoId=? AND naParty=1 AND capturado=0")
-    .all(serverId, donoId);
-}
-
-const CAMPOS_FOLLOWER = new Set(["nivel", "energia", "energiaEm", "naParty", "capturado", "donoId", "capturadoEm", "dungeonId"]);
-export function salvarFollower(id, campos = {}) {
-  const e = Object.entries(campos).filter(([k]) => CAMPOS_FOLLOWER.has(k));
-  if (!e.length) return getFollower(id);
-  prep(`UPDATE rpg_followers SET ${e.map(([k]) => `${k} = ?`).join(", ")} WHERE id = ?`)
-    .run(...e.map(([, v]) => v), id);
-  return getFollower(id);
-}
-
-
-// ── Dungeon: followers capturados ──
-
-
-
-export function upsertMoeda(serverId, m) {
-  prep(`INSERT INTO rpg_moedas
-    (serverId, id, nome, simbolo, finita, mercado, dungeon, pSuave, pEm, padrao,
-     dificuldade, suprimentoBase, nivelMin)
-    VALUES (?, ?, ?, ?, ?, ?, 0, 0.5, ?, ?, ?, ?, ?)
-    ON CONFLICT(serverId, id) DO UPDATE SET nome=excluded.nome, simbolo=excluded.simbolo,
-      finita=excluded.finita, padrao=excluded.padrao, dificuldade=excluded.dificuldade,
-      suprimentoBase=excluded.suprimentoBase, nivelMin=excluded.nivelMin`)
-    .run(serverId, m.id, m.nome, m.simbolo ?? "🪙", m.finita === false ? 0 : 1,
-         m.mercado ?? m.suprimentoBase ?? 10000, Date.now(), m.padrao ? 1 : 0,
-         m.dificuldade ?? 1, m.suprimentoBase ?? 10000, m.nivelMin ?? 1);
-  return getMoeda(serverId, m.id);
-}
-
-
-export function getMoeda(serverId, id) {
-  return prep("SELECT * FROM rpg_moedas WHERE serverId=? AND id=?").get(serverId, id) ?? null;
-}
-
-export function listarMoedas(serverId) {
-  return prep("SELECT * FROM rpg_moedas WHERE serverId=? ORDER BY padrao DESC, nome").all(serverId);
-}
-
-
-
-const CAMPOS_MOEDA = new Set(["mercado", "dungeon", "pSuave", "pEm", "nome", "simbolo",
-  "finita", "padrao", "dificuldade", "suprimentoBase", "nivelMin"]);
-export function salvarMoeda(serverId, id, campos = {}) {
-  const e = Object.entries(campos).filter(([k]) => CAMPOS_MOEDA.has(k));
-  if (!e.length) return getMoeda(serverId, id);
-  prep(`UPDATE rpg_moedas SET ${e.map(([k]) => `${k} = ?`).join(", ")} WHERE serverId=? AND id=?`)
-    .run(...e.map(([, v]) => v), serverId, id);
-  return getMoeda(serverId, id);
-}
-
-// ── Carteira ──
-export function getSaldo(serverId, userId, moedaId) {
-  return prep("SELECT quantidade FROM rpg_carteira WHERE serverId=? AND userId=? AND moedaId=?")
-    .get(serverId, userId, moedaId)?.quantidade ?? 0;
-}
-
-export function creditar(serverId, userId, moedaId, qtd) {
-  prep(`INSERT INTO rpg_carteira (serverId, userId, moedaId, quantidade) VALUES (?, ?, ?, ?)
-    ON CONFLICT(serverId, userId, moedaId) DO UPDATE SET quantidade = quantidade + excluded.quantidade`)
-    .run(serverId, userId, moedaId, qtd);
-  return getSaldo(serverId, userId, moedaId);
-}
-
-export function debitar(serverId, userId, moedaId, qtd) {
-  const atual = getSaldo(serverId, userId, moedaId);
-  const tirar = Math.min(atual, qtd);
-  if (tirar <= 0) return 0;
-  prep("UPDATE rpg_carteira SET quantidade = quantidade - ? WHERE serverId=? AND userId=? AND moedaId=?")
-    .run(tirar, serverId, userId, moedaId);
-  return tirar;
-}
-
-
-// Quanto TODOS os jogadores têm dessa moeda — numerador do P.
-
-// ── Estoque de itens no mercado ──
-
-
-
-export function criarOferta(o) {
-  const r = prep(`INSERT INTO rpg_ofertas
-    (serverId, tipo, autorId, alvoId, itemOferecido, moedaOferecida, qtdOferecida,
-     itemPedido, moedaPedida, qtdPedida, estado, criadoEm)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'aberta', ?)`)
-    .run(o.serverId, o.tipo, o.autorId, o.alvoId ?? null,
-         o.itemOferecido ?? null, o.moedaOferecida ?? null, o.qtdOferecida ?? 0,
-         o.itemPedido ?? null, o.moedaPedida ?? null, o.qtdPedida ?? 0, Date.now());
-  return getOferta(r.lastInsertRowid);
-}
-
-export function getOferta(id) {
-  return prep("SELECT * FROM rpg_ofertas WHERE id = ?").get(id) ?? null;
-}
-
-export function listarOfertas(serverId, { tipo = null, autorId = null, alvoId = null } = {}) {
-  let sql = "SELECT * FROM rpg_ofertas WHERE serverId=? AND estado='aberta'";
-  const p = [serverId];
-  if (tipo) { sql += " AND tipo=?"; p.push(tipo); }
-  if (autorId) { sql += " AND autorId=?"; p.push(autorId); }
-  if (alvoId) { sql += " AND (alvoId=? OR alvoId IS NULL)"; p.push(alvoId); }
-  return prep(sql + " ORDER BY id DESC LIMIT 50").all(...p);
-}
-
-export function fecharOferta(id, estado = "fechada", valorFinal = 0) {
-  prep("UPDATE rpg_ofertas SET estado=?, valorFinal=?, fechadoEm=? WHERE id=?")
-    .run(estado, valorFinal, Date.now(), id);
-  return getOferta(id);
-}
-
-// Volume negociado na última hora — alimenta a taxa dinâmica.
-
 export function getDb() {
   return db;
 }
-
-// ── RPG v4: únicos, esperas e dungeons ──
-export function temUnico(userId, chave) {
-  return !!prep("SELECT 1 FROM rpg_unicos WHERE userId=? AND chave=?").get(userId, chave);
-}
-export function marcarUnico(userId, chave) {
-  return (prep("INSERT OR IGNORE INTO rpg_unicos (userId, chave, em) VALUES (?, ?, ?)").run(userId, chave, Date.now()).changes ?? 0) > 0;
-}
-export function esperaAte(userId, chave) {
-  return prep("SELECT ate FROM rpg_espera WHERE userId=? AND chave=?").get(userId, chave)?.ate ?? 0;
-}
-export function marcarEspera(userId, chave, ate) {
-  prep("INSERT INTO rpg_espera (userId, chave, ate) VALUES (?, ?, ?) ON CONFLICT(userId, chave) DO UPDATE SET ate=excluded.ate").run(userId, chave, ate);
-}
-export function getDungeon(id) {
-  return prep("SELECT * FROM rpg_dungeons WHERE id=?").get(id) ?? null;
-}
-export function salvarDungeon(id, campos = {}) {
-  const atual = getDungeon(id) ?? { id, ouro: 0, cristal: 0, renovadoEm: 0 };
-  const n = { ...atual, ...campos };
-  prep(`INSERT INTO rpg_dungeons (id, ouro, cristal, renovadoEm) VALUES (?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET ouro=excluded.ouro, cristal=excluded.cristal, renovadoEm=excluded.renovadoEm`)
-    .run(id, Math.max(0, n.ouro ?? 0), Math.max(0, n.cristal ?? 0), n.renovadoEm ?? 0);
-  return getDungeon(id);
-}
-export function marcarAtivoDungeon(dungeonId, userId, nivel) {
-  prep(`INSERT INTO rpg_dungeon_ativos (dungeonId, userId, nivel, em) VALUES (?, ?, ?, ?)
-    ON CONFLICT(dungeonId, userId) DO UPDATE SET nivel=excluded.nivel, em=excluded.em`).run(dungeonId, userId, nivel, Date.now());
-}
-export function ativosDungeon(dungeonId, desde) {
-  return prep("SELECT userId, nivel, em FROM rpg_dungeon_ativos WHERE dungeonId=? AND em > ?").all(dungeonId, desde);
-}
-
 
 // ── Webhooks (ganchos) ──────────────────────────────────────────────────────
 export function criarGancho(serverId, nome, canalId, token) {
@@ -1768,102 +834,64 @@ export function xpTirarCargoNivel(serverId, nivel) {
   return prep("DELETE FROM xp_cargos WHERE serverId = ? AND nivel = ?").run(String(serverId), Number(nivel)).changes ?? 0;
 }
 
-// ── P2 rpg ──
-// (31 out 2026) O RPG recomeçou numa era nova (`mundo:v5`, ver modulos/game/era.js):
-// as linhas antigas continuam no banco, invisíveis ao jogo. Daqui saem só o que
-// apaga UMA pessoa (o `&game apagar` na era atual e o `&privacidade apagar` em
-// todas) e a contagem por era — nunca um DELETE em massa.
-const RPG_POR_ERA = [["rpg_personagem", "userId"], ["rpg_inventario", "userId"], ["rpg_equipado", "userId"],
-  ["rpg_magias", "userId"], ["rpg_carteira", "userId"], ["rpg_followers", "donoId"]];
-// Ofertas abertas (desafios de duelo, propostas antigas) FEITAS a esta pessoa: canceladas;
-// a custódia volta ao autor só se ele ainda tem personagem naquela era (senão o ouro iria
-// para uma carteira sem dono). As FEITAS por ela saem junto com a carteira dela.
-function rpgDesligarOfertas(u, era = null) {
-  let n = 0;
-  const filtro = era ? " AND serverId = ?" : "", p = era ? [u, u, era] : [u, u];
-  for (const of of prep(`SELECT * FROM rpg_ofertas WHERE alvoId = ? AND autorId <> ? AND estado = 'aberta'${filtro}`).all(...p)) {
-    if (getPersonagem(of.serverId, of.autorId)) {
-      if (of.itemOferecido) darItem(of.serverId, of.autorId, of.itemOferecido);
-      if (of.moedaOferecida && of.qtdOferecida > 0) creditar(of.serverId, of.autorId, of.moedaOferecida, of.qtdOferecida);
-    }
-    n += prep("UPDATE rpg_ofertas SET estado = 'cancelada', fechadoEm = ? WHERE id = ?").run(Date.now(), of.id).changes ?? 0;
+// ── P4 rpg ──
+// (2 nov 2026, decisão do Ghieh: "pode remover tudo relacionado, desde no banco")
+// O RPG saiu por completo. Na abertura do banco somem as tabelas dele (as
+// 16 que o jogo já criou, de todas as eras) e as marcas de config `__rpg_*__`
+// (imagens, mundo, versões). Idempotente: o que já não existe não entra no log, e
+// nenhuma outra tabela é tocada. XP (xp_*) e economia (eco_*) não têm ligação.
+export const TABELAS_RPG = Object.freeze(["rpg_personagem", "rpg_itens", "rpg_inventario", "rpg_equipado",
+  "rpg_follower_itens", "rpg_magias", "rpg_followers_catalogo", "rpg_followers", "rpg_moedas", "rpg_carteira",
+  "rpg_estoque", "rpg_ofertas", "rpg_unicos", "rpg_espera", "rpg_dungeons", "rpg_dungeon_ativos"]);
+function removerRpg() {
+  for (const t of TABELAS_RPG) {
+    try {
+      if (!prep("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t)) continue;
+      const n = db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get()?.n ?? 0;
+      db.exec(`DROP TABLE IF EXISTS ${t}`);
+      console.log(`[DB] P4: tabela ${t} removida (${n} linhas)`);
+    } catch (e) { console.error(`[DB] P4: remover ${t}:`, e.message); }
   }
-  n += prep(`UPDATE rpg_ofertas SET alvoId = NULL WHERE alvoId = ? AND autorId <> ?${filtro}`).run(...p).changes ?? 0;
-  n += prep(`UPDATE rpg_followers SET donoOriginal = NULL WHERE donoOriginal = ? AND (donoId IS NULL OR donoId <> ?)${filtro}`).run(...p).changes ?? 0;
-  return n;
-}
-// A pessoa numa era (o `&game apagar`): personagem, mochila, vagas, magias, ouro, aliados
-// (e os itens deles), os desafios/ofertas dela, e — pelo `prefixo` da era ("v5:%") — únicos,
-// esperas e as dungeons onde jogou. As outras eras ficam.
-export function rpgApagarDaEra(era, userId, prefixo) {
-  const u = String(userId);
-  let n = 0;
-  db.exec("BEGIN IMMEDIATE");
   try {
-    n += rpgDesligarOfertas(u, era);
-    n += prep("DELETE FROM rpg_ofertas WHERE serverId = ? AND autorId = ?").run(era, u).changes ?? 0;
-    n += prep("DELETE FROM rpg_follower_itens WHERE followerId IN (SELECT id FROM rpg_followers WHERE serverId = ? AND donoId = ?)").run(era, u).changes ?? 0;
-    for (const [t, col] of RPG_POR_ERA) n += prep(`DELETE FROM ${t} WHERE serverId = ? AND ${col} = ?`).run(era, u).changes ?? 0;
-    if (prefixo) {
-      for (const t of ["rpg_unicos", "rpg_espera"]) n += prep(`DELETE FROM ${t} WHERE userId = ? AND chave LIKE ?`).run(u, prefixo).changes ?? 0;
-      n += prep("DELETE FROM rpg_dungeon_ativos WHERE userId = ? AND dungeonId LIKE ?").run(u, prefixo).changes ?? 0;
-    }
-    db.exec("COMMIT");
-  } catch (e) { db.exec("ROLLBACK"); throw e; }
-  return n;
-}
-// A pessoa em TODAS as eras (o `&privacidade apagar`): o mesmo, sem filtro de era.
-export function rpgApagarJogador(userId) {
-  const u = String(userId);
-  let n = 0;
-  db.exec("BEGIN IMMEDIATE");
-  try {
-    n += rpgDesligarOfertas(u);
-    n += prep("DELETE FROM rpg_follower_itens WHERE followerId IN (SELECT id FROM rpg_followers WHERE donoId = ?)").run(u).changes ?? 0;
-    for (const [t, col] of [...RPG_POR_ERA, ["rpg_ofertas", "autorId"], ["rpg_unicos", "userId"], ["rpg_espera", "userId"], ["rpg_dungeon_ativos", "userId"]]) {
-      n += prep(`DELETE FROM ${t} WHERE ${col} = ?`).run(u).changes ?? 0;
-    }
-    db.exec("COMMIT");
-  } catch (e) { db.exec("ROLLBACK"); throw e; }
-  return n;
-}
-// Quantos personagens há em cada era (o `&game admin` e o plano de purga)
-export function rpgPersonagensPorEra() {
-  return prep("SELECT serverId AS era, COUNT(*) AS n FROM rpg_personagem GROUP BY serverId ORDER BY serverId").all();
+    const n = prep("DELETE FROM config WHERE serverId LIKE '\\_\\_rpg\\_%' ESCAPE '\\'").run().changes ?? 0;
+    if (n) console.log(`[DB] P4: marcas __rpg_*__ removidas da config (${n} linhas)`);
+  } catch (e) { console.error("[DB] P4: marcas __rpg_*__:", e.message); }
 }
 
-// ── P2 ia ──
-// (31 out 2026, P2) A `ia_memoria` (a memória curta de cada pessoa: "perguntou
-// sobre: …") era global e ia ao prompt em TODO servidor. Agora cada item novo leva
-// o servidor de origem na frente ("[s:<id>] …") e o prompt só vê os DESTE
-// servidor. Os itens antigos (sem a marca) ficam no banco, não vão mais ao prompt,
-// e saem quando a pessoa apaga (`&privacidade apagar`/`memoria off`).
-const MARCA_SRV = /^\[s:([0-9A-Za-z]{1,40})\] /;
-export function lembrarNoServidor(userId, serverId, { nome = null, fato }) {
-  const f = String(fato ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
-  if (!userId || !serverId || !f) return;
-  const mem = getMemoria(userId);
-  setMemoria(userId, { nome, fatos: [...(mem.fatos ?? []), `[s:${serverId}] ${f}`] });
-}
-export function memoriaDoServidor(userId, serverId) {
-  if (!userId || !serverId) return [];
-  return (getMemoria(userId).fatos ?? [])
-    .map((x) => String(x).match(MARCA_SRV) ? { s: String(x).match(MARCA_SRV)[1], f: String(x).replace(MARCA_SRV, "") } : null)
-    .filter((x) => x && x.s === serverId).map((x) => x.f);
-}
-// O `esquecer tudo` de um servidor tira da memória de cada pessoa só o que veio dele.
-export function apagarMemoriaGlobalDoServidor(serverId) {
-  if (!serverId) return 0;
-  let n = 0;
-  for (const r of prep("SELECT userId, fatos FROM ia_memoria WHERE fatos LIKE ?").all(`%[s:${serverId}]%`)) {
-    let fatos = [];
-    try { fatos = JSON.parse(r.fatos || "[]"); } catch { continue; }
-    const fica = fatos.filter((x) => String(x).match(MARCA_SRV)?.[1] !== serverId);
-    if (fica.length === fatos.length) continue;
-    n += fatos.length - fica.length;
-    prep("UPDATE ia_memoria SET fatos = ?, atualizado = ? WHERE userId = ?").run(JSON.stringify(fica), new Date().toISOString(), r.userId);
+// ── P4 ia ──
+// (2 nov 2026, decisão do Ghieh: "pode remover tudo relacionado, desde no banco")
+// O chat IA saiu por completo e a IA ficou só na moderação, que não guarda nada nestas
+// tabelas (os casos e limiares dela são staff_*, revisao_*, perfil_silencio). Na
+// abertura do banco somem as 7 tabelas da conversa: a memória (fatos de pessoa e de
+// servidor, perfil mapeado, memória curta), o histórico, o consentimento e o "não fale
+// comigo". Idempotente: o que já não existe não entra no log; nenhuma outra tabela é tocada.
+export const TABELAS_CHAT_IA = Object.freeze(["ia_memoria", "ia_historico", "ia_fatos_pessoa", "ia_fatos_servidor",
+  "ia_perfil", "ia_consentimento", "ia_silencio"]);
+function removerChatIA() {
+  for (const t of TABELAS_CHAT_IA) {
+    try {
+      if (!prep("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(t)) continue;
+      const n = db.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get()?.n ?? 0;
+      db.exec(`DROP TABLE IF EXISTS ${t}`);
+      console.log(`[DB] P4: tabela ${t} removida (${n} linhas)`);
+    } catch (e) { console.error(`[DB] P4: remover ${t}:`, e.message); }
   }
-  return n;
+}
+
+// (P4, 2 nov 2026, revisão) O gerador de imagem saiu com o chat; a contagem do teto diário dele ficava
+// num arquivo ao lado do banco (/data/imagem-teto.json: o dia, IDs de servidor e quantas). Dado de
+// funcionalidade removida, autorizado pelo dono: some na subida, uma linha no log; sem o arquivo,
+// nada (idempotente). Só esse nome, só na pasta do banco — nunca um caminho vindo do .env. (A pasta
+// dos modelos do gerador e o volume do SearXNG são grandes: ficam como instrução manual ao dono.)
+const ARQUIVO_TETO_IMAGENS = "imagem-teto.json";
+function removerTetoDeImagens(dbPath) {
+  if (!dbPath || String(dbPath).startsWith(":memory:")) return;   // banco em memória: não há pasta do banco
+  const arq = join(dirname(String(dbPath)), ARQUIVO_TETO_IMAGENS);
+  try {
+    if (!existsSync(arq)) return;
+    rmSync(arq, { force: true });
+    console.log(`[DB] P4: ${ARQUIVO_TETO_IMAGENS} removido (a contagem do teto de imagens geradas, que saiu)`);
+  } catch (e) { console.error(`[DB] P4: remover ${ARQUIVO_TETO_IMAGENS}:`, e.message); }
 }
 
 // ── P2 moderacao ──

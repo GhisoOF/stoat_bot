@@ -6,7 +6,6 @@ import { temCargoStaff } from "./acesso.js";
 import { podeNoCanal } from "./permissoes.js";
 import { curarIds } from "./pertence.js";
 import * as montar from "./montar-servidor.js";
-import * as iaMod from "../ai/conversa-config.js";   // (P2) a IA do servidor: `&assistente ia|imagem on|off`
 
 const TTL_MS = 10 * 60 * 1000;
 const sessoes = new Map();   // `${channelId}:${userId}` → sessão
@@ -303,11 +302,6 @@ const NOME_ROTEIRO = {
   servidor: { pt: "Montar o servidor", en: "Build the server", es: "Montar el servidor" },
 };
 
-// `&assistente ia|imagem on|off` = `&config ia chat|imagem on|off` (o handler é o da IA)
-async function iaDoServidor(message, qual, args, ctx) {
-  return iaMod.cmdConfigIA(message, [qual === "ia" ? "chat" : "imagem", ...args], ctx);
-}
-
 export async function cmdAssistente(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, config } = ctx;
   // IDs herdados de outro servidor (molde antigo) saem antes das perguntas:
@@ -342,11 +336,6 @@ export async function cmdAssistente(message, args, ctx) {
       colour: COR.erro,
     });
   }
-
-  // (P2, 31 out 2026) a IA do servidor: `ia on|off` (a conversa) e `imagem on|off` (era o
-  // `&chat on|off` / `&chat imagem on|off`). As chaves são as de sempre (`config.ia.chat`,
-  // `config.ia.imagem`): quem tinha a conversa ligada continua ligada.
-  if (pedido === "ia" || pedido === "imagem") return iaDoServidor(message, pedido, args.slice(1), ctx);
 
   const roteiro = ROTEIROS[pedido] ? pedido : null;
   if (!roteiro) {

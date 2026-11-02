@@ -512,9 +512,9 @@ export async function cmdAutomod(message, args, ctx) {
       const acao = avatar.acaoDoAvatar(mod);
       const julgados = julgadosPelaStaff("perfil-");
       return linha(COR.mod,
-        `🖼️ Perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "pt")}\`${acao === "silenciar" ? " até trocar" : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ sem visão (só o texto)"}${julgados ? `\n${julgados[0]}` : ""}`,
-        `🖼️ Profile ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "en")}\`${acao === "silenciar" ? " until changed" : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ no vision (text only)"}${julgados ? `\n${julgados[1]}` : ""}`,
-        `🖼️ Perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "es")}\`${acao === "silenciar" ? " hasta que cambie" : ""}${process.env.IA_SERVICO_URL ? "" : " · ⚠️ sin visión (solo el texto)"}${julgados ? `\n${julgados[2]}` : ""}`);
+        `🖼️ Perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "pt")}\`${acao === "silenciar" ? " até trocar" : ""}${avatar.temVisao() ? "" : " · ⚠️ sem visão (só o texto)"}${julgados ? `\n${julgados[0]}` : ""}`,
+        `🖼️ Profile ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "en")}\`${acao === "silenciar" ? " until changed" : ""}${avatar.temVisao() ? "" : " · ⚠️ no vision (text only)"}${julgados ? `\n${julgados[1]}` : ""}`,
+        `🖼️ Perfil ${mod.enabled !== false ? "🟢" : "🔴"} · \`${nomeAcaoAvatar(acao, "es")}\`${acao === "silenciar" ? " hasta que cambie" : ""}${avatar.temVisao() ? "" : " · ⚠️ sin visión (solo el texto)"}${julgados ? `\n${julgados[2]}` : ""}`);
     }
     if (op === "on" || op === "off") { mod.enabled = op === "on"; salvarConfig(); return onOff(op === "on", ["perfil", "profile", "perfil"]); }
     if (op === "acao" || op === "ação" || op === "action") {
@@ -537,7 +537,7 @@ export async function cmdAutomod(message, args, ctx) {
       const user = membro?.user ?? await ctx.client?.users?.fetch?.(uid).catch(() => null);
       const arq = avatar.arquivoDe(membro?.avatar) ?? avatar.arquivoDe(user?.avatar);
       if (!arq) return linha(COR.mod, `🖼️ <@${uid}> não tem foto.`, `🖼️ <@${uid}> has no picture.`, `🖼️ <@${uid}> no tiene foto.`);
-      if (!process.env.IA_SERVICO_URL) return linha(COR.aviso, "⚠️ Sem o modelo de visão.", "⚠️ No vision model.", "⚠️ Sin modelo de visión.");
+      if (!avatar.temVisao()) return linha(COR.aviso, "⚠️ Sem o modelo de visão.", "⚠️ No vision model.", "⚠️ Sin modelo de visión.");
       const r = await avatar.analisarFoto(arq);
       if (!r) return linha(COR.aviso, "⚠️ O modelo de visão não respondeu.", "⚠️ The vision model didn't answer.", "⚠️ El modelo de visión no respondió.");
       const res = r.apitou ? T(`🖼️ Apitaria: ${r.motivos.join(", ")}`, `🖼️ Would flag: ${r.motivos.join(", ")}`, `🖼️ Saltaría: ${r.motivos.join(", ")}`) : T("🖼️ Passaria.", "🖼️ Would pass.", "🖼️ Pasaría.");
@@ -649,7 +649,8 @@ export async function cmdWhitelist(message, args, ctx) {
 export async function cmdBlocklist(message, args, ctx) {
   const { cfgGlobal, estado, sendEmbed, COR, getServer, membroTemPermissao, salvarGlobal, PREFIXO } = ctx;
   const lang = lingua(ctx);
-  const server = await getServer(message);
+  // (P4) o dono do bot muda a lista na DM com a Judy (sem servidor); quem não é o dono, sem servidor, não tem a permissão
+  const server = await getServer(message).catch(() => null);
   if (!membroTemPermissao(message, server, "ManagePermissions"))
     return semPermissao(ctx, message.channel, "ManagePermissions");
 

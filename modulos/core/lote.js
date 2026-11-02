@@ -6,7 +6,7 @@
 //
 // Só vira lote se TODA linha não vazia começar com o prefixo: uma mensagem
 // com texto livre depois do comando (um &embed com descrição em várias
-// linhas, um &chat longo) continua sendo UM comando, como sempre foi.
+// linhas) continua sendo UM comando, como sempre foi.
 export const LOTE_MAX = 10;
 
 export function comandosPorLinha(conteudo, prefixo) {

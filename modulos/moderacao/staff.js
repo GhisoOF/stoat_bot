@@ -27,7 +27,7 @@ export async function cmdStaff(message, args, ctx) {
   // ── &staff → a lista (público: qualquer um pode consultar) ──
   // 12 out 2026: além dos cargos marcados, o dono do servidor, o cargo de
   // equipe dos tickets e os cargos com permissão de moderar (decisão de Ghieh)
-  // — o mesmo levantamento que a Judy usa quando perguntam "quem é da staff?".
+  // — o mesmo levantamento do `&servidor`.
   if (!sub || sub === "lista" || sub === "list") {
     const en = lang === "en";
     const T = (pt, eng, es) => tr(ctx, pt, eng, es);

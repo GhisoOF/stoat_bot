@@ -106,6 +106,19 @@ export async function registrar(ctx, categoria, { titulo, descricao, en = null, 
   }
 }
 
+// (31 out 2026, decisão do dono) o dono do bot agiu num servidor que não é dele — com um
+// comando ali ou, desde o P4, da DM com o ID do servidor: a staff de lá fica sabendo pelo log
+// (categoria própria, sempre ligada). `canalId` null = da DM. Uma fonte só (main.js e ban-global.js).
+export function registrarComandoDoDono(ctx, { autorId, canalId = null, linha }) {
+  const onde = canalId ? `<#${canalId}>` : "DM";
+  const l = String(linha ?? "").slice(0, 300);
+  return registrar(ctx, "dono", {
+    titulo: "🛠️ Comando do dono do bot", descricao: `<@${autorId}> · ${onde}\n${l}`,
+    en: { titulo: "🛠️ Bot owner command", descricao: `<@${autorId}> · ${onde}\n${l}` },
+    es: { titulo: "🛠️ Comando del dueño del bot", descricao: `<@${autorId}> · ${onde}\n${l}` },
+  });
+}
+
 // (P2, 31 out 2026) o `&log` (cmdLog) virou `&config log`: mora em modulos/moderacao/config-log.js
 // (o core não tem handler de comando).
 

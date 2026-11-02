@@ -15,9 +15,8 @@ import { trechoPronto } from "../core/aliases.js";
 import * as confianca from "./confianca.js";
 import * as relatorioHora from "../ferramentas/relatorio.js";
 import { canalDaStaff } from "./pertence.js";
-import { chaveServicoIA } from "../ai/servicos.js";
+import * as modelo from "./modelo.js";   // (P4) a IA da moderação, num lugar só
 
-const IA_URL = (process.env.IA_SERVICO_URL || "").replace(/\/$/, "");
 const CDN = (process.env.CDN_URL || "https://cdn.stoatusercontent.com").replace(/\/$/, "");
 const ALERTA = 4;
 const FILA_MAX = Number(process.env.IMAGEM_FILA_MAX || 20);
@@ -86,7 +85,7 @@ export function pontuarDescricao(descricao, { riscoModelo = false, recusou = fal
 // roda na mesma máquina do bot; analisar toda imagem de todo mundo pesa.
 export function deveAnalisar(config, serverId, userId) {
   const cfg = config?.automod?.antiImagem ?? {};
-  if (cfg.enabled === false || !IA_URL) return false;
+  if (cfg.enabled === false || !modelo.temServico()) return false;
   return cfg.todos === true || confianca.contaNova(serverId, userId);
 }
 
@@ -138,7 +137,6 @@ export function montarAlerta({ userId, canalId, messageId, descricao, r, staff =
 // muitas imagens juntas. Estourou, descarta (e registra) em vez de travar.
 const fila = [];
 let rodando = false;
-export function tamanhoFila() { return fila.length; }
 
 // A mesma imagem (tamanho + dimensões) é analisada uma vez só a cada 30 min —
 // no ataque de 2 out a mesma bandeira entrou na fila dezenas de vezes e
@@ -175,11 +173,7 @@ async function processar() {
 }
 
 async function analisarUma({ ctx, userId, canalId, messageId, url }) {
-  const headers = { "Content-Type": "application/json", ...(chaveServicoIA() ? { "x-chave": chaveServicoIA() } : {}) };
-  const resp = await fetch(`${IA_URL}/moderar-imagem`, {
-    method: "POST", headers, body: JSON.stringify({ url }), signal: AbortSignal.timeout(120_000),
-  });
-  const j = await resp.json().catch(() => ({}));
+  const j = await modelo.descreverImagem(url);
   if (j?.erro || !j?.descricao) { console.warn(`[IMAGEM] ${userId}: ${j?.erro ?? "sem descrição"}`); return; }
   const r = pontuarDescricao(j.descricao, { riscoModelo: j.riscoModelo, recusou: j.recusou === true });
   console.log(`[IMAGEM] ${userId} nota ${r.nota.toFixed(1)} [${r.categorias.join(",")}] ${r.alertar ? "→ ALERTA" : ""}`);

@@ -1,26 +1,21 @@
 // llama-swap-config.js — o /data/llama-swap.yaml que o iniciar.js escreve.
 //
-// O bot pede o modelo por PAPEL: "conversa" e "visao". Com dois modelos
-// diferentes, são duas entradas e o llama-swap troca um pelo outro sob
-// demanda. Mas em produção o MESMO modelo faz os dois papéis (Gemma 4,
-// multimodal, desde 11 set 2026) — e duas entradas com o mesmo `cmd` são,
-// para o llama-swap, dois modelos: cada imagem descarregava a conversa e
-// carregava uma 2ª cópia do mesmo arquivo, e a volta descarregava de novo.
-// Com o E2B (~3 GB) isso custava segundos; com um modelo de 17 GB (Gemma 4
-// 26B-A4B) seriam dezenas de segundos por troca, ou duas cópias na RAM.
-// Mesmo modelo → UMA entrada, e "visao" vira apelido (`aliases`) dela.
-//
-// "moderacao" (16 out 2026, MODELO_MODERACAO): um modelo PEQUENO só para o
-// juiz da moderação (temas proibidos, &modia). Ele fica num grupo próprio
-// sem troca (swap: false), não exclusivo e persistente: carregar a conversa
-// não o derruba, e carregar ele não derruba a conversa — os dois ficam na
-// memória juntos, e uma onda de mensagens a julgar não trava o chat. Usa o
-// `groups:` do topo (o formato antigo, que todas as versões do llama-swap
-// leem); o bloco `routing.router` novo não pode aparecer junto.
-// Sem visão (só conversa + moderação): nenhuma entrada "visao".
-// `ctxModeracao`: contexto próprio do juiz (as mensagens a julgar são curtas;
-// com o LLAMA_CTX da conversa, 32k, ele reservava ~1 GB de KV à toa).
-//
+// (P4, 2 nov 2026) O chat IA saiu: o bot pede o modelo por PAPEL, e os papéis são só
+// os da moderação — "moderacao" (o juiz dos temas proibidos) e "visao" (as imagens).
+// Mesmo modelo nos dois (um multimodal) → UMA entrada, e "visao" vira apelido
+// (`aliases`) dela: duas entradas com o mesmo `cmd` são, para o llama-swap, dois
+// modelos — cada imagem carregaria uma 2ª cópia do mesmo arquivo.
+// Modelos diferentes → duas entradas num grupo sem troca (swap: false), não
+// exclusivo: os dois ficam na memória juntos, e uma onda de imagens num raid não
+// derruba o juiz (nem o contrário). Usa o `groups:` do topo (o formato antigo, que
+// todas as versões do llama-swap leem); o bloco `routing.router` novo não pode
+// aparecer junto. Sem visão: só o juiz.
+// `ctxJuiz` (LLAMA_CTX_MODERACAO): contexto próprio do juiz (as mensagens a julgar
+// são curtas); sem ele, o LLAMA_CTX de todos (`ctx`, o padrão do `comando`).
+// (P4, 2 nov 2026, revisão) Juiz e visão no MESMO modelo = uma entrada só: ela usa o MAIOR
+// dos dois contextos — a imagem precisa do contexto da visão, e um LLAMA_CTX_MODERACAO
+// pequeno não pode cortá-lo. Modelos diferentes: cada um com o seu.
+
 // (31 out 2026, R10) O que vem do .env e entra na linha de comando do llama ou
 // no YAML passa por aqui antes. Um MODELO com quebra de linha escrevia chaves
 // novas no YAML; um LLAMA_FLAGS com `--host 0.0.0.0` abria o modelo para a rede.
@@ -49,44 +44,45 @@ export function flagsDoLlama(texto = "") {
   return pedacos;
 }
 
-export function montarConfigSwap({ conversa, visao, moderacao = null, comando, ttlConversa = 3600, ttlVisao = 600, ttlModeracao = ttlConversa, ctxModeracao = null }) {
+export function montarConfigSwap({ juiz, visao = null, comando, ttlJuiz = 300, ttlVisao = 600, ctxJuiz = null, ctx = null }) {
   // O formato completo (usuario/repo:quant) o iniciar.js confere no boot com
   // modeloValido; aqui, a última barreira do YAML: nome sem espaço, aspas, #
   // ou quebra de linha, e nenhum `cmd` com mais de uma linha.
-  for (const m of [conversa, visao, moderacao]) {
+  for (const m of [juiz, visao]) {
     if (m != null && !/^[\w.\/:-]{1,200}$/.test(String(m))) throw new Error(`modelo inválido para o llama-swap: ${JSON.stringify(String(m).slice(0, 80))}`);
   }
-  if (ctxModeracao != null && !/^\d{1,7}$/.test(String(ctxModeracao))) throw new Error("LLAMA_CTX_MODERACAO tem de ser um número inteiro");
+  if (juiz == null) throw new Error("llama-swap sem o modelo do juiz");
+  if (ctxJuiz != null && !/^\d{1,7}$/.test(String(ctxJuiz))) throw new Error("LLAMA_CTX_MODERACAO tem de ser um número inteiro");
+  if (ctx != null && !/^\d{1,7}$/.test(String(ctx))) throw new Error("LLAMA_CTX tem de ser um número inteiro");
   const cmd = (...a) => {
     const c = String(comando(...a));
     if (/[\r\n]/.test(c)) throw new Error("comando do llama-swap com quebra de linha");
     return c;
+  };
+  const mesmo = !!visao && visao === juiz;
+  // o mesmo modelo nos dois papéis: o maior contexto (sem `ctx` conhecido, o padrão do comando, que é o da visão)
+  const cmdDoJuiz = () => {
+    if (!ctxJuiz) return cmd(juiz);
+    if (!mesmo) return cmd(juiz, ctxJuiz);
+    return ctx == null ? cmd(juiz) : cmd(juiz, String(Math.max(Number(ctxJuiz), Number(ctx))));
   };
   const linhas = [
     // 10min de tolerância para o servidor ficar de pé: o padrão de 2min do
     // llama-swap matava cargas lentas (e qualquer download residual) no meio.
     "healthCheckTimeout: 600",
     "models:",
-    "  conversa:",
-    `    cmd: ${cmd(conversa)}`,
-    `    ttl: ${ttlConversa}`,
+    "  moderacao:",
+    `    cmd: ${cmdDoJuiz()}`,
+    `    ttl: ${ttlJuiz}`,
   ];
-  const apelidos = [];
-  if (visao === conversa || visao === undefined) apelidos.push("visao");
-  if (moderacao && moderacao === conversa) apelidos.push("moderacao");
-  if (apelidos.length) {
-    linhas.push("    aliases:", ...apelidos.map((a) => `      - ${a}`));
-    // /v1/models lista o apelido também (o &chat status e quem confere a
-    // lista de modelos continuam vendo "visao")
+  if (mesmo) {
+    // /v1/models lista o apelido também (o &debug e quem confere a lista de modelos veem "visao")
+    linhas.push("    aliases:", "      - visao");
     linhas.splice(1, 0, "includeAliasesInList: true");
-  }
-  if (visao && visao !== conversa) {
+  } else if (visao) {
     linhas.push("  visao:", `    cmd: ${cmd(visao)}`, `    ttl: ${ttlVisao}`);
-  }
-  if (moderacao && moderacao !== conversa) {
-    linhas.push("  moderacao:", `    cmd: ${ctxModeracao ? cmd(moderacao, ctxModeracao) : cmd(moderacao)}`, `    ttl: ${ttlModeracao}`);
     linhas.push("groups:", "  moderacao:", "    swap: false", "    exclusive: false", "    persistent: true",
-      "    members:", "      - moderacao");
+      "    members:", "      - moderacao", "      - visao");
   }
   return linhas.join("\n") + "\n";
 }

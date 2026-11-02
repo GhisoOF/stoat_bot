@@ -1,7 +1,6 @@
 // &economia — a moeda DO SERVIDOR (pedido de Ghieh, 1 out 2026).
 //
-// À parte do RPG (que agora é um mundo só, com duas moedas): aqui cada
-// servidor tem UMA moeda própria, simples:
+// Cada servidor tem UMA moeda própria, simples:
 //   &economia minerar      → ganha um punhado, com espera entre uma e outra
 //   &economia saldo [@x]   · &economia top · &economia pagar @x <qtd>
 //   &economia loja         → cargos à venda · &economia comprar <cargo>

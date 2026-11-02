@@ -8,7 +8,7 @@ services:
     restart: unless-stopped
     # O .env inteiro entra no container. Antes, só as variáveis listadas aqui
     # uma a uma chegavam: das 165 que o código lê, 28 passavam — e ajustar
-    # SD_MODELO_TIPO, SPOTIFY_ID, STOAT_API ou CDN_URL no .env não fazia
+    # LLAMA_CTX, SPOTIFY_ID, STOAT_API ou CDN_URL no .env não fazia
     # efeito nenhum, sem aviso. Este arquivo deixou de ser uma lista para
     # manter em dia. (O .env é obrigatório: `cp .env.example .env`.)
     env_file:
@@ -24,21 +24,19 @@ services:
       - DB_PATH=/data/stoat.db
       - CONFIG_PATH=/data/automod-config.json
       - TZ=${TZ:-America/Sao_Paulo}
-      - IA=${IA:-1}                     # 0 desliga todos os módulos de IA
-      - IMAGEM=${IMAGEM:-0}             # (P2) 1 liga a geração de imagem embutida; sem ela, nada é baixado
+      - IA=${IA:-1}                     # 0 desliga a IA da moderação (o juiz dos temas e a visão das imagens)
       - VOZ_ATIVA=${VOZ_ATIVA:-0}       # 1 liga a voz nas calls (Piper na imagem)
-      - SEARXNG_URL=${SEARXNG_URL:-http://searxng:8080}   # o serviço que sobe no compose
       - WEBHOOK_PORTA=${WEBHOOK_PORTA:-8095}
       - WEBHOOK_ESCUTA=0.0.0.0          # dentro do container; a exposição na máquina é o WEBHOOK_BIND da porta abaixo
       - LLAMA_NGL=${LLAMA_NGL:-999}     # camadas do modelo na GPU (IA_MODO=local)
-      - LLAMA_CTX=${LLAMA_CTX:-}        # contexto do modelo local (tokens; vazio = 8192, ou 4096 com CONVERSA=0)
+      - LLAMA_CTX=${LLAMA_CTX:-}        # contexto do modelo local (tokens; vazio = 4096)
     extra_hosts:
       - "host.docker.internal:host-gateway"
     # Endurecimento (31 out 2026, R10/R11): o processo roda como `node`, sem
     # nenhuma capability do kernel e sem poder ganhar privilégio (setuid). Teto
-    # de processos/threads (o llama-server e o sd.cpp usam uma thread por núcleo)
-    # e de memória: a máquina tem 32 GB unificados e roda LLM + gerador de
-    # imagem; MEMORIA_LIMITE no .env ajusta (ex.: 12g numa máquina de 16 GB).
+    # de processos/threads (o llama-server usa uma thread por núcleo) e de
+    # memória: a máquina tem 32 GB unificados e roda o LLM da moderação;
+    # MEMORIA_LIMITE no .env ajusta (ex.: 12g numa máquina de 16 GB).
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
     pids_limit: 1024
@@ -68,31 +66,5 @@ services:
         max-size: "${LOG_MAX_TAMANHO:-10m}"
         max-file: "${LOG_MAX_ARQUIVOS:-5}"
 
-  # ── Busca na web da IA ──────────────────────────────────
-  # Sobe junto por padrão: `docker compose up -d` traz tudo.
-  # Para rodar SÓ o bot:  docker compose up -d stoat-bot
-  searxng:
-    # versão fixa (tag + digest): `latest` trocava o buscador sem ninguém pedir
-    image: searxng/searxng:2026.10.27-b5ed73fcb@sha256:0f48ffe2152f388f5eaede27f96b610449cebfc890d0ad457304475a54ad7b6e
-    container_name: stoat-searxng
-    restart: unless-stopped
-    # O segredo do SearXNG vem do .env (antes estava ESCRITO no arquivo de
-    # exemplo, igual para todo mundo). Sem ele o compose nem sobe — gere com:
-    #   openssl rand -hex 32
-    environment:
-      - SEARXNG_SECRET=${SEARXNG_SECRET:?defina SEARXNG_SECRET no .env (gere com openssl rand -hex 32)}
-    # as capabilities que a imagem do SearXNG usa para trocar de usuário, e só elas
-    cap_drop: [ALL]
-    cap_add: [CHOWN, SETGID, SETUID]
-    security_opt: [no-new-privileges:true]
-    # a busca na web só serve ao chat: BUSCA_WEB=0 no .env não sobe este
-    # container (junto com CONVERSA=0, para economizar memória e CPU)
-    deploy:
-      replicas: ${BUSCA_WEB:-1}
-    volumes:
-      - ./ia-servico/searxng-settings.example.yml:/etc/searxng/settings.yml:ro
-      - searxng_data:/var/cache/searxng
-
 volumes:
   stoat_data:
-  searxng_data:

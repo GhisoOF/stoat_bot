@@ -1,23 +1,19 @@
 // &info (id `sobre`) e &ping — saíram do geral.js no P2 (31 out 2026).
 // (namespace: os módulos de outras áreas mudam no P2 — um nome que sumir dá `false`, não derruba o boot)
-import * as gating from "../ai/gating.js";
-import * as mundoMod from "../game/mundo.js";
+import * as modelo from "./modelo.js";   // (P4) a IA que sobrou: só a da moderação
 import { citar, citarInterno } from "../core/aliases.js";
 import { URL_POLITICA } from "../ferramentas/privacidade.js";
 import { GRUPOS_AUTOMOD, estadoDoGrupo, escadaDePunicao, rotuloDegrau } from "./automod-engine.js";
 import { servidorNaLista } from "../core/env.js";
 import * as db from "../core/db.js";
 import * as banGlobal from "./ban-global.js";
+import { soDoDono } from "./visao.js";   // (P4) os comandos só do dono do bot (só na DM) não contam aqui
 import { nomeModo } from "../core/nomes-automod.js";
 import { tr, lingua } from "../core/i18n.js";
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-const temIA = (sid) => !!gating.iaNoEnv?.(sid);
-const chatAqui = (sid) => !!gating.conversaAqui?.(sid);
-const imagemLigadaAqui = (sid) => !!gating.imagemAqui?.(sid);
-const podeIA = (sid) => { try { return temIA(sid); } catch { return false; } };
 
 // Conta as linhas de código do projeto (uma vez, com cache).
 let _linhasCache = null;
@@ -86,19 +82,21 @@ export async function cmdInfo(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO, estado, config, serverId } = ctx;
   const lang = lingua(ctx);
   const en = lang === "en";
-  const comIA = (() => { try { return temIA(serverId); } catch { return false; } })();
-  const chatLigado = (() => { try { return chatAqui(serverId); } catch { return false; } })();
+  // (P4) a IA ficou só na moderação: o juiz dos temas proibidos e a visão das imagens
+  const juiz = modelo.temJuiz();
+  const visao = modelo.temServico() && !!modelo.modeloVisao();
+  const comIA = juiz || visao;
 
   // conta comandos, linhas e uptime de forma resiliente
   // Um comando por função (os apelidos apontam para a mesma), sem os que não
-  // valem aqui: desativados neste servidor, só-IA fora da IA, o painel do
-  // dono e o &cargomudo aposentado.
+  // valem aqui: desativados neste servidor, os só do dono do bot (P4: só na DM — o nível
+  // "dono" do MAPA do visao.js) e o &cargomudo aposentado.
   const nComandos = (() => {
     if (!estado?.rotas) return null;
     const porFuncao = new Map();
     for (const [nome, fn] of Object.entries(estado.rotas)) if (!porFuncao.has(fn)) porFuncao.set(fn, nome);
-    const fora = new Set(["servidores", "cargomudo", ...(config?.comandosDesativados ?? [])]);
-    return [...porFuncao.values()].filter((n) => !fora.has(n) && (!estado.COMANDOS_SO_IA?.has(n) || podeIA(serverId))).length;
+    const fora = new Set(["cargomudo", ...(config?.comandosDesativados ?? [])]);
+    return [...porFuncao.values()].filter((n) => !fora.has(n) && !soDoDono(n)).length;
   })();
   const nLinhas = contarLinhas();
   const up = process.uptime();
@@ -114,14 +112,11 @@ export async function cmdInfo(message, args, ctx) {
   const modulosOn = gruposAm.filter((x) => x.ligadas > 0).length;
   const nModulos = gruposAm.length;
   const vozAqui = servidorNaLista("TTS_SERVIDORES", serverId);
-  // (22 out 2026) a imagem é escolha de cada servidor (`&chat imagem on`)
-  const geraImagem = (() => { try { return imagemLigadaAqui(serverId); } catch { return false; } })();
   const nomeBot = ctx.client?.user?.displayName || "Judy";   // o nome de exibição; a conta (username) pode chamar outra coisa, como "Cobaia"
   const criador = (process.env.CRIADOR || "").trim();
   const xpOn = !!config?.xp?.enabled;
   const logOn = !!config?.log?.canalId;
   const rssN = (() => { try { return db.listarFeeds?.(serverId)?.length ?? 0; } catch { return 0; } })();
-  const nPersonagens = (() => { try { return db.listarPersonagens?.(mundoMod.MUNDO, 9999)?.length ?? 0; } catch { return 0; } })();
   const banGlobalModo = banGlobal.modoDe(config);
   const idioma = en ? "English" : "Português";
 
@@ -133,10 +128,7 @@ export async function cmdInfo(message, args, ctx) {
     `${sim(logOn)} **Log channel** — ${logOn ? `<#${config.log.canalId}>` : "not set"}`,
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Global ban list** — mode \`${banGlobalModo}\``,
-    `🎲 **RPG** _(one world for every server)_ — ${nPersonagens} character(s)`,
-    comIA && !chatLigado ? `🤖 **AI (Judy)** — available, off on this server (\`${citar("assistente.ia", "en", PREFIXO)} on\`)`
-    : comIA ? `🤖 **AI (Judy)** — enabled here: chat, code, web search, exact math, image reading${geraImagem ? " and **image generation**" : ""}`
-          : `🤖 **AI (Judy)** — runs only on the servers enabled by the bot owner: chat, code, web search, exact math and image reading`,
+    `${sim(comIA)} **Moderation AI** — ${comIA ? [juiz && "confirms banned topics", visao && "looks at images and profile pictures"].filter(Boolean).join(" · ") : "off"}`,
     `🎫🪝🔊 **Tickets · Webhooks · Voice** — ${db.listarTickets(serverId).length} open ticket(s) · ${db.listarGanchos(serverId).length} webhook(s) · ${!vozAqui ? "voice and music not available here" : config?.tts?.ativo && config?.tts?.canalVoz ? `voice and music in <#${config.tts.canalVoz}>` : `voice and music: \`${citarInterno("entrar", PREFIXO)}\` from any channel, while in a call`}`,
   ];
   const estadoPT = () => [
@@ -146,10 +138,7 @@ export async function cmdInfo(message, args, ctx) {
     `${sim(logOn)} **Canal de log** — ${logOn ? `<#${config.log.canalId}>` : "não definido"}`,
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Lista global de bans** — modo \`${banGlobalModo}\``,
-    `🎲 **RPG** _(um mundo só, em todos os servidores)_ — ${nPersonagens} personagem(ns)`,
-    comIA && !chatLigado ? `🤖 **IA (Judy)** — disponível, desligada neste servidor (\`${citar("assistente.ia", "pt", PREFIXO)} on\`)`
-    : comIA ? `🤖 **IA (Judy)** — habilitada aqui: conversa, código, busca na web, contas exatas, leitura de imagens${geraImagem ? " e **geração de imagens**" : ""}`
-          : `🤖 **IA (Judy)** — funciona apenas nos servidores habilitados pelo dono do bot: conversa, código, busca na web, contas exatas e leitura de imagens`,
+    `${sim(comIA)} **IA da moderação** — ${comIA ? [juiz && "confirma os temas proibidos", visao && "olha imagens e fotos de perfil"].filter(Boolean).join(" · ") : "desligada"}`,
     `🎫🪝🔊 **Tickets · Webhooks · Voz** — ${db.listarTickets(serverId).length} ticket(s) aberto(s) · ${db.listarGanchos(serverId).length} webhook(s) · ${!vozAqui ? "voz e música indisponíveis aqui" : config?.tts?.ativo && config?.tts?.canalVoz ? `voz e música em <#${config.tts.canalVoz}>` : `voz e música: \`${citarInterno("entrar", PREFIXO)}\` de qualquer canal, estando numa call`}`,
   ];
   const estadoES = () => [
@@ -159,10 +148,7 @@ export async function cmdInfo(message, args, ctx) {
     `${sim(logOn)} **Canal de registro** — ${logOn ? `<#${config.log.canalId}>` : "no definido"}`,
     `${sim(rssN)} **RSS** — ${rssN} feed(s)`,
     `${sim(banGlobalModo !== "off")} **Lista global de bans** — modo \`${banGlobalModo}\``,
-    `🎲 **RPG** _(un solo mundo para todos los servidores)_ — ${nPersonagens} personaje(s)`,
-    comIA && !chatLigado ? `🤖 **IA (Judy)** — disponible, desactivada en este servidor (\`${citar("assistente.ia", "es", PREFIXO)} on\`)`
-    : comIA ? `🤖 **IA (Judy)** — habilitada aquí: conversación, código, búsqueda web, cálculos exactos, lectura de imágenes${geraImagem ? " y **generación de imágenes**" : ""}`
-          : `🤖 **IA (Judy)** — solo funciona en los servidores habilitados por el dueño del bot: conversación, código, búsqueda web, cálculos exactos y lectura de imágenes`,
+    `${sim(comIA)} **IA de la moderación** — ${comIA ? [juiz && "confirma los temas prohibidos", visao && "mira imágenes y fotos de perfil"].filter(Boolean).join(" · ") : "desactivada"}`,
     `🎫🪝🔊 **Tickets · Webhooks · Voz** — ${db.listarTickets(serverId).length} ticket(s) abierto(s) · ${db.listarGanchos(serverId).length} webhook(s) · ${!vozAqui ? "voz y música no disponibles aquí" : config?.tts?.ativo && config?.tts?.canalVoz ? `voz y música en <#${config.tts.canalVoz}>` : `voz y música: \`${citar("entrar", "es", PREFIXO)}\` desde cualquier canal, estando en una llamada`}`,
   ];
   // só o idioma da tela é montado (cada lista consulta o banco)
@@ -176,7 +162,7 @@ export async function cmdInfo(message, args, ctx) {
   await sendEmbed(message.channel, tr(ctx, {
     title: `🤖 ${nomeBot}`,
     description: [
-      `Bot de moderação, automod, níveis, voz${comIA ? ", IA" : ""} e RPG para o Stoat.`,
+      `Bot de moderação, automod, níveis${comIA ? ", voz e IA" : " e voz"} para o Stoat.`,
       "",
       "**Neste servidor**",
       ...estadoLinhas.filter(Boolean),
@@ -193,7 +179,7 @@ export async function cmdInfo(message, args, ctx) {
   }, {
     title: `🤖 ${nomeBot}`,
     description: [
-      `Moderation, automod, levels, voice${comIA ? ", AI" : ""} and RPG bot for Stoat.`,
+      `Moderation, automod, levels${comIA ? ", voice and AI" : " and voice"} bot for Stoat.`,
       "",
       "**On this server**",
       ...estadoLinhas.filter(Boolean),
@@ -210,7 +196,7 @@ export async function cmdInfo(message, args, ctx) {
   }, {
     title: `🤖 ${nomeBot}`,
     description: [
-      `Bot de moderación, automod, niveles, voz${comIA ? ", IA" : ""} y RPG para el Stoat.`,
+      `Bot de moderación, automod, niveles${comIA ? ", voz e IA" : " y voz"} para el Stoat.`,
       "",
       "**En este servidor**",
       ...estadoLinhas.filter(Boolean),

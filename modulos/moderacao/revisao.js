@@ -26,12 +26,12 @@
 
 import { createHash } from "node:crypto";
 import * as db from "../core/db.js";
-import * as store from "../core/config-store.js";
 import { numero } from "../core/env.js";
 import { pseudonimo } from "../core/pseudonimo.js";
 import { textoDeFora } from "../core/seguranca.js";
 import { registrarErro } from "../core/erros.js";
 import { tr } from "../core/i18n.js";
+import { donos, ehDono, idiomaDoDono, dmDoDono as abrirDmDoDono, esquecerDm } from "../core/dono.js";
 
 // ── vocabulário da interface (BRIEF-P3a) ──
 // (31 out 2026, P3a, staff) antes: também o tipo/origem "staff" (o sinal da punição manual) e a
@@ -61,15 +61,11 @@ export const horaDaRodada = () => numero("REVISAO_HORA", 21, { min: 0, max: 23, 
 export const fracaoDaAmostra = () => numero("REVISAO_AMOSTRA", 0.02, { min: 0, max: 0.1 });
 
 export const inicioDoDia = (agora = Date.now()) => Math.floor(agora / DIA) * DIA;   // UTC
-export const donos = () => (process.env.SUPER_ADMINS || "").split(",").map((x) => x.trim()).filter(Boolean);
-export const ehDono = (id) => !!id && donos().includes(String(id));
+// (P4) quem é o dono do bot e a DM dele: core/dono.js (a mesma fonte do relatório por hora)
+export { donos, ehDono };
 
-// O idioma do que a fila escreve na DM: o do servidor do dono (RELATORIO_SERVIDOR), senão o padrão do bot.
-export function idiomaDoDono() {
-  const sid = (process.env.RELATORIO_SERVIDOR || "").trim() || null;
-  try { return store.configDoServidor(sid)?.language ?? store.configDoServidor(null)?.language ?? "en"; }
-  catch { return "en"; }
-}
+// O idioma do que a fila escreve na DM: core/dono.js (o mesmo dos comandos do dono na DM).
+export { idiomaDoDono };
 const ctxDono = () => ({ config: { language: idiomaDoDono() } });
 
 // ── o código do caso: 5 caracteres, letra-dígito-letra-letra-dígito (ex.: K7FQ2) ──
@@ -340,7 +336,6 @@ export function escolherDoDia({ agora = Date.now(), vagas = null, sorteio = Math
 // ── a DM ──
 let cfg = null;    // { client, enviar(canal, embed) → mensagem, editar(canalId, msgId, embed) }; null = fila desligada
 let timer = null;
-let dmCache = null;
 // Os números do .env são conferidos aqui (o main.js chama no boot): inválido → erro alto e a fila
 // fica DESLIGADA: nenhum caso novo é gravado (`registrarCaso` devolve código null, `amostrar` false).
 // A retenção do que já está no banco (e a edição das DMs que perderam o trecho) roda do mesmo jeito.
@@ -361,16 +356,8 @@ export function configurar({ client, enviar, editar = null } = {}) {
   cfg = { client, enviar, editar: editor };
   armar();
 }
-export function desligar() { if (timer) clearTimeout(timer); timer = null; cfg = null; dmCache = null; }
-async function dmDoDono() {
-  if (dmCache) return dmCache;
-  const id = donos()[0];
-  if (!id || !cfg?.client) return null;
-  const user = cfg.client.users?.get?.(id) ?? await cfg.client.users?.fetch?.(id).catch(() => null);
-  const dm = await user?.openDM?.();
-  if (dm) dmCache = dm;
-  return dm ?? null;
-}
+export function desligar() { if (timer) clearTimeout(timer); timer = null; esquecerDm(cfg?.client); cfg = null; }
+const dmDoDono = () => (cfg?.client ? abrirDmDoDono(cfg.client) : Promise.resolve(null));
 const NOME_TIPO = {
   "perfil-imagem": ["perfil (imagem)", "profile (image)", "perfil (imagen)"], "perfil-texto": ["perfil (texto)", "profile (text)", "perfil (texto)"],
   assunto: ["assunto", "topic", "tema"], imagem: ["imagem", "image", "imagen"],

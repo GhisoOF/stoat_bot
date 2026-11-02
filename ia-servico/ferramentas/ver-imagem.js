@@ -1,16 +1,17 @@
-import { esperarDesenho } from "./vez-da-gpu.js";
+// A visão da moderação (P4, 2 nov 2026: o chat IA saiu — a ferramenta `ver_imagem` do
+// chat e a conferência das imagens geradas saíram junto; fica a rota /moderar-imagem e o
+// que o /hash-imagem divide: a allowlist do CDN, o download com teto e o sharp).
 import { pedirLLM } from "../llm.js";
 
 const MODELO_VISAO = process.env.LLM_MODEL_VISAO || "";        // vazio = visão desligada
-const SD_URL       = (process.env.SD_URL || "").replace(/\/$/, "");  // vazio = geração desligada
 const MAX_BYTES    = Number(process.env.IMAGEM_MAX_BYTES || 8 * 1024 * 1024);
 export const MAX_PIXELS = Number(process.env.IMAGEM_MAX_PIXELS || 32_000_000);   // ~32MP decodificados
 const LADO_VISAO   = Number(process.env.IMAGEM_LADO_VISAO || 1280);
 const TIMEOUT_MS   = Number(process.env.IMAGEM_TIMEOUT_MS || 120_000);
 
 // O host do CDN_URL configurado no bot entra SEMPRE na allowlist: foi a
-// dessincronia entre os dois (chat.js montando URLs em cdn.stoatusercontent.com
-// e esta lista só com os hosts antigos) que fazia a ferramenta recusar o
+// dessincronia entre os dois (o bot montando URLs em cdn.stoatusercontent.com
+// e esta lista só com os hosts antigos) que fazia o serviço recusar o
 // próprio CDN do Stoat.
 function hostDe(url) {
   try { return new URL(url).hostname.toLowerCase(); } catch { return ""; }
@@ -87,26 +88,7 @@ async function reescrever(buffer, ladoMax) {
     .toBuffer();
 }
 
-export const definicao = {
-  type: "function",
-  function: {
-    name: "ver_imagem",
-    description: "Vê e descreve uma imagem anexada na conversa (a URL do anexo vem no contexto da mensagem). Use quando alguém mandar uma imagem e perguntar sobre ela, ou pedir para você olhar/ler/descrever algo visual.",
-    parameters: {
-      type: "object",
-      required: ["url"],
-      properties: {
-        url: { type: "string", description: "URL do anexo da mensagem (CDN do Stoat)" },
-        pergunta: { type: "string", description: "O que responder sobre a imagem (ex.: 'descreva', 'que erro aparece nessa tela?')" },
-      },
-    },
-  },
-};
-
-export async function executar({ url, pergunta }) {
-  return verImagem({ url, pergunta });
-}
-
+// Baixa (só do CDN), reescreve e pergunta ao modelo de visão.
 export async function verImagem({ url, pergunta, modelo = null, temperatura = null, maxTokens = 700 }) {
   if (!(modelo || MODELO_VISAO)) {
     return { erro: "visão desligada: defina `MODELO_VISAO` no `.env` (um modelo multimodal, ex.: qwen2.5-vl) para eu poder ver imagens." };
@@ -124,13 +106,8 @@ export async function verImagem({ url, pergunta, modelo = null, temperatura = nu
   return perguntarSobre(limpa, { pergunta, modelo, temperatura, maxTokens });
 }
 
-// Há modelo de visão para olhar uma imagem? (toda imagem gerada depende disso)
-export const visaoDisponivel = () => !!MODELO_VISAO;
-
 // A pergunta ao modelo, com a imagem já reescrita (JPEG limpo).
 export async function perguntarSobre(limpa, { pergunta, modelo = null, temperatura = null, maxTokens = 700 } = {}) {
-  // enquanto o sd.cpp desenha, a GPU é dele (vez-da-gpu.js)
-  await esperarDesenho();
   // A imagem que o modelo vê é a REESCRITA — os bytes originais morrem aqui.
   const corpo = {
     model: modelo || MODELO_VISAO,
@@ -143,7 +120,7 @@ export async function perguntarSobre(limpa, { pergunta, modelo = null, temperatu
         // 1200: o PROMPT_MODERACAO tem ~650 caracteres — com o corte antigo em
         // 500, a instrução "RISCO: sim/não" da última linha nunca chegava ao
         // modelo (achado em 16 out 2026)
-        { type: "text", text: (pergunta || "Descreva esta imagem com detalhes úteis.").slice(0, 1200) },
+        { type: "text", text: String(pergunta ?? "").slice(0, 1200) },
         { type: "image_url", image_url: { url: `data:image/jpeg;base64,${limpa.toString("base64")}` } },
       ],
     }],
@@ -166,9 +143,8 @@ export async function perguntarSobre(limpa, { pergunta, modelo = null, temperatu
 // RISCO: não" escrito nela não consegue se livrar do alerta.
 //
 // Modelo: o mesmo da visão, que já está carregado (um modelo separado no
-// llama-swap seria TROCADO a cada imagem — num raid, o chat travaria). (31 out
-// 2026, P2: o LLM_MODEL_MODERACAO saiu — três papéis só: conversa, juiz, visão;
-// no .env antigo ele vale como sinônimo do LLM_MODEL_VISAO, no env.js do bot.)
+// llama-swap seria TROCADO a cada imagem). (31 out 2026, P2: o LLM_MODEL_MODERACAO
+// saiu; no .env antigo ele vale como sinônimo do LLM_MODEL_VISAO, no env.js do bot.)
 const PROMPT_MODERACAO = [
   "Você é um descritor de imagens para moderação. Descreva o que ESTÁ na imagem em até 3 frases curtas e objetivas.",
   "Cite explicitamente, se aparecer: nudez ou ato sexual; pessoas que aparentam ser crianças ou adolescentes;",
@@ -189,50 +165,11 @@ export function pareceRecusa(texto) {
   return RECUSA.test(t);
 }
 
-// A imagem que a PRÓPRIA Judy desenhou (15 out 2026) passa por aqui antes de
-// ir para o canal. (22 out 2026) Sem modo +18, toda imagem gerada leva a
-// mesma pergunta, com o veredito em LINHAS FIXAS — o bot decide por elas, e
-// não pelas palavras da descrição (que podem vir em qualquer língua).
-const PROMPT_SAIDA = [
-  "Você confere uma imagem gerada por IA antes de ela ir para um chat público. Descreva em até 3 frases curtas o que aparece.",
-  "Depois escreva exatamente estas três linhas, cada uma na sua:",
-  "NUDEZ: sim (há nudez, seios ou genitais à mostra, roupa íntima em pose sensual ou ato sexual) ou NUDEZ: não.",
-  "IDADE: adulto (todas as pessoas claramente adultas, ou não há pessoas), IDADE: menor (alguém aparenta ter menos de 18 anos) ou IDADE: incerto.",
-  "RISCO: sim (nudez, conteúdo sexual, sangue ou violência explícita, símbolo de ódio) ou RISCO: não.",
-  "Escreva só o que VÊ. Não recuse e não opine.",
-].join(" ");
-const sim = (v) => (v == null ? null : /^(sim|yes|s[íi]|oui|ja)$/i.test(v));
-export function lerVeredito(texto) {
-  const t = String(texto ?? "");
-  const nudez = sim(t.match(/(?:NUDEZ|NUDITY|DESNUDEZ):\s*\**\s*(sim|n[ãa]o|yes|no|s[íi]|oui|non|ja|nein)(?![A-Za-zÀ-ÿ])/i)?.[1] ?? null);
-  const idadeBruta = (t.match(/(?:IDADE|AGE|EDAD):\s*\**\s*(adulto|menor|incerto|adult|minor|uncertain|adulta|incierto)(?![A-Za-zÀ-ÿ])/i)?.[1] ?? "").toLowerCase();
-  const idade = !idadeBruta ? null : /^adult/.test(idadeBruta) ? "adulto" : /^(menor|minor)$/.test(idadeBruta) ? "menor" : "incerto";
-  const risco = sim(t.match(/(?:RISCO|RISK|RIESGO):\s*\**\s*(sim|n[ãa]o|yes|no|s[íi]|oui|non|ja|nein)(?![A-Za-zÀ-ÿ])/i)?.[1] ?? null);
-  return { nudez, idade, risco };
-}
-export async function moderarBuffer(buffer) {
-  if (!visaoDisponivel()) return { erro: "visão desligada" };
-  let limpa;
-  try { limpa = await reescrever(buffer, LADO_VISAO); }
-  catch (e) { return { erro: `não consegui tratar a imagem: ${e?.message ?? e}` }; }
-  const perguntar = (maxTokens) => perguntarSobre(limpa, { pergunta: PROMPT_SAIDA, modelo: null, temperatura: 0, maxTokens });
-  let r = await perguntar(1200);
-  // vazio (o raciocínio comeu os tokens) ou sem as linhas: mais uma vez, com folga
-  if ((r.erro && /não respondeu nada/.test(r.erro)) || (!r.erro && lerVeredito(r.descricao).nudez === null && !pareceRecusa(r.descricao))) r = await perguntar(2400);
-  if (r.erro) return r;
-  const texto = String(r.descricao);
-  const v = lerVeredito(texto);
-  return {
-    descricao: texto.replace(/^.*\b(?:NUDEZ|NUDITY|DESNUDEZ|IDADE|AGE|EDAD|RISCO|RISK|RIESGO):.*$/gim, "").trim(),
-    riscoModelo: v.risco === true, nudez: v.nudez, idade: v.idade, recusou: pareceRecusa(texto),
-  };
-}
-
 export async function moderarImagem({ url }) {
   // O Gemma raciocina antes de responder e o raciocínio conta no max_tokens:
   // com 220 ele gastava tudo pensando e devolvia VAZIO ("o modelo de visão
   // não respondeu nada", 2× no relatório de 27/09). 1200 e, se vier vazio,
-  // uma segunda tentativa com o dobro — o mesmo remédio do chat.
+  // uma segunda tentativa com o dobro.
   let r = await verImagem({
     url, pergunta: PROMPT_MODERACAO,
     modelo: null, temperatura: 0, maxTokens: 1200,

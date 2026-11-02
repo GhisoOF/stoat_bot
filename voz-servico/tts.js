@@ -10,8 +10,8 @@ const require_ = createRequire(import.meta.url);
 
 // (31 out 2026, P1, R10) Os programas de fora (Piper, ffmpeg) recebem só o ambiente
 // de que precisam para rodar — nada de BOT_TOKEN, VOZ_CHAVE ou SPOTIFY_SECRET.
-// (Mesma lista do modulos/ai/servicos.js; aqui sem importar o bot, o serviço roda
-// também sozinho noutra máquina.)
+// (Era a mesma lista do modulos/ai/servicos.js, que saiu com o chat IA no P4; aqui sem
+// importar o bot, o serviço roda também sozinho noutra máquina.)
 export function ambienteMinimo() {
   const env = {};
   for (const k of ["PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "LD_LIBRARY_PATH", "ESPEAK_DATA_PATH"]) if (process.env[k] != null) env[k] = process.env[k];

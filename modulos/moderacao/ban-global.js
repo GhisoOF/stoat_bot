@@ -10,6 +10,7 @@ import { carimbo } from "../core/tempo.js";
 import { semPermissao } from "./punir.js";
 import { enviarPaginado, paginarLinhas } from "../core/paginas.js";
 import { chamarApi } from "../core/stoat-api.js";
+import { servidorDoArgumento } from "../core/dono.js";
 
 // ── Os modos (15 out 2026, pedido de Ghieh) ─────────────────────────────────
 // Eram três: off · avisar · banir — e no `banir` UM ban em QUALQUER servidor da
@@ -521,6 +522,25 @@ export async function cmdBanGlobal(message, args, ctx) {
   config.banGlobal ??= { modo: "off" };
   config.banGlobal.isentos ??= [];
   let sub = String(args[0] ?? "").toLowerCase();
+  // (P4, 2 nov 2026) os subcomandos do dono do bot só rodam na DM (o main.js barra num servidor).
+  // Com o ID de um servidor NO FIM (a única posição aceita: P4, revisão — antes, um ID de servidor no
+  // meio do motivo de um `add` mudava o servidor), rodam como lá (a config, a resposta e o log de lá;
+  // servidor alheio: a linha "comando do dono do bot" no log dele, como num comando feito lá). Os que
+  // agem NUM servidor exigem o ID: `&banglobal imediato ‹servidor›`, `varrer|revisar|desfazer
+  // [confirmar] ‹servidor›`, `lista servidor ‹servidor›`; os da lista (add, esquecer…) não precisam.
+  const levaServidor = Object.hasOwn(MODOS, sub) || ["varrer", "revisar", "desfazer"].includes(sub) || (sub === "lista" && args[1] === "servidor");
+  if (!serverId && SO_DONO.has(sub) && ctx.ehSuperAdmin?.(message.authorId)) {
+    const alvo = typeof ctx.criarContexto === "function" ? servidorDoArgumento(args.slice(1), ctx.client) : null;
+    if (alvo) {
+      const ctxS = { ...ctx.criarContexto(alvo.sid), getServer: async () => alvo.server };
+      if (alvo.server?.ownerId !== message.authorId) {
+        await log.registrarComandoDoDono(ctxS, { autorId: message.authorId, linha: `\`${citarInterno("banglobal", PREFIXO)} ${args.join(" ")}\`` });
+      }
+      return cmdBanGlobal(message, [args[0], ...alvo.resto], ctxS);
+    }
+    // (P4, revisão) na DM, `desfazer <pessoa>` (o `isentar` da staff) também pergunta: sem servidor, isentaria na config de ninguém
+    if (levaServidor) return erroUso("Qual servidor? O ID dele no fim", "Which server? Its ID at the end", "¿Qué servidor? Su ID al final", "❓");
+  }
   // `desfazer <pessoa>` é o `isentar` (da staff); `desfazer [confirmar]` sozinho é do dono
   if (sub === "desfazer" && args[1] && args[1] !== "confirmar") sub = "isentar";
   const dono = !!ctx.ehSuperAdmin?.(message.authorId);
@@ -545,12 +565,12 @@ export async function cmdBanGlobal(message, args, ctx) {
   if (!sub || sub === "auto" || sub === "importar") {
     const modo = modoDe(config);
     const daqui = db.bansGlobaisDoServidor(serverId);
-    // o tamanho da lista inteira é coisa do dono do bot (a lista vale para todos os servidores)
-    const total = dono ? db.usuariosBanidosDistintos() : null;
+    // (P4, revisão) o tamanho da lista inteira é dado só do dono do bot: não aparece num canal de servidor
+    // (nem para ele) — está no painel `&servidores`, na DM
     return linha(COR.info,
-      `🌐 Modo: **${nomeModoBG(modo, "pt")}** — ${MODOS[modo]}\n${daqui} registro(s) deste servidor · ${config.banGlobal.isentos.length} isento(s)${total !== null ? ` · ${total} pessoa(s) na lista` : ""}\nContribuição automática: sempre ligada`,
-      `🌐 Mode: **${nomeModoBG(modo, "en")}** — ${MODOS_EN[modo]}\n${daqui} record(s) from this server · ${config.banGlobal.isentos.length} exempt${total !== null ? ` · ${total} person(s) on the list` : ""}\nContribution (automatic): always on`,
-      `🌐 Modo: **${nomeModoBG(modo, "es")}** — ${MODOS_ES[modo]}\n${daqui} registro(s) de este servidor · ${config.banGlobal.isentos.length} exento(s)${total !== null ? ` · ${total} persona(s) en la lista` : ""}\nContribución automática: siempre activa`);
+      `🌐 Modo: **${nomeModoBG(modo, "pt")}** — ${MODOS[modo]}\n${daqui} registro(s) deste servidor · ${config.banGlobal.isentos.length} isento(s)\nContribuição automática: sempre ligada`,
+      `🌐 Mode: **${nomeModoBG(modo, "en")}** — ${MODOS_EN[modo]}\n${daqui} record(s) from this server · ${config.banGlobal.isentos.length} exempt\nContribution (automatic): always on`,
+      `🌐 Modo: **${nomeModoBG(modo, "es")}** — ${MODOS_ES[modo]}\n${daqui} registro(s) de este servidor · ${config.banGlobal.isentos.length} exento(s)\nContribución automática: siempre activa`);
   }
 
   // ── <modo> (só o dono do bot) ──

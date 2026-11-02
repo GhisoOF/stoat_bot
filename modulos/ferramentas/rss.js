@@ -4,35 +4,19 @@ import * as db from "../core/db.js";
 import { canalDeOutroServidor, canalDesteServidor } from "../moderacao/pertence.js";
 import { registrarErro } from "../core/erros.js";
 import * as log from "../core/log.js";
-import { tr, textoDoIdioma, idiomaDaTela } from "../core/i18n.js";
-import { servidorNaLista, numero } from "../core/env.js";
-import { servidorDaCasa } from "../core/casa.js";
+import { idiomaDaTela } from "../core/i18n.js";
+import { numero } from "../core/env.js";
 import { carimbo } from "../core/tempo.js";
 import { fusoDoServidor, lerHorario, instanteEm, proximoInstante, diaEm, buscarFuso, fusoValido, cidadeDoFuso } from "../core/fusos.js";
 import { idiomaDe } from "../core/i18n.js";
 import { salvarConfigServidor } from "../core/config-store.js";
 import { responder, erroDeUso, erro, semPermissao } from "../core/saida.js";
 
-let resumirIA = null;
-export function configurarResumo(fn) { resumirIA = fn; }
-// Relatório por categoria (neutro, uma linha por item) + comentário da Judy no fim.
-let relatorioIA = null;
-export function configurarRelatorio(fns) { relatorioIA = fns; }
-
 const RSS_SERVIDORES = (process.env.RSS_SERVIDORES || "")
   .split(",").map((x) => x.trim()).filter(Boolean);
 function servidorPermitido(serverId) {
   if (!RSS_SERVIDORES.length) return true;   // sem allowlist = liberado
   return RSS_SERVIDORES.includes(serverId);
-}
-
-// O resumo da Judy no RSS: só onde a IA de conversa roda (SERVIDOR/CHAT_SERVIDORES) E o
-// servidor quer a IA (`&chat on`; sem escolha, só os da casa — ou todos com CHAT_PADRAO=on).
-// Nos outros, a lista de notícias sai do mesmo jeito, sem modelo. (21 out 2026)
-export function iaNoRssAqui(serverId, config) {
-  if (!servidorNaLista("CHAT_SERVIDORES", serverId)) return false;
-  if (typeof config?.ia?.chat === "boolean") return config.ia.chat;
-  return ["on", "1", "sim", "true", "ligado"].includes((process.env.CHAT_PADRAO ?? "").trim().toLowerCase()) || servidorDaCasa(serverId);
 }
 
 const MAX_ITENS   = numero("RSS_MAX_ITENS", 50, { min: 1, max: 500, inteiro: true });
@@ -105,9 +89,9 @@ const semUrl = (t) => String(t ?? "").replace(/https?:\/\/\S+/g, "‹url›");
 //   • urgentes (só por REGRA, sem modelo item a item): CVE crítica, termo da lista
 //     do servidor (`&rss urgente`), ou o mesmo assunto em 3+ fontes → saem na hora;
 //   • o resto entra na fila do dia e sai num resumo só, no horário do servidor
-//     (`&rss horario 21:00`, hora local do fuso do servidor), feito pelo modelo
-//     pequeno (os ganchos `configurarRelatorio`/`configurarResumo`, que o main.js liga
-//     ao chat.js: `linhasRSS`, `comentarioRSS`, `traduzirLinhasRSS`, LLM_MODEL_LEVE).
+//     (`&rss horario 21:00`, hora local do fuso do servidor). (P4, 2 nov 2026) Sem
+//     modelo: o chat IA saiu, e com ele o resumo, o relatório por categoria e o
+//     comentário da Judy que o modelo escrevia — o telejornal é a lista das notícias.
 // Um timer só, armado só enquanto algum servidor tem feed: ele dorme até o próximo
 // ciclo ou o próximo telejornal, o que vier antes.
 
@@ -268,24 +252,10 @@ async function publicarUrgentes(canal, urgentes, tela) {
   for (const b of blocosDe(linhas.join("\n\n"), 1800)) await enviar(canal, titulo, b, "#e5484d");
 }
 
-// O telejornal: o relatório do modelo (onde a IA roda) e a lista de notícias.
-async function publicarTelejornal(canal, itens, { serverId, config, cortados = 0 }) {
+// O telejornal: a lista de notícias.
+async function publicarTelejornal(canal, itens, { config, cortados = 0 }) {
   const tela = idiomaDaTela(config?.language);
-  const lang = textoDoIdioma(config?.language) === "en" ? "en" : "pt";   // o idioma do modelo
   const quando = carimbo(Date.now(), "D");
-  const iaNoRss = iaNoRssAqui(serverId, config);
-  {
-    if (relatorioIA && iaNoRss) {
-      try { await publicarRelatorio(canal, itens, { lang, agora: quando, serverId, idioma: tela === "es" ? "es" : null }); }
-      catch (e) { registrarErro("RSS", e); }
-    } else if (resumirIA && iaNoRss) {
-      try {
-        const material = itens.map((it, i) => { const t = textoDoItem(it.resumo, it.titulo); return `${i + 1}. [${it.feedTitulo}] ${it.titulo}${t ? ` — ${t.slice(0, 250)}` : " — (só o título; não há texto da notícia)"}`; }).join("\n");
-        const resumo = await resumirIA(material, itens.length, { lang, serverId });
-        if (resumo?.trim()) await enviar(canal, tela === "es" ? `📰 El resumen de Judy — ${quando}` : tela === "en" ? `📰 Judy's digest — ${quando}` : `📰 O resumo da Judy — ${quando}`, textoDeFora(fecharResumo(resumo, itens)), "#a78bfa");
-      } catch (e) { registrarErro("RSS", e); }
-    }
-  }
   const nome = tela === "es" ? "📰 Telediario" : tela === "en" ? "📰 News digest" : "📰 Telejornal";
   const blocos = blocosDeItens(itens, cortados, { alem: tela === "es" ? "más" : tela === "en" ? "more" : "a mais" });
   for (let i = 0; i < blocos.length; i++) await enviar(canal, `${nome}${blocos.length > 1 ? ` (${i + 1}/${blocos.length})` : ""} — ${quando}`, blocos[i]);
@@ -319,7 +289,7 @@ export async function rodarCiclo(serverId, ctx, { forcado = false, agora = Date.
     const fila = db.rssPendentes(serverId);
     const itens = fila.slice(-MAX_ITENS);
     if (itens.length) {
-      await publicarTelejornal(canal, itens, { serverId, config, cortados: fila.length - itens.length });
+      await publicarTelejornal(canal, itens, { config, cortados: fila.length - itens.length });
       db.rssTirarPendentes(serverId, fila.map((x) => x._id));
       publicados = itens.length;
     } else if (forcado) {
@@ -584,175 +554,11 @@ export async function cmdRss(message, args, ctx) {
   return responder(ctx, canal, est(["Feeds", "Canal"]), est(["Feeds", "Channel"]), est(["Feeds", "Canal"]), "info");
 }
 
-// ─── Precisão do resumo ─────────────────────────────────────────────────────
-
-// O que não é texto de notícia: o "Comments" do Hacker News, as linhas de
-// metadados do hnrss ("Article URL:", "Points:", "# Comments:") e a descrição
-// que só repete o título.
-export function textoDoItem(resumo, titulo = "") {
-  let t = String(resumo ?? "")
-    .replace(/\b(Article URL|Comments URL|Points|# Comments)\s*:\s*\S*/gi, " ")
-    .replace(/https?:\/\/\S+/g, " ")
-    .replace(/\s+/g, " ").trim();
-  if (/^(comments?|coment[áa]rios?|read more|leia mais|continue reading|\[?…\]?)$/i.test(t)) t = "";
-  const norm = (x) => String(x).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-  if (t && norm(t) === norm(titulo)) t = "";
-  return t.length < 20 ? "" : t;
-}
-
-// Número que não está em nenhuma notícia é invenção: a frase sai inteira.
-// (Números por extenso — "três" — não são checados; os dígitos, sim.)
-function numerosDe(txt) {
-  return (String(txt).match(/\d+(?:[.,]\d+)*/g) ?? []).map((n) => n.replace(/[.,]/g, ""));
-}
-export function tirarNumerosInventados(resumo, itens) {
-  const fonte = new Set(itens.flatMap((it) => numerosDe(`${it.titulo} ${it.resumo ?? ""} ${it.feedTitulo ?? ""}`)));
-  return String(resumo).split(/(?<=[.!?…])\s+/).filter((frase) => {
-    const nums = numerosDe(frase);
-    return nums.every((n) => fonte.has(n) || n.length <= 1);
-  }).join(" ");
-}
-
-// Corta na última frase COMPLETA que cabe — nunca no meio da palavra
-// (o resumo das 21:55 de 27/09 terminou em "A m").
-export function cortarEmFrase(txt, max = 1900) {
-  const s = String(txt).trim();
-  if (s.length <= max) return s;
-  const pedaco = s.slice(0, max);
-  const fim = Math.max(pedaco.lastIndexOf(". "), pedaco.lastIndexOf(".\n"), pedaco.lastIndexOf("! "), pedaco.lastIndexOf("? "));
-  return fim > max * 0.5 ? pedaco.slice(0, fim + 1) : `${pedaco.slice(0, pedaco.lastIndexOf(" "))}…`;
-}
-
-export function fecharResumo(resumo, itens) {
-  // preserva as quebras de parágrafo: filtra número por parágrafo
-  const paragrafos = String(resumo).trim().split(/\n\s*\n/).map((p) => tirarNumerosInventados(p, itens)).filter((p) => p.trim());
-  return cortarEmFrase(paragrafos.join("\n\n"), 1900);
-}
-
-// ─── Relatório por categoria ────────────────────────────────────────────────
-//
-// O texto corrido com sarcasmo errava do jeito que importa num resumo: CVE
-// sumia no meio da lista (3 de 18 em 28/09), "authorization" virou
-// "autenticação", "every household receives $10k" virou "a vila recebe dez
-// mil dólares". Agora cada categoria é um relatório NEUTRO, uma linha por
-// item, e o código confere a cobertura: todo item da entrada aparece uma vez,
-// nada inventado entra, e o que o modelo não trouxer volta pelo título. O tom
-// da Judy fica num comentário curto no fim, sobre o conjunto.
-
+// A categoria de uma notícia: CVE é sempre "Vulnerabilidades"; o resto, a do feed.
 const RE_CVE = /\bCVE-\d{4}-\d{4,}\b/i;
 export function categoriaDoItem(item, categoriaDoFeed = null) {
   if (RE_CVE.test(item?.titulo ?? "")) return "Vulnerabilidades";
   return categoriaDoFeed || null;
-}
-
-// "…/coltranes-shadow-tiberi-tapes" → "coltranes shadow tiberi tapes": o link
-// costuma dizer do que a notícia é quando o feed só manda o título.
-export function pistaDoLink(url) {
-  try {
-    const u = new URL(url);
-    const partes = u.pathname.split("/").filter(Boolean)
-      .filter((x) => /[a-z]/i.test(x) && x.includes("-"));
-    const ultima = partes.at(-1) ?? "";
-    return ultima.replace(/\.[a-z]{2,5}$/i, "").split("-")
-      .filter((w) => w && !/^[0-9a-f]{6,}$/i.test(w))   // ids no fim do slug
-      .join(" ").slice(0, 120);
-  } catch { return ""; }
-}
-
-function materialNumerado(itens, numeros = null) {
-  return itens.map((it, i) => {
-    const n = numeros ? numeros[i] : i + 1;
-    const texto = textoDoItem(it.resumo, it.titulo);
-    const pista = pistaDoLink(it.link);
-    return `${n}. ${it.titulo}${texto ? ` — ${texto.slice(0, 250)}` : ""}${pista ? ` (endereço: ${pista})` : ""}`;
-  }).join("\n");
-}
-
-// Resposta do modelo: "N | frase" — tolerante ao que o modelo costuma variar
-// ("**1** | …", "[1] …", "1) …", "Notícia 1: …").
-export function lerLinhasNumeradas(resposta) {
-  const porN = new Map();
-  for (const bruta of String(resposta ?? "").split("\n")) {
-    const linha = bruta.replace(/\*\*/g, "").replace(/^\s*[-*•]\s*/, "");
-    const m = linha.match(/^\s*(?:not[ií]cia|item|story)?\s*\[?(\d+)\]?\s*[|.)\-–—:]+\s*\|?\s*(.+?)\s*$/i);
-    if (m && !porN.has(Number(m[1]))) porN.set(Number(m[1]), m[2]);
-  }
-  return porN;
-}
-
-// Cada item vira UMA linha; o que faltar ou trouxer número que não está
-// naquele item volta pelo título original (marcado com doModelo: false).
-export function linhasDoResumo(resposta, itens) {
-  const porN = lerLinhasNumeradas(resposta);
-  return itens.map((it, i) => {
-    let frase = porN.get(i + 1) ?? "";
-    if (frase) frase = tirarNumerosInventados(frase, [{ ...it, resumo: `${it.resumo ?? ""} ${pistaDoLink(it.link)}` }]).trim();
-    return frase ? { texto: frase, doModelo: true } : { texto: it.titulo, doModelo: false };
-  });
-}
-export function montarResumoNoticias(resposta, itens) {
-  return linhasDoResumo(resposta, itens).map((l) => `• ${l.texto}`).join("\n");
-}
-
-// ─── Idioma ─────────────────────────────────────────────────────────────────
-// Quando o modelo falhava num item, o título voltava CRU — "Extraction is Still
-// a Major Part of Marathon" e "Miracle on FlyDubai" no resumo em português de
-// 01/10. O pareceIngles do chat exige 4 palavras inglesas (feito para
-// respostas longas); um título curto precisa de um teste próprio.
-export { pareceOutroIdioma } from "../core/idioma.js";
-import { pareceOutroIdioma } from "../core/idioma.js";
-
-// Traduz as linhas "• …" de um bloco que não estão em português. O sufixo
-// "(CVE-…)" fica de fora da tradução e volta igual. Sem tradutor, ou se a
-// tradução falhar, o bloco sai como estava.
-export async function portuguesNoBloco(texto, traduzir) {
-  if (typeof traduzir !== "function") return texto;
-  const linhas = String(texto).split("\n");
-  const alvos = [];
-  linhas.forEach((l, i) => {
-    const m = l.match(/^(\s*•\s*)(.+?)(\s*\(CVE-\d{4}-\d+\))?$/i);
-    if (m && pareceOutroIdioma(m[2])) alvos.push({ i, prefixo: m[1], corpo: m[2], sufixo: m[3] ?? "" });
-  });
-  if (!alvos.length) return texto;
-  let porN = new Map();
-  try {
-    const r = await traduzir(alvos.map((a, k) => `${k + 1} | ${a.corpo}`).join("\n"), alvos.length);
-    porN = lerLinhasNumeradas(r);
-  } catch (e) { console.error("[RSS] tradução falhou:", e?.message ?? e); }
-  for (const [k, a] of alvos.entries()) {
-    const tr = (porN.get(k + 1) ?? "").trim();
-    if (tr && !pareceOutroIdioma(tr)) linhas[a.i] = `${a.prefixo}${tr}${a.sufixo}`;
-  }
-  const restam = alvos.filter((a) => pareceOutroIdioma(linhas[a.i])).length;
-  if (restam) console.warn(`[RSS] ${restam} linha(s) seguem em outro idioma depois da tradução`);
-  return linhas.join("\n");
-}
-
-// Resposta do modelo: "CVE-ID | produto | falha". Toda CVE da entrada aparece
-// exatamente uma vez; CVE que não estava na entrada é descartada; a esquecida
-// volta com o título original, em "Outros".
-export function montarRelatorioCVE(resposta, itens) {
-  const idDe = (t) => (String(t).match(RE_CVE)?.[0] ?? "").toUpperCase();
-  const entrada = new Map(itens.map((it) => [idDe(it.titulo), it]));
-  const linhas = new Map();
-  for (const l of String(resposta ?? "").split("\n")) {
-    const partes = l.split("|").map((x) => x.replace(/^\s*[-*•]\s*/, "").trim());
-    if (partes.length < 3) continue;
-    const id = idDe(partes[0]);
-    if (!entrada.has(id) || linhas.has(id)) continue;          // inventada ou repetida
-    linhas.set(id, { produto: partes[1] || "Outros", falha: partes.slice(2).join(" | ") });
-  }
-  for (const [id, it] of entrada) {
-    if (!linhas.has(id)) linhas.set(id, { produto: "Outros", falha: String(it.titulo).replace(RE_CVE, "").replace(/^\s*[-–—]\s*/, "") });
-  }
-  const grupos = new Map();
-  for (const [id, l] of linhas) {
-    const chave = l.produto.toLowerCase();
-    if (!grupos.has(chave)) grupos.set(chave, { nome: l.produto, itens: [] });
-    grupos.get(chave).itens.push(`• ${l.falha} (${id})`);
-  }
-  const ordem = [...grupos.values()].sort((a, b) => (a.nome === "Outros") - (b.nome === "Outros"));
-  return ordem.map((g) => `**${g.nome}**\n${g.itens.join("\n")}`).join("\n\n");
 }
 
 // Divide em blocos de até `max` sem cortar linha no meio.
@@ -765,65 +571,4 @@ export function blocosDe(texto, max = 1900) {
   }
   if (atual) out.push(atual);
   return out;
-}
-
-// `idioma: "es"` (etapa 4b): os títulos em espanhol; o `lang` (do modelo) fica como está
-export async function publicarRelatorio(canal, novos, { lang = "pt", agora = "", serverId = null, idioma = null } = {}) {
-  const en = lang === "en";
-  const es = idioma === "es";
-  const grupos = new Map();
-  for (const it of novos) {
-    const cat = it.categoria || (en ? "General" : "Geral");
-    if (!grupos.has(cat)) grupos.set(cat, []);
-    grupos.get(cat).push(it);
-  }
-  const ordenados = [...grupos.entries()].sort(([a], [b]) =>
-    (b === "Vulnerabilidades") - (a === "Vulnerabilidades") || a.localeCompare(b));
-
-  for (const [cat, itens] of ordenados) {
-    const cve = cat === "Vulnerabilidades";
-    let resposta = "";
-    try { resposta = await relatorioIA.linhas(materialNumerado(itens), { modo: cve ? "cve" : "noticias", lang, quantidade: itens.length }); }
-    catch (e) { console.error(`[RSS] relatório (${cat}) sem o modelo:`, e.message); }
-    let texto;
-    if (cve) texto = montarRelatorioCVE(resposta, itens);
-    else {
-      // Itens sem linha do modelo: uma segunda chance só para eles, com os
-      // números originais, antes de cair no título cru.
-      let linhas = linhasDoResumo(resposta, itens);
-      const faltam = linhas.map((l, i) => (l.doModelo ? -1 : i)).filter((i) => i >= 0);
-      if (faltam.length && resposta) {
-        try {
-          const r2 = await relatorioIA.linhas(materialNumerado(faltam.map((i) => itens[i]), faltam.map((i) => i + 1)),
-            { modo: "noticias", lang, quantidade: faltam.length });
-          const novas = linhasDoResumo(r2, itens);
-          for (const i of faltam) if (novas[i].doModelo) linhas[i] = novas[i];
-        } catch (e) { console.error(`[RSS] 2ª tentativa (${cat}) falhou:`, e?.message ?? e); }
-      }
-      const semModelo = linhas.filter((l) => !l.doModelo).length;
-      if (semModelo) console.warn(`[RSS] resumo (${cat}): ${semModelo} de ${itens.length} item(ns) sem frase do modelo — vão pelo título`);
-      texto = linhas.map((l) => `• ${l.texto}`).join("\n");
-    }
-    if (!en) texto = await portuguesNoBloco(texto, relatorioIA.traduzir);
-    const titulo = cve
-      ? (es ? `📋 Informe de vulnerabilidades` : en ? `📋 Vulnerability report` : `📋 Relatório de vulnerabilidades`)
-      : (es ? `📰 Resumen · ${cat}` : en ? `📰 Summary · ${cat}` : `📰 Resumo · ${cat}`);
-    const blocos = blocosDe(texto);
-    for (let i = 0; i < blocos.length; i++) {
-      await canal.sendMessage({ embeds: [{
-        title: `${titulo}${blocos.length > 1 ? ` (${i + 1}/${blocos.length})` : ""} — ${agora}`,
-        description: textoDeFora(blocos[i]), colour: cve ? "#e5484d" : "#a78bfa",
-      }] });
-    }
-  }
-
-  // O comentário da Judy: no tom dela, sobre o conjunto, e com a mesma trava.
-  try {
-    const bruto = await relatorioIA.comentario(materialNumerado(novos), { lang, serverId });
-    const comentario = cortarEmFrase(tirarNumerosInventados(String(bruto ?? "").trim(),
-      novos.map((it) => ({ ...it, resumo: `${it.resumo ?? ""} ${pistaDoLink(it.link)}` }))), 700);
-    if (comentario) {
-      await canal.sendMessage({ embeds: [{ title: es ? "💬 Judy opina" : en ? "💬 Judy's take" : "💬 A Judy comenta", description: textoDeFora(comentario), colour: "#a78bfa" }] });
-    }
-  } catch (e) { console.error("[RSS] comentário falhou:", e.message); }
 }

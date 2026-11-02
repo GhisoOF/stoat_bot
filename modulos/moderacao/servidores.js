@@ -1,12 +1,11 @@
-// &servidores — painel do dono do bot (SUPER_ADMINS). Só no grupo "dono" do &help.
+// &servidores — painel do dono do bot (SUPER_ADMINS). Só no grupo "dono" do &help, e só na
+// DM com a Judy (P4, 2 nov 2026: num servidor o main.js responde só a linha da DM).
 //
-//   &servidores                          → onde o bot está: membros e ritmo
-//   &servidores relatorio                → como está o relatório horário
-//   &servidores relatorio canal <#canal|aqui>
-//   &servidores relatorio agora          → a última hora, já (não esvazia a contagem)
+//   &servidores                          → onde o bot está: membros e ritmo; os erros das últimas 24 h
+//   &servidores relatorio                → como está o relatório horário (vai à DM do dono)
+//   &servidores relatorio agora          → a última hora, já, na DM (não esvazia a contagem)
 //   &servidores relatorio on|off
 //   &servidores relatorio vazias on|off  → mandar (ou pular) as horas sem nada
-//   &servidores relatorio assuntos [add|remove <id> [id…]]
 //   &servidores pseudonimo <id> [id…]    → como esse ID aparece no log (privacidade P2)
 //   &servidores aviso <texto>            → (P2) prévia; com o ✅ do dono, vai ao canal de log de cada servidor
 //   &servidores palavras                 → (P2) o que tentam digitar e não existe; os comandos nunca usados
@@ -17,6 +16,7 @@ import { porMinuto, tempoDePe, listarServidores } from "../core/metricas.js";
 import { contarMembros } from "../core/membros.js";
 import { limparId } from "../core/ids.js";
 import * as relatorio from "../ferramentas/relatorio.js";
+import * as modelo from "./modelo.js";   // (P4, revisão) o estado da IA com o detalhe, só aqui (na DM)
 import * as store from "../core/config-store.js";
 import * as db from "../core/db.js";
 import { pseudonimo } from "../core/pseudonimo.js";
@@ -35,25 +35,17 @@ export async function cmdServidores(message, args, ctx) {
   if (!ehSuperAdmin?.(message.authorId)) {
     return sendEmbed(message.channel, { colour: COR.erro, title: T(ctx, "🚫 Comando restrito", "🚫 Restricted command", "🚫 Comando restringido"), description: T(ctx, "Só o dono do bot.", "Bot owner only.", "Solo el dueño del bot.") });
   }
-  // (31 out 2026, R9) O painel só abre no servidor do relatório (RELATORIO_SERVIDOR)
-  // ou na DM do dono: num servidor qualquer, os números dos outros ficavam à vista.
-  const fixo = relatorio.servidorDoRelatorio();
-  const aqui = ctx.serverId ?? message.server?.id ?? message.channel?.serverId ?? null;
-  if (aqui && aqui !== fixo) {
-    return sendEmbed(message.channel, { colour: COR.erro, title: T(ctx, "🚫 Aqui não", "🚫 Not here", "🚫 Aquí no"), description: T(ctx,
-      "Este painel só abre na DM ou no servidor do relatório.",
-      "This panel only opens in DMs or in the report's server.",
-      "Este panel solo se abre por DM o en el servidor del informe.") });
-  }
+  // (31 out 2026, R9) num servidor, os números dos outros ficavam à vista. (P4, 2 nov 2026) Só na DM:
+  // o main.js barra o comando de dono num servidor (até no do relatório) antes de chegar aqui.
   const sub = args[0]?.toLowerCase();
   if (sub === "relatorio" || sub === "relatório" || sub === "report") return cmdRelatorio(message, args.slice(1), ctx);
   if (sub === "aviso") return cmdAviso(message, args.slice(1), ctx);
   if (["adulto", "+18", "18", "nsfw", "adult"].includes(sub)) {
-    // (22 out 2026) o modo +18 da IA saiu — o subcomando só avisa
+    // (22 out 2026) o modo +18 da IA saiu — o subcomando só avisa (P4: o texto sem o chat, que saiu)
     return sendEmbed(message.channel, { colour: COR.info, title: T(ctx, "🔞 +18 da IA: removido", "🔞 AI 18+: removed", "🔞 +18 de la IA: eliminado"), description: T(ctx,
-      "A IA não tem modo adulto: chat e imagem recusam conteúdo sexual em qualquer servidor e canal, inclusive canais NSFW. A moderação do que os membros postam continua igual.",
-      "The AI has no adult mode: chat and images refuse sexual content on every server and channel, NSFW channels included. Moderation of what members post is unchanged.",
-      "La IA no tiene modo adulto: el chat y las imágenes rechazan contenido sexual en cualquier servidor y canal, incluidos los canales NSFW. La moderación de lo que publican los miembros sigue igual.") });
+      "A IA não tem modo adulto: ela ficou só na moderação (a conversa e a geração de imagem saíram). A moderação do que os membros postam continua igual em todo servidor e canal, inclusive canais NSFW.",
+      "The AI has no adult mode: it's only in moderation now (chat and image generation are gone). Moderation of what members post is the same on every server and channel, NSFW channels included.",
+      "La IA no tiene modo adulto: quedó solo en la moderación (la conversación y la generación de imágenes salieron). La moderación de lo que publican los miembros sigue igual en todo servidor y canal, incluidos los canales NSFW.") });
   }
   if (sub === "palavras") return cmdPalavras(message, ctx);
   // O log guarda os IDs como pseudônimo: para procurar alguém, o dono calcula como o ID aparece lá.
@@ -96,7 +88,40 @@ export async function cmdServidores(message, args, ctx) {
     `_+ ${outros.n} server(s) that didn't opt in: ${membrosTxt(outros.membros)} · ${ritmo(outros.mpm)}_`,
     `_+ ${outros.n} servidor(es) que no se adhirieron: ${membrosTxt(outros.membros)} · ${ritmo(outros.mpm)}_`));
   linhas.push("", `**${T(ctx, "Total", "Total", "Total")}:** ${membrosTxt(total)} · ${ritmo(mpmTotal)} · ${tempoDePe()}`);
+  // (P4, revisão) o tamanho da lista global (antes no `&banglobal` do dono, num canal de servidor)
+  try {
+    const n = db.usuariosBanidosDistintos();
+    linhas.push(T(ctx, `**🌐 Lista global:** ${n} pessoa(s)`, `**🌐 Global list:** ${n} person(s)`, `**🌐 Lista global:** ${n} persona(s)`));
+  } catch (e) { registrarErro("SERVIDORES", e); }
+  // (P4, revisão) o estado da IA da moderação COM o detalhe (o nome da variável, o erro do serviço): no
+  // `&debug` de um servidor a staff vê só o estado (R10); o dono, que mexe na máquina, vê aqui, na DM
+  linhas.push(await linhaDaIA(ctx));
+  // (P4, 2 nov 2026) os erros de todos os servidores: antes no `&debug` de um servidor (R13), agora aqui, na DM
+  let erros = null;
+  try { erros = relatorio.errosRecentes(); } catch (e) { registrarErro("SERVIDORES", e); }
+  linhas.push("", `**🧾 ${T(ctx, "Erros (24 h)", "Errors (24 h)", "Errores (24 h)")}**`, ...(erros === null
+    ? [T(ctx, "histórico de erros indisponível", "error history unavailable", "historial de errores no disponible")]
+    : erros.length ? erros.map(([t, n]) => `${n}× \`${String(t).slice(0, 140)}\``)
+      : [T(ctx, "nenhum erro nas últimas 24 h", "no errors in the last 24 h", "ningún error en las últimas 24 h")]));
   return sendEmbed(message.channel, { title: `🌐 ${T(ctx, "Servidores", "Servers", "Servidores")} (${dados.length})`, description: linhas.join("\n"), colour: COR.info });
+}
+
+async function linhaDaIA(ctx) {
+  const rotulo = `**🤖 ${T(ctx, "IA da moderação", "Moderation AI", "IA de la moderación")}:**`;
+  if (!modelo.ligada()) return `${rotulo} ${T(ctx, "desligada", "off", "desactivada")} (\`IA=0\`)`;
+  const partes = [modelo.temJuiz() ? T(ctx, "juiz ✓", "judge ✓", "juez ✓") : T(ctx, "sem juiz", "no judge", "sin juez") + " (`LLM_URL`)"];
+  if (!modelo.temServico()) partes.push(T(ctx, "sem serviço", "no service", "sin servicio") + " (`IA_SERVICO_URL`)");
+  else {
+    try {
+      const s = await modelo.saude();
+      partes.push(s.alcancavel ? T(ctx, `modelo ✓ (${s.modelos.length})`, `model ✓ (${s.modelos.length})`, `modelo ✓ (${s.modelos.length})`)
+        : T(ctx, "o servidor do modelo não responde", "the model server doesn't answer", "el servidor del modelo no responde") + " (`LLM_URL`)");
+    } catch (e) {
+      partes.push(`${T(ctx, "serviço fora do ar", "service down", "servicio caído")} (\`IA_SERVICO_URL\`: ${String(e?.message ?? e).replace(/`/g, "").slice(0, 120)})`);
+    }
+    partes.push(modelo.modeloVisao() ? T(ctx, "visão ✓", "vision ✓", "visión ✓") : T(ctx, "sem visão", "no vision", "sin visión") + " (`MODELO_VISAO`)");
+  }
+  return `${rotulo} ${partes.join(" · ")}`;
 }
 
 // ── &servidores aviso <texto> ── (P2) uma mensagem do dono do bot a todos os servidores,
@@ -166,75 +191,41 @@ async function cmdPalavras(message, ctx) {
 
 async function cmdRelatorio(message, args, ctx) {
   const { sendEmbed, COR, client } = ctx;
-  const g = store.getGlobal();
-  g.relatorio ??= { canalId: null, ativo: true, pularVazias: false, assuntos: [] };
-  const cfg = g.relatorio;
+  // (P4) a config antiga (com o canal) é lida sem quebrar: relatorio.configDoRelatorio
+  const cfg = relatorio.configDoRelatorio(store.getGlobal());
   const salvar = () => store.salvarGlobal();
   const sub = args[0]?.toLowerCase();
   const ok = (pt, en, es) => sendEmbed(message.channel, { colour: COR.sucesso, description: T(ctx, pt, en, es) });
   const erro = (pt, en, es) => sendEmbed(message.channel, { colour: COR.erro, description: T(ctx, pt, en, es) });
 
-  if (sub === "canal") {
-    const alvo = ["aqui", "here"].includes(args[1]?.toLowerCase()) ? message.channel?.id : limparId(args[1] ?? "");
-    if (!alvo) return erro(`❓ ${ajudaDe(ctx, "servidores.relatorio")}`, `❓ ${ajudaDe(ctx, "servidores.relatorio")}`, `❓ ${ajudaDe(ctx, "servidores.relatorio")}`);
-    const fixo = relatorio.servidorDoRelatorio();
-    if (fixo) {
-      const canal = client.channels.get?.(alvo) ?? await client.channels.fetch?.(alvo).catch(() => null);
-      if (canal?.serverId !== fixo) return erro("❌ O canal tem de ser do servidor do relatório.", "❌ The channel must be in the report's server.", "❌ El canal tiene que ser del servidor del informe.");
-    }
-    cfg.canalId = alvo; cfg.ativo = true; salvar();
-    return ok(`📊 <#${alvo}> 🟢`, `📊 <#${alvo}> 🟢`, `📊 <#${alvo}> 🟢`);
-  }
+  // (P4, 2 nov 2026) o relatório vai à DM do dono do bot: o `canal` saiu
   if (sub === "on" || sub === "off") {
     cfg.ativo = sub === "on"; salvar();
-    return ok(`📊 ${cfg.ativo ? "🟢" : "🔴"}${cfg.canalId ? ` <#${cfg.canalId}>` : " — sem canal"}`, `📊 ${cfg.ativo ? "🟢" : "🔴"}${cfg.canalId ? ` <#${cfg.canalId}>` : " — no channel"}`, `📊 ${cfg.ativo ? "🟢" : "🔴"}${cfg.canalId ? ` <#${cfg.canalId}>` : " — sin canal"}`);
+    return ok(`📊 ${estadoDe(cfg, "pt")}`, `📊 ${estadoDe(cfg, "en")}`, `📊 ${estadoDe(cfg, "es")}`);
   }
   if (sub === "vazias") {
     cfg.pularVazias = args[1]?.toLowerCase() === "off"; salvar();
     return ok(`📊 ${cfg.pularVazias ? "horas vazias puladas" : "horas vazias enviadas"}`, `📊 ${cfg.pularVazias ? "empty hours skipped" : "empty hours sent"}`, `📊 ${cfg.pularVazias ? "horas vacías omitidas" : "horas vacías enviadas"}`);
   }
-  if (sub === "assuntos") {
-    const acao = args[1]?.toLowerCase();
-    const ids = [...new Set(args.slice(2).join(" ").split(/[\s,;]+/).map((x) => limparId(x)).filter(Boolean))];
-    const nomeDe = (id) => client.servers.get(id)?.name;
-    const fixo = relatorio.servidorDoRelatorio();
-    const avisos = [];
-    if ((acao === "add" || acao === "remove") && !ids.length) avisos.push(`❓ ${ajudaDe(ctx, "servidores.relatorio")}`);
-    // (P4, privacidade) a conversa de um servidor ALHEIO não vai para o relatório
-    const alheios = acao === "add" ? ids.filter((id) => !relatorio.ehDoDono(client.servers.get(id) ?? { id })) : [];
-    if (alheios.length) avisos.push(`🔒 ${T(ctx, "Fora:", "Out:", "Fuera:")} ${alheios.map((x) => nomeDe(x) ? `**${nomeDe(x)}**` : `\`${x}\``).join(", ")} — ${T(ctx, "não é seu", "not yours", "no es tuyo")}`);
-    if ((acao === "add" || acao === "remove") && ids.length) {
-      const antes = new Set(cfg.assuntos ?? []);
-      cfg.assuntos = (cfg.assuntos ?? []).filter((x) => !ids.includes(x));
-      if (acao === "add") cfg.assuntos.push(...ids.filter((id) => id !== fixo && !alheios.includes(id)));
-      salvar();
-      const novos = acao === "add" ? ids.filter((id) => id !== fixo && !antes.has(id) && !alheios.includes(id)) : ids.filter((id) => antes.has(id));
-      if (novos.length) avisos.push(`${acao === "add" ? T(ctx, "✅ Entraram:", "✅ Added:", "✅ Entraron:") : T(ctx, "✅ Saíram:", "✅ Removed:", "✅ Salieron:")} ${novos.map((x) => nomeDe(x) ? `**${nomeDe(x)}**` : `\`${x}\``).join(", ")}`);
-    }
-    const linha = (x, extra = "") => `• ${nomeDe(x) ? `**${nomeDe(x)}** ` : ""}\`${x}\`${extra}`;
-    const listados = (cfg.assuntos ?? []).filter((x) => x !== fixo);
-    const lista = [fixo ? linha(fixo, " _(RELATORIO_SERVIDOR — sempre)_") : null, ...listados.map((x) => linha(x))].filter(Boolean);
-    return sendEmbed(message.channel, { title: "🗣️", colour: COR.info, description: [...(lista.length ? lista : ["—"]), ...(avisos.length ? ["", ...avisos] : [])].join("\n") });
-  }
   if (sub === "agora") {
     await sendEmbed(message.channel, { colour: COR.info, description: T(ctx, "⏳ Montando o relatório…", "⏳ Building the report…", "⏳ Armando el informe…") });
     const rel = await relatorio.gerar({ client, cfg, esvaziar: false });
-    let destino = cfg.canalId ? await client.channels.fetch(cfg.canalId).catch(() => message.channel) : message.channel;
-    const fixo = relatorio.servidorDoRelatorio();
-    if (fixo && destino?.serverId !== fixo) destino = message.channel;   // canal antigo de outro servidor
-    // o painel é do dono do bot: o canal do relatório pode ser de outro servidor (o dele)
+    // (P4) a mesma entrega do relatório por hora: a DM do dono do bot (o painel não é de servidor nenhum)
     const enviarGlobal = ctx.criarContexto?.(null)?.sendEmbed ?? sendEmbed;
-    return enviarGlobal(destino, { title: rel.title, description: rel.description, colour: COR.info });
+    const r = await relatorio.entregar(rel, { client, enviar: (canal, emb) => enviarGlobal(canal, { ...emb, colour: COR.info }) });
+    return r ?? erro("❌ A DM do dono do bot não abriu.", "❌ The bot owner's DM didn't open.", "❌ No se abrió la DM del dueño del bot.");
   }
+  if (sub) return erro(`❓ ${ajudaDe(ctx, "servidores.relatorio")}`, `❓ ${ajudaDe(ctx, "servidores.relatorio")}`, `❓ ${ajudaDe(ctx, "servidores.relatorio")}`);
 
-  const estado = cfg.canalId && cfg.ativo !== false ? `🟢 <#${cfg.canalId}>` : cfg.canalId ? "⏸️" : "—";
   return sendEmbed(message.channel, {
     title: T(ctx, "📊 Relatório horário", "📊 Hourly report", "📊 Informe por hora"),
     description: [
-      `${T(ctx, "**Estado:**", "**State:**", "**Estado:**")} ${estado}`,
+      `${T(ctx, "**Estado:**", "**State:**", "**Estado:**")} ${T(ctx, estadoDe(cfg, "pt"), estadoDe(cfg, "en"), estadoDe(cfg, "es"))}`,
       `${T(ctx, "**Horas vazias:**", "**Empty hours:**", "**Horas vacías:**")} ${cfg.pularVazias ? "⏭️" : "✅"}`,
-      `${T(ctx, "**Modelo:**", "**Model:**", "**Modelo:**")} \`${process.env.LLM_MODEL_RELATORIO || process.env.LLM_MODEL || "—"}\``,
     ].join("\n"),
     colour: COR.info,
   });
 }
+
+// (P4) ligado = à DM do dono do bot; desligado = 🔴
+const estadoDe = (cfg, l) => (cfg.ativo === true ? { pt: "🟢 na sua DM", en: "🟢 in your DM", es: "🟢 por DM" }[l] : "🔴");

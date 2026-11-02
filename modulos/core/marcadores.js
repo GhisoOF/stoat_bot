@@ -2,9 +2,8 @@
 //
 // O cliente do Stoat trata qualquer `<palavra>` como tag HTML e a esconde —
 // até dentro de código. A ajuda inteira usa esse jeito de escrever parâmetro
-// (`&game pontos <atributo> [quantos]`, `&game cambio <qtd> <moeda> para
-// <moeda>`), e na tela aparecia "&game pontos [quantos]" e "&game cambio
-// para". Aqui o marcador vira ‹atributo› (aspas angulares simples, que o
+// (`&economia pagar <pessoa> <qtd>`), e na tela aparecia "&economia pagar".
+// Aqui o marcador vira ‹pessoa› (aspas angulares simples, que o
 // Stoat mostra). Menções (<@id>, <#id>, <%id>), links (<https://…>) e emoji
 // personalizado ficam como estão — e o timestamp do Stoat (<t:SEGUNDOS:f>).
 

@@ -3,7 +3,7 @@
 // Cada comando é declarado UMA vez, num arquivo desta pasta (um por família).
 // Tudo o que antes era escrito à mão em vários lugares sai daqui: as rotas e os
 // apelidos do main.js, o nome mostrado na tela em inglês e os apelidos do
-// aliases.js, e as listas soltas (gerenciáveis, só de IA, de voz, essenciais).
+// aliases.js, e as listas soltas (gerenciáveis, de voz, essenciais).
 //
 // O formato de uma entrada:
 //
@@ -25,7 +25,6 @@
 //     familias: { sentinela: { subcomandos, naTela } },  // níveis dentro do comando (vira "automod.sentinela")
 //     partes: { punicao: { en: "punishment", subcomandos } }, // partes citadas sozinhas (`&help punicao`)
 //     gerenciavel: true,           // o admin pode desligar com `&comando desativar`
-//     soIA: true,                  // só existe onde a IA roda
 //     voz: true,                   // vale dentro da call, mesmo fora dos canais liberados
 //     essencial: true,             // nunca é desligado (a ajuda, o próprio &comando…)
 //     qualquerCanal: true,         // vale até nos canais onde o &acesso restringe os comandos
@@ -77,7 +76,6 @@ import embed from "./embed.js";
 import reactionrole from "./reactionrole.js";
 import rss from "./rss.js";
 import xp from "./xp.js";
-import game from "./game.js";
 import autorole from "./autorole.js";
 import staff from "./staff.js";
 import boasvindas from "./boasvindas.js";
@@ -93,7 +91,6 @@ import entretenimento from "./entretenimento.js";
 import servidor from "./servidor.js";
 import help from "./help.js";
 import sobre from "./sobre.js";
-import personalidade from "./personalidade.js";
 import config from "./config.js";
 import servidores from "./servidores.js";
 import debug from "./debug.js";
@@ -105,8 +102,8 @@ import caso from "./caso.js";   // (31 out 2026, P3a) a amostra diária do dono
 export const REGISTRO = [
   ping, userinfo, kick, ban, unban, untimeout, silenciar, limpar, warn, automod,
   tutorial, assistente, cor, banglobal, embed, reactionrole, rss, xp,
-  game, autorole, staff, boasvindas, adeus, fuso, voz, musica, webhook, rolar,
-  ticket, economia, entretenimento, servidor, help, sobre, personalidade,
+  autorole, staff, boasvindas, adeus, fuso, voz, musica, webhook, rolar,
+  ticket, economia, entretenimento, servidor, help, sobre,
   config, servidores, debug, reset, privacidade,
   caso,
 ].flat();
@@ -143,7 +140,7 @@ export function problemasDoRegistro(registro = REGISTRO) {
       else dono.set(nome, c.id);
     }
   }
-  // (P2) atalhos: `atalhos: { "chat sair|leave": "privacidade chat sair" }` (ver aliases.js)
+  // (P2) atalhos: `atalhos: { "xp sair|leave": "privacidade xp sair" }` (ver aliases.js)
   const ids = new Set(registro.map((c) => c?.id));
   const atalhos = [];
   for (const c of registro) {
@@ -177,7 +174,6 @@ export async function montarTabela(registro = REGISTRO) {
   return {
     rotas, CANONICO,
     COMANDOS_GERENCIAVEIS: comFlag("gerenciavel"),
-    COMANDOS_SO_IA: new Set(comFlag("soIA")),
     COMANDOS_DE_VOZ: new Set(comFlag("voz")),
     ESSENCIAIS: new Set(comFlag("essencial")),
     SEMPRE_LIBERADOS: new Set(comFlag("qualquerCanal")),

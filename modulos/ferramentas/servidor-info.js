@@ -1,9 +1,8 @@
-// servidor-info.js — a Judy conhece o servidor em que está (12 out 2026).
+// servidor-info.js — o `&servidor`: o que o servidor é, num comando (12 out 2026).
 //
-// Pedido de Ghieh: poder perguntar à Judy "quem são os staffs?", "quais são as
-// regras?" e afins, e um comando direto para isso. Antes ela não sabia nada do
-// servidor além do nome — e, com a busca de fundo, "como está o servidor?" foi
-// parar no buscador e voltou notícia de servidor PÚBLICO.
+// Pedido de Ghieh: "quem são os staffs?", "quais são as regras?" e afins num
+// comando direto. (P4, 2 nov 2026: o chat IA saiu — o mesmo levantamento ia para o
+// prompt da Judy; agora serve só ao comando.)
 //
 // De onde vem cada coisa (decisões de Ghieh):
 //   • regras — o texto que a staff definir (`&servidor regras definir`) vence;
@@ -15,8 +14,6 @@
 //     permissões), com quem tem cada um (bots fora);
 //   • dados gerais, cargos com contagem, canais com descrição e o FAQ/avisos
 //     que a staff cadastrar.
-// O mesmo levantamento serve ao comando (`&servidor …`) e à IA (vira material
-// real no prompt quando a pergunta é sobre o servidor).
 
 import { Permission } from "stoat.js";
 import { citarInterno, citar } from "../core/aliases.js";
@@ -222,76 +219,6 @@ export async function regras(server, config, { forcar = false, quem = null } = {
   }
 }
 
-// ─── Para a IA ───────────────────────────────────────────────────────────────
-
-const I = "(?<![\\p{L}\\p{N}])", F = "(?![\\p{L}\\p{N}])";
-const re = (s) => new RegExp(`${I}(?:${s})${F}`, "iu");
-const SECOES = {
-  regras: re("regras?|rules?|regulamento|é proibido|e proibido|é permitido|pode(?:mos)? (?:postar|mandar|falar|divulgar|xingar)|proibido|norma"),
-  // "dono"/"dona" sozinho não: "quem é seu dono?" é sobre o criador da Judy; e
-  // "mods" sozinho é mod de jogo
-  equipe: re("staffs?|equipe|moderador(?:es|as?)?|moderação|adms?|admins?|administrador(?:es|as?)?|(?:dono|dona|owner) d[oa] (?:servidor|server|grupo|comunidade)|server owner|dono daqui|quem manda|quem cuida|quem modera"),
-  cargos: re("cargos?|roles?|tags?"),
-  canais: re("canais|canal|channels?|onde (?:posso|eu posso|devo|fica|ficam|é que)|em que canal"),
-  geral: re("servidor|server|comunidade|quantos membros|quantas pessoas|quando (?:foi )?criad[oa]|sobre (?:o|este|esse) (?:servidor|server|grupo)"),
-  faq: re("faq|avisos?|eventos?|links?|perguntas? frequentes?"),
-};
-// "regras do xadrez" não é sobre o servidor
-const REGRAS_DE_OUTRA_COISA = new RegExp(`${I}regras?\\s+d[eoa]s?\\s+(?!servidor|server|grupo|chat|canal|comunidade|aqui)\\p{L}`, "iu");
-
-export function secoesDaPergunta(texto) {
-  const t = String(texto ?? "");
-  const s = new Set();
-  for (const [k, r] of Object.entries(SECOES)) if (r.test(t)) s.add(k);
-  if (s.has("regras") && REGRAS_DE_OUTRA_COISA.test(t)) s.delete("regras");
-  // "cargo" e "canal" sozinhos aparecem em conversa sobre outra coisa: só
-  // contam com cara de pergunta
-  if (!/\?|\b(quais|qual|quem|quantos?|onde|lista|me (?:fala|diz|mostra))\b/i.test(t)) { s.delete("cargos"); s.delete("canais"); s.delete("faq"); }
-  return s;
-}
-
-const FONTE_REGRAS = { texto: "texto definido pela staff", canal: "canal" };
-
-// `quem` = { uid, membro } de quem perguntou: os canais e as regras saem só do
-// que essa pessoa vê (sem `quem`: só o que o @everyone vê).
-export async function materialParaIA(pergunta, { server, config, client = null, lang = "pt", quem = null } = {}) {
-  if (!server) return "";
-  const secoes = secoesDaPergunta(pergunta);
-  if (!secoes.size) return "";
-  const en = lang === "en";
-  const partes = [];
-  const g = await dadosGerais(server, { client });
-  partes.push(`• ${en ? "General" : "Geral"}: ${en ? "owner" : "dono"} ${g.dono ?? "?"}${g.criado ? `; ${en ? "created" : "criado em"} ${g.criado}` : ""}${g.membros != null ? `; ${g.membros} ${en ? "members" : "membros"}` : ""}; ${g.nCanais} ${en ? "channels" : "canais"}, ${g.nCargos} ${en ? "roles" : "cargos"}${g.descricao ? `; ${en ? "description" : "descrição"}: "${g.descricao.slice(0, 400)}"` : ""}.`);
-
-  if (secoes.has("equipe")) {
-    const e = await equipe(server, config, { client });
-    const linhas = e.blocos.map((b) => `${b.nome}${b.origem === "permissao" ? (en ? " (can moderate)" : " (pode moderar)") : ""}: ${b.pessoas ? (b.pessoas.length ? b.pessoas.slice(0, 15).map((p) => p.nome).join(", ") + (b.pessoas.length > 15 ? ` +${b.pessoas.length - 15}` : "") : (en ? "nobody" : "ninguém")) : (en ? "(member list unavailable)" : "(lista de membros indisponível)")}`);
-    partes.push(`• ${en ? "Staff" : "Equipe"}: ${en ? "owner" : "dono"}: ${e.dono ?? "?"}${linhas.length ? `. ${linhas.join(". ")}` : en ? ". No staff role marked or found." : ". Nenhum cargo de staff marcado ou encontrado."}`);
-  }
-  if (secoes.has("regras")) {
-    const r = await regras(server, config, { quem });
-    partes.push(r.fonte
-      ? `• ${en ? "Rules" : "Regras"} (${r.fonte === "canal" ? `${en ? "from channel" : "do canal"} #${r.canal?.nome ?? "?"}` : FONTE_REGRAS.texto}):\n${r.texto.slice(0, 1800)}`
-      : `• ${en ? "Rules" : "Regras"}: ${en ? "none registered and no rules channel I can read" : "nenhuma cadastrada e nenhum canal de regras que eu consiga ler"}${r.canal ? ` (#${r.canal.nome})` : ""}.`);
-  }
-  if (secoes.has("cargos")) {
-    const cs = await cargosComContagem(server);
-    partes.push(`• ${en ? "Roles (highest first)" : "Cargos (do mais alto ao mais baixo)"}: ${cs.slice(0, 30).map((c) => `${c.nome}${c.n != null ? ` (${c.n})` : ""}`).join(", ") || "—"}`);
-  }
-  if (secoes.has("canais")) {
-    const gs = canaisOrganizados(server, quem);
-    partes.push(`• ${en ? "Channels" : "Canais"}:\n${gs.map((gr) => `${gr.titulo ? `[${gr.titulo}] ` : ""}${gr.canais.map((c) => `#${c.nome}${c.voz ? (en ? " (voice)" : " (voz)") : ""}${c.descricao ? ` — ${c.descricao.slice(0, 120)}` : ""}`).join("; ")}`).join("\n").slice(0, 1500)}`);
-  }
-  const faq = config?.servidorInfo?.faq ?? [];
-  if (faq.length && (secoes.has("faq") || secoes.has("geral") || secoes.has("regras"))) {
-    partes.push(`• ${en ? "Staff notices / FAQ" : "Avisos / FAQ da staff"}:\n${faq.slice(0, 10).map((f) => `- ${f.titulo}: ${String(f.texto).slice(0, 300)}`).join("\n")}`);
-  }
-  return (en
-    ? `REAL DATA about the server "${g.nome}" where you are (read now from Stoat and from what the staff set up — use ONLY this to talk about the server; what isn't here, you don't know: say so and point to \`${citarInterno("servidor")}\`):\n`
-    : `DADOS REAIS do servidor "${g.nome}" onde você está (lidos agora do Stoat e do que a staff cadastrou — use SÓ isto para falar do servidor; o que não estiver aqui você não sabe: diga isso e indique \`${citarInterno("servidor")}\`):\n`)
-    + partes.join("\n");
-}
-
 // ─── Comando ─────────────────────────────────────────────────────────────────
 
 const SUB_EN = { rules: "regras", roles: "cargos", channels: "canais", about: "info", general: "info", notices: "faq", staff: "equipe", team: "equipe" };
@@ -351,7 +278,7 @@ export async function cmdServidor(message, args, ctx) {
       if (!texto) return sendEmbed(message.channel, { title: "📜", description: T(`Uso: \`${citarInterno("servidor.regras", P)} definir <texto>\` (pode ter várias linhas).`, `Usage: \`${citarInterno("servidor.regras", P)} set <text>\` (multiple lines are fine).`, `Uso: \`${citar("servidor.regras", "es", P)} set <texto>\` (puede tener varias líneas).`), colour: COR.aviso });
       info.regrasTexto = texto;
       salvarConfig?.();
-      return sendEmbed(message.channel, { title: T("📜 Regras salvas", "📜 Rules saved", "📜 Reglas guardadas"), description: T(`Agora \`${citarInterno("servidor.regras", P)}\` e a Judy usam este texto (ele vence o canal de regras).`, `\`${citarInterno("servidor.regras", P)}\` and Judy now use this text (it beats the rules channel).`, `Ahora \`${citar("servidor.regras", "es", P)}\` y Judy usan este texto (tiene prioridad sobre el canal de reglas).`), colour: COR.sucesso });
+      return sendEmbed(message.channel, { title: T("📜 Regras salvas", "📜 Rules saved", "📜 Reglas guardadas"), description: T(`Agora \`${citarInterno("servidor.regras", P)}\` usa este texto (ele vence o canal de regras).`, `\`${citarInterno("servidor.regras", P)}\` now uses this text (it beats the rules channel).`, `Ahora \`${citar("servidor.regras", "es", P)}\` usa este texto (tiene prioridad sobre el canal de reglas).`), colour: COR.sucesso });
     }
     if (["canal", "channel"].includes(acao)) {
       if (!podeGerir()) return negar();

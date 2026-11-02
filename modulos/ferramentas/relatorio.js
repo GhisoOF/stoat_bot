@@ -1,27 +1,27 @@
 // Relatório horário do dono do bot.
 //
 // A cada hora cheia, um resumo do que aconteceu em todos os servidores vai
-// para um canal configurável (`&servidores relatorio canal #x`):
-// banimentos, punições, entradas, alertas, ritmo de conversa, assuntos mais
-// comentados, erros e bugs.
+// para a DM do dono do bot (o primeiro de SUPER_ADMINS — P4, 2 nov 2026; antes, um
+// canal escolhido com `&servidores relatorio canal`, que saiu):
+// banimentos, punições, entradas, alertas, ritmo de conversa, erros e bugs.
 //
-// Divisão de trabalho (a mesma de sempre no projeto): os NÚMEROS saem do
-// código — o modelo nunca conta nada. O modelo só escreve os destaques, os
-// assuntos (a partir de amostras) e uma leitura dos erros. Se o modelo falhar,
-// o relatório sai assim mesmo, só com a parte do código.
+// Tudo sai do código. (P4, 2 nov 2026, área da IA) O chat IA saiu e a IA ficou só na
+// moderação: o texto que o modelo escrevia (Destaques, Assuntos a partir de amostras
+// de conversa, a leitura dos erros) saiu junto — o relatório é só os números, e o
+// texto das pessoas não é mais guardado nem por uma hora.
 //
 // Quem entra (privacidade P4, 20 out 2026, decisão do Ghieh):
 //   • os servidores do PRÓPRIO dono do bot (RELATORIO_SERVIDOR, ou de que um
-//     SUPER_ADMIN é dono): completos, como antes — números, eventos e assuntos;
+//     SUPER_ADMIN é dono): completos, como antes — números e eventos;
 //   • os outros, SÓ se o servidor aderiu (`&log relatorio on`): anônimos — o
 //     servidor vira um pseudônimo, e só os eventos de ataque (punições, raids,
 //     imagens suspeitas), sem nomes, menções nem IDs;
 //   • os que não aderiram: nada (nem números).
 
-import { llmChat, llmUrl, modeloConversa } from "../ai/llm.js";
 import * as db from "../core/db.js";
 import { pseudonimo } from "../core/pseudonimo.js";
 import { registrarErro } from "../core/erros.js";
+import { donos, dmDoDono } from "../core/dono.js";
 
 // "completo" | "anonimo" | null — o main.js liga a regra de verdade no boot
 // (precisa do dono de cada servidor e da config). Sem ela, ninguém entra.
@@ -47,7 +47,6 @@ export function filtrarEvento(e) {
 }
 
 const HORA = 3600_000;
-const AMOSTRAS_MAX = 120;          // mensagens guardadas por servidor, por hora
 const ERROS_MAX_HORA = 300;        // teto de linhas de erro gravadas por hora
 
 // ─── Coleta ─────────────────────────────────────────────────────────────────
@@ -92,24 +91,19 @@ export function erro(texto, t = Date.now()) {
   evento(null, "erro", `${etiquetaDoErro(texto)} falha (detalhes só no log local)`, t);
 }
 
-// Ritmo e amostras de conversa ficam só em memória: contar não precisa de
-// disco, e o texto das pessoas não deve ficar gravado para gerar um resumo.
-const atividade = new Map();   // serverId → { msgs, autores:Set, amostras:[] }
-export function mensagem(serverId, texto, { autorId = null, ehBot = false, comAssunto = false } = {}) {
+// O ritmo de conversa fica só em memória (contar não precisa de disco); o texto
+// das mensagens não é guardado (P4: sem o modelo, as amostras saíram).
+const atividade = new Map();   // serverId → { msgs, autores:Set }
+export function mensagem(serverId, { autorId = null, ehBot = false } = {}) {
   if (!serverId || ehBot) return;
   const modo = modoDe(serverId);
   if (!modo) return;                       // não aderiu: nem o ritmo é contado
   // anônimo: só os ataques entram (a política promete isso) — nem o ritmo de conversa
   // (revisão do P4: o "· N msg de M pessoa(s)" do servidor anônimo ia ao relatório)
   if (modo === "anonimo") return;
-  const a = atividade.get(serverId) ?? { msgs: 0, autores: new Set(), amostras: [] };
+  const a = atividade.get(serverId) ?? { msgs: 0, autores: new Set() };
   a.msgs++;
   if (autorId) a.autores.add(autorId);
-  const limpo = String(texto ?? "").replace(/<[@#%][^>]+>/g, "").replace(/https?:\/\/\S+/g, "").trim();
-  if (comAssunto && limpo.length >= 8 && !limpo.startsWith("&")) {
-    a.amostras.push(limpo.slice(0, 160));
-    if (a.amostras.length > AMOSTRAS_MAX) a.amostras.shift();
-  }
   atividade.set(serverId, a);
 }
 export function esvaziarAtividade() {
@@ -202,41 +196,8 @@ export function cortar(txt, max) {
   return `${s.slice(0, i > max * 0.6 ? i : max - 1)}…`;
 }
 
-// ─── A parte do modelo ─────────────────────────────────────────────────────
-// Sessão nova a cada hora: uma mensagem só, sem histórico.
-export function montarPrompt({ numeros, amostras, nomes }) {
-  const blocos = [...amostras].filter(([, a]) => a.amostras.length)
-    .map(([id, a]) => `### ${nomes.get(id) ?? id}\n${a.amostras.slice(-60).map((m) => `- ${m}`).join("\n")}`);
-  return [
-    "Você escreve o relatório horário de um bot de moderação, para o dono dele. Português do Brasil, direto, sem floreio.",
-    "Os NÚMEROS abaixo já estão certos e já vão aparecer no relatório — não repita contagens nem invente números.",
-    "Escreva só três seções curtas, com estes títulos exatos:",
-    "**Destaques** — até 4 linhas: o que merece atenção nesta hora (banimentos, alertas, algo fora do normal). Se foi tranquila, diga em uma linha.",
-    "**Assuntos** — SÓ para os servidores que aparecem em \"Amostras de conversa\", 1 a 3 assuntos mais comentados. Sem amostra, não há assunto: nunca deduza assunto pelo NOME do servidor. Sem citar nomes de pessoas nem copiar frases.",
-    "Reinício por deploy/restart é manutenção normal, não instabilidade; só \"queda sem aviso\" e \"watchdog\" merecem atenção.",
-    "**Erros** — se houver erros, em até 3 linhas: a causa provável de cada tipo e se parece grave. Erro que aparece \"em N das últimas 24 h\" é PERSISTENTE, nunca \"temporário\". Se não houver, omita a seção.",
-    "",
-    "## Números da hora",
-    numeros,
-    "",
-    blocos.length ? "## Amostras de conversa (só destes servidores)\n" + blocos.join("\n\n") : "## Amostras de conversa\n(nenhuma)",
-  ].join("\n");
-}
-
-// (31 out 2026, P2) pelo cliente único do modelo (ai/llm.js): a fila de prioridade, as
-// esperas do 429 e o corte do raciocínio são os mesmos da conversa. O modelo é o
-// LLM_MODEL (o antigo LLM_MODEL_RELATORIO ainda vale como sinônimo dele, no env.js).
-export async function redigir(prompt, { fetcher = fetch } = {}) {
-  if (!llmUrl() || !modeloConversa()) return null;
-  try {
-    const texto = await llmChat([{ role: "user", content: prompt }],
-      { modelo: modeloConversa(), maxTokens: 1500, temperatura: 0.3, etiqueta: "relatorio", continuarMax: 0, fetcher });
-    return texto || null;
-  } catch (e) { registrarErro("RELATORIO", e); return null; }   // sem o modelo, o relatório sai só com os números
-}
-
-// ─── Uma hora inteira: coleta → números → modelo → envio ───────────────────
-export async function gerar({ client, cfg, ate = Date.now(), fetcher = fetch, esvaziar = true }) {
+// ─── Uma hora inteira: coleta → números → envio ────────────────────────────
+export async function gerar({ client, cfg, ate = Date.now(), esvaziar = true }) {
   const desde = ate - HORA;
   const nomes = new Map();
   for (const s of client?.servers?.values?.() ?? []) nomes.set(s.id, modoDe(s.id) === "anonimo" ? nomeAnonimo(s.id) : (s.name ?? s.id));
@@ -250,48 +211,49 @@ export async function gerar({ client, cfg, ate = Date.now(), fetcher = fetch, es
     if (id && !nomes.has(id)) nomes.set(id, modoDe(id) === "completo" ? id : nomeAnonimo(id));
   }
   const numeros = montarNumeros({ grupos, atividade: ativ, nomes, desde, ate });
-  const bruta = numeros.algo ? await redigir(montarPrompt({ numeros: numeros.texto, amostras: ativ, nomes }), { fetcher }) : null;
-  const prosa = bruta ? limparAssuntos(bruta, ativ, nomes) : null;
   podar(ate);
   return {
     title: `📊 Relatório ${hhmm(desde)}–${hhmm(ate)} UTC`,
-    description: [prosa, prosa ? "━━━━━━━━━━" : null, numeros.texto,
-      prosa || !numeros.algo ? null : "_O modelo não respondeu — seguem só os números._"]
-      .filter(Boolean).join("\n\n"),
+    description: numeros.texto,
     vazio: !numeros.algo,
   };
 }
 
-// Assuntos: servidores listados à mão, ou — sem lista — os que pertencem a um
-// dono do bot (SUPER_ADMINS). Os demais aparecem só em números.
+// Os donos do bot (SUPER_ADMINS): os servidores deles entram completos.
 export function listaSuperAdmins() {
-  return (process.env.SUPER_ADMINS || "").split(",").map((x) => x.trim()).filter(Boolean);
+  return donos();
 }
-// RELATORIO_SERVIDOR: o servidor do dono do bot. Definido, o painel e o
-// relatório só existem lá (comando, canal de envio) e ele SEMPRE entra nos
-// assuntos (pedido de Ghieh, 1 out 2026). Os outros entram só se o dono do bot
-// os listar em `&servidores relatorio assuntos add` (13 out 2026: antes a
-// variável ignorava a lista e o `add` respondia como se nada tivesse
-// acontecido) — sem lista, dos outros, só números.
+// RELATORIO_SERVIDOR: o servidor do dono do bot (o idioma da DM dele, e o relatório
+// completo — P4: o painel e o relatório agora só na DM).
 export function servidorDoRelatorio() {
   return (process.env.RELATORIO_SERVIDOR || "").trim() || null;
 }
-// (P4) Só dos servidores do próprio dono do bot: a lista escolhe ENTRE eles, mas
-// não põe a conversa de um servidor alheio no relatório.
+// (P4) Os servidores do próprio dono do bot: completos no relatório.
 export const ehDoDono = (server, superAdmins = listaSuperAdmins()) =>
   !!server?.id && (server.id === servidorDoRelatorio() || (!!server.ownerId && superAdmins.includes(server.ownerId)));
-export function temAssunto(server, cfg, superAdmins = listaSuperAdmins()) {
-  if (!ehDoDono(server, superAdmins)) return false;
-  const fixo = servidorDoRelatorio();
-  if (fixo) return server?.id === fixo || (cfg?.assuntos ?? []).includes(server?.id);
-  const lista = cfg?.assuntos ?? [];
-  if (lista.length) return lista.includes(server?.id);
-  return true;
-}
 
 // O banco guarda só 48 h de eventos.
 export function podar(ate = Date.now()) {
   try { db.podarRelatorio(ate - 48 * HORA); } catch (e) { registrarErro("RELATORIO", e); }
+}
+
+// (P4, 2 nov 2026) A config: { ativo, pularVazias, … }. A antiga tinha `canalId` (o
+// canal escolhido): ela é lida sem quebrar — ligado só se tinha canal e não estava pausado,
+// como antes — e o canal é esquecido. Sem config, desligado (`&servidores relatorio on`).
+export function configDoRelatorio(global) {
+  if (!global || typeof global !== "object") return { ativo: false, pularVazias: false };
+  const cfg = global.relatorio ??= { ativo: false, pularVazias: false };
+  if (Object.hasOwn(cfg, "canalId")) {
+    cfg.ativo = !!cfg.canalId && cfg.ativo !== false;
+    delete cfg.canalId;
+  }
+  return cfg;
+}
+// O relatório vai à DM do dono do bot — nunca a um canal. `enviar(canal, embed)`.
+export async function entregar(rel, { client, enviar }) {
+  const dm = await dmDoDono(client);
+  if (!dm) { console.warn("[RELATORIO] sem DM com o dono do bot (SUPER_ADMINS) — relatório não enviado"); return null; }
+  return enviar(dm, { title: rel.title, description: rel.description });
 }
 
 let timer = null;
@@ -299,14 +261,14 @@ export function agendar({ client, getCfg, enviar }) {
   if (timer) return;
   const proxima = () => HORA - (Date.now() % HORA) + 5_000;   // 5s depois da hora cheia
   const rodar = async () => {
-    // (31 out 2026, R11) a poda roda toda hora, MESMO sem canal configurado:
+    // (31 out 2026, R11) a poda roda toda hora, MESMO com o relatório desligado:
     // antes, sem canal, a tabela relatorio_eventos crescia para sempre
     podar();
     const cfg = getCfg();
-    if (cfg?.canalId && cfg.ativo !== false) {
+    if (cfg?.ativo === true) {
       try {
         const rel = await gerar({ client, cfg, ate: Math.floor(Date.now() / HORA) * HORA });
-        if (!(rel.vazio && cfg.pularVazias)) await enviar(cfg.canalId, rel);
+        if (!(rel.vazio && cfg.pularVazias)) await entregar(rel, { client, enviar });
       } catch (e) { registrarErro("RELATORIO", e); }
     }
     timer = setTimeout(rodar, proxima());
@@ -315,48 +277,16 @@ export function agendar({ client, getCfg, enviar }) {
   timer.unref?.();
 }
 
-// O modelo escreveu assunto para servidores SEM amostras, deduzido do nome
-// ("Queremos acordar tarde" → "foco no despertar tardio"), e copiou a frase de
-// um membro entre aspas. O prompt pede para não fazer isso; aqui é o código
-// que garante: na seção **Assuntos** só ficam os servidores que tinham
-// amostras, e trecho entre aspas copiado de uma amostra sai.
-export function limparAssuntos(texto, amostras, nomes) {
-  const comAmostra = new Set([...amostras].filter(([, a]) => a.amostras?.length).map(([id]) => (nomes.get(id) ?? id).toLowerCase()));
-  const frases = [...amostras].flatMap(([, a]) => a.amostras ?? []).map((f) => f.toLowerCase());
-  const saida = [];
-  let naSecao = false, manter = true;
-  for (const linha of String(texto).split("\n")) {
-    const t = linha.trim();
-    if (/^\*\*(Destaques|Erros)\*\*/i.test(t)) { naSecao = false; manter = true; }
-    else if (/^\*\*Assuntos\*\*/i.test(t)) { naSecao = true; manter = true; saida.push(linha); continue; }
-    else if (naSecao && t && !/^[-*•]\s/.test(t)) {
-      // cabeçalho de servidor dentro de Assuntos: **Nome**, ### Nome ou Nome:
-      const nome = t.replace(/^#+\s*/, "").replace(/^\*\*|\*\*$/g, "").replace(/:$/, "").trim().toLowerCase();
-      manter = comAmostra.has(nome);
-    }
-    if (naSecao && !manter) continue;
-    const limpa = naSecao
-      ? linha.replace(/\s*\(?["“]([^"”]{3,})["”]\)?/g, (m, q) => (frases.some((f) => f.includes(q.toLowerCase())) ? "" : m))
-      : linha;
-    saida.push(limpa);
-  }
-  // Assuntos sem cabeçalho de servidor (aconteceu com um servidor só): se só um
-  // tinha amostras, o nome é dele — o código põe, em vez de deixar ambíguo.
-  const idx = saida.findIndex((l) => /^\s*\*\*Assuntos\*\*/i.test(l));
-  if (idx >= 0 && comAmostra.size === 1) {
-    const prox = saida.slice(idx + 1).find((l) => l.trim());
-    if (prox && /^\s*[-*•]\s/.test(prox)) {
-      const nome = [...amostras].filter(([, a]) => a.amostras?.length).map(([id]) => nomes.get(id) ?? id)[0];
-      saida.splice(idx + 1, 0, `**${nome}**`);
-    }
-  }
-  return saida.join("\n")
-    .replace(/\*\*Assuntos\*\*\s*\n(\s*\n)*(?=\*\*(Erros|Destaques)\*\*|$)/i, "")
-    .trim();
+// (P4, 2 nov 2026) Os erros das últimas 24 h, os mais frequentes primeiro: [[etiqueta, n], …]. São de
+// todos os servidores: só o dono do bot vê, no `&servidores` (na DM). Antes, no `&debug` de um servidor.
+export function errosRecentes(agora = Date.now(), max = 5) {
+  const cont = new Map();
+  for (const e of db.eventosRelatorio(agora - 24 * HORA, agora + 1)) if (e.tipo === "erro") cont.set(e.titulo, (cont.get(e.titulo) ?? 0) + 1);
+  return [...cont].sort((a, b) => b[1] - a[1]).slice(0, max);
 }
 
-// Em quantas das últimas 24 horas cada padrão de erro apareceu. Sem isto o
-// modelo chamou de "falha temporária" o nitter.net recusando o dia inteiro.
+// Em quantas das últimas 24 horas cada padrão de erro apareceu ("em N das
+// últimas 24 h"): o erro persistente não se passa por temporário.
 export function persistenciaDosErros(eventos, ate) {
   const horas = new Map();
   for (const e of eventos) {

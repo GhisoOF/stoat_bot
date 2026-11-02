@@ -139,7 +139,7 @@ export async function cmdComando(message, args, ctx) {
 // &cargomudo — APOSENTADO (1 out 2026). O silêncio da Judy (manual e do
 // automod) passou a ser o timeout nativo do Stoat: não há mais cargo a criar,
 // posicionar nem negar canal por canal. O comando fica só para avisar quem o
-// digitar (como o `&chat especial`), e quem tinha o cargo antigo perde-o
+// digitar, e quem tinha o cargo antigo perde-o
 // sozinho quando o prazo vence (vigia de silêncios).
 export async function cmdCargoMudo(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P, config } = ctx;

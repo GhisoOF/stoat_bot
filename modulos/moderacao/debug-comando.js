@@ -22,12 +22,9 @@ import { lingua, idiomaDe, tr } from "../core/i18n.js";
 import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
 import { descreverErro, registrarErro } from "../core/erros.js";
 import { carimbo } from "../core/tempo.js";
-import { imagemPedida } from "../core/imagem-modelo.js";
 import { erroDeUso, semPermissao } from "./punir.js";
-import { chaveServicoIA } from "../ai/servicos.js";
+import * as modelo from "./modelo.js";   // (P4) a IA que sobrou: só a da moderação
 import { MODULOS_AUTOMOD, moduloLigado, escadaDePunicao, GRUPOS_AUTOMOD, estadoDoGrupo, validadeDosAvisos } from "./automod-engine.js";
-// (22 out 2026) `iaExiste` = a IA está disponível aqui; `iaAqui` = e o chat está ligado
-import { servidorPermitido as temIA, iaDisponivel, imagemLigadaAqui } from "../ai/chat.js";
 import { loja as lojaEconomia } from "../ferramentas/economia.js";
 import { nomeModo, nomeGrupo } from "../core/nomes-automod.js";
 
@@ -40,7 +37,7 @@ function botTem(server, perm) {
 }
 
 // ─── Coleta: tudo o que o relatório precisa, num objeto só ───────────────────
-export async function coletar({ server, client, config, serverId, botMember, ehDono = false, fetcher = fetch }) {
+export async function coletar({ server, client, config, serverId, botMember, fetcher = fetch }) {
   const am = config?.automod ?? {};
   const pol = am.punicao ?? {};
   const escada = (() => { try { return escadaDePunicao(pol); } catch { return []; } })();
@@ -51,14 +48,10 @@ export async function coletar({ server, client, config, serverId, botMember, ehD
   const cargosNivel = (() => { try { return db.listarCargosNivel(serverId); } catch { return []; } })();
   const reacoes = (() => { try { return db.listReactionRolesServidor(serverId); } catch { return []; } })();
   const vozAqui = servidorNaLista("TTS_SERVIDORES", serverId);
-  const iaAqui = (() => { try { return temIA(serverId); } catch { return false; } })();
-  const iaExiste = (() => { try { return iaDisponivel(serverId); } catch { return false; } })();
-  const imagem = imagemPedida();   // (P2) `IMAGEM` vazio = desligado (a regra única do boot e do ia-servico)
-  const imagemAqui = (() => { try { return imagemLigadaAqui(serverId); } catch { return false; } })();
 
   return {
-    server, client, config, serverId, botMember, ehDono, fetcher,
-    am, pol, usaMute, usaBan, filtrosLigados, cargosNivel, reacoes, vozAqui, iaAqui, iaExiste, imagem, imagemAqui,
+    server, client, config, serverId, botMember, fetcher,
+    am, pol, usaMute, usaBan, filtrosLigados, cargosNivel, reacoes, vozAqui,
     tickets: !!config?.tickets?.logCanal,
     punicoes: punicoesPorModulo(config),
   };
@@ -108,7 +101,7 @@ function secaoPermissoes(d, T) {
     AssignRoles: !!d.config?.autorole?.roleId || d.cargosNivel.length > 0 || d.reacoes.length > 0 || (() => { try { return lojaEconomia(d.serverId).length > 0; } catch { return false; } })(),
     ManageChannel: d.tickets || !!d.config?.tickets?.painel,
     Connect: d.vozAqui, Speak: d.vozAqui,
-    UploadFiles: d.iaAqui && d.imagemAqui,
+    UploadFiles: d.tickets || !!d.config?.log?.canalId,   // a transcrição do ticket e a mídia apagada que volta no log
   };
   const TABELA = [
     ["ViewChannel", "ver os canais", "see channels", "ver los canales", true],
@@ -126,7 +119,7 @@ function secaoPermissoes(d, T) {
     ["ManagePermissions", `permissões de canais e cargos — ${citar("assistente.servidor", "pt")}`, `channel and role permissions — ${citar("assistente.servidor", "en")}`, `permisos de canales y roles — ${citar("assistente.servidor", "es")}`],
     ["Connect", "entrar em calls — voz e música", "join calls — voice and music", "entrar en llamadas — voz y música"],
     ["Speak", "falar nas calls — voz e música", "speak in calls — voice and music", "hablar en llamadas — voz y música"],
-    ["UploadFiles", "enviar arquivos — imagens geradas", "upload files — generated images", "subir archivos — imágenes generadas"],
+    ["UploadFiles", "enviar arquivos — mídia apagada no log, transcrição dos tickets", "upload files — deleted media in the log, ticket transcripts", "subir archivos — multimedia borrada en el registro, transcripción de los tickets"],
   ];
   const itens = [];
   for (const [p, pt, en, es, essencial] of TABELA) {
@@ -156,7 +149,7 @@ function secaoPunicoes(d, T) {
   return { titulo: T("⚖️ Punições de cada módulo", "⚖️ Each module's punishment", "⚖️ Castigos de cada módulo"), itens };
 }
 
-// Webhooks, RSS e RPG — só o que é deste servidor (P2)
+// Webhooks e RSS — só o que é deste servidor (P2)
 function secaoFerramentas(d, T) {
   const itens = [];
   const doServidor = new Set((d.server?.channels ?? []).map((x) => (typeof x === "string" ? x : x?.id)).filter(Boolean));
@@ -177,10 +170,8 @@ function secaoFerramentas(d, T) {
     if (!comErro.length) itens.push({ nivel: "ok", texto: T(`RSS: ${feeds.length} feed(s), sem erro`, `RSS: ${feeds.length} feed(s), no errors`, `RSS: ${feeds.length} feed(s), sin errores`) });
     if (!d.config?.rss?.canalId) itens.push({ nivel: "aviso", texto: T("RSS: sem canal para publicar", "RSS: no channel to post in", "RSS: sin canal para publicar") });
   }
-  const fichas = (() => { try { return db.listarPersonagens(d.serverId, 1000)?.length ?? 0; } catch (e) { registrarErro("DEBUG:rpg", e); return 0; } })();
-  if (fichas) itens.push({ nivel: "info", texto: T(`RPG: ${fichas} personagem(ns) daqui`, `RPG: ${fichas} character(s) from here`, `RPG: ${fichas} personaje(s) de aquí`) });
-  if (!itens.length) itens.push({ nivel: "info", texto: T("sem webhooks, RSS nem RPG por aqui", "no webhooks, RSS or RPG here", "sin webhooks, RSS ni RPG por aquí") });
-  return { titulo: T("🧰 Webhooks, RSS e RPG", "🧰 Webhooks, RSS and RPG", "🧰 Webhooks, RSS y RPG"), itens };
+  if (!itens.length) itens.push({ nivel: "info", texto: T("sem webhooks nem RSS por aqui", "no webhooks or RSS here", "sin webhooks ni RSS por aquí") });
+  return { titulo: T("🧰 Webhooks e RSS", "🧰 Webhooks and RSS", "🧰 Webhooks y RSS"), itens };
 }
 
 function secaoHierarquia(d, T) {
@@ -226,8 +217,6 @@ function secaoCanaisConfigurados(d, T) {
     [T("Anúncio de nível", "Level-up announcements", "Anuncio de nivel"), c.xp?.enabled ? c.xp?.canalAnuncio : null],
     [T("Log dos tickets", "Ticket log", "Registro de tickets"), c.tickets?.logCanal],
     [T("Painel de tickets", "Ticket panel", "Panel de tickets"), c.tickets?.painel?.canalId],
-    [T("Comentários espontâneos", "Spontaneous comments", "Comentarios espontáneos"), d.iaAqui ? c.comentarioEspontaneo?.canalId : null],
-    ...((d.iaAqui ? c.chatLivre?.canais ?? [] : []).map((id) => [T("Conversa livre", "Free chat", "Conversación libre"), id])),
     // (22 out 2026) canais de divulgação: lá o anti-invite não age, mas o resto do
     // automod sim — o bot só precisa VER o canal
     ...((c.automod?.antiInvite?.canaisLiberados ?? []).map((id) => [T("Divulgação (convites liberados)", "Promotion (invites allowed)", "Promoción (invitaciones permitidas)"), id, ["ViewChannel"]])),
@@ -282,32 +271,32 @@ function secaoModeracao(d, T) {
   return { titulo: T("🛡 Moderação", "🛡 Moderation", "🛡 Moderación"), itens };
 }
 
-// (31 out 2026, R6/R10) nome de variável do .env e erro técnico só para o dono do
-// bot; a staff vê o estado e "avise quem hospeda o bot".
-const soDono = (d, txt) => (d.ehDono ? txt : "");
+// (31 out 2026, R6/R10) nome de variável do .env e erro técnico: nunca num canal de servidor. A staff
+// vê o estado e "avise quem hospeda o bot". (P4, revisão) antes o dono do bot via esses detalhes no
+// &debug — num canal de servidor; agora ninguém vê ali: o estado da IA com o detalhe vai ao
+// `&servidores` (só na DM), e a máquina se confere com `bash scripts/judy-diag.sh`.
 const avisarHost = (T) => T("avise quem hospeda o bot", "tell whoever hosts the bot", "avisa a quien aloja el bot");
 
 async function secaoVoz(d, T) {
   const itens = [];
   if (!d.vozAqui) {
-    itens.push({ nivel: "info", texto: T("voz e música não estão liberadas neste servidor", "voice and music aren't enabled on this server", "la voz y la música no están habilitadas en este servidor") + soDono(d, " (`TTS_SERVIDORES`)") });
+    itens.push({ nivel: "info", texto: T("voz e música não estão liberadas neste servidor", "voice and music aren't enabled on this server", "la voz y la música no están habilitadas en este servidor") });
     return { titulo: T("🔊 Voz e música", "🔊 Voice and music", "🔊 Voz y música"), itens };
   }
   const url = (process.env.VOZ_SERVICO_URL || "").replace(/\/$/, "");
   if (!url) {
-    itens.push({ nivel: "erro", texto: T("o serviço de voz não é encontrado", "the voice service can't be found", "no se encuentra el servicio de voz") + (d.ehDono ? " (`VOZ_SERVICO_URL`)" : ` — ${avisarHost(T)}`) });
+    itens.push({ nivel: "erro", texto: T("o serviço de voz não é encontrado", "the voice service can't be found", "no se encuentra el servicio de voz") + ` — ${avisarHost(T)}` });
   } else {
     const t0 = Date.now();
     try {
       const r = await d.fetcher(`${url}/saude`, { signal: AbortSignal.timeout(6000), headers: process.env.VOZ_CHAVE ? { "x-chave": process.env.VOZ_CHAVE } : {} });
       const s = await r.json();
       itens.push({ nivel: r.ok ? "ok" : "erro", texto: T(`serviço de voz respondeu em ${Date.now() - t0} ms`, `voice service answered in ${Date.now() - t0} ms`, `el servicio de voz respondió en ${Date.now() - t0} ms`) });
-      const falhou = (x) => (d.ehDono ? String(x ?? "?").slice(0, 200) : T("com falha", "failing", "con fallo"));
+      const falhou = () => T("com falha", "failing", "con fallo");
       itens.push({ nivel: s.piper?.ok ? "ok" : "erro", texto: `Piper: ${s.piper?.ok ? s.piper.vozAtual ?? "ok" : falhou(s.piper?.erro)}` });
       itens.push({ nivel: s.voz?.pronto ? "ok" : "erro", texto: `LiveKit: ${s.voz?.pronto ? T("pronto", "ready", "listo") : falhou(s.voz?.erro)}` });
     } catch (e) {
-      itens.push({ nivel: "erro", texto: T("serviço de voz inalcançável", "voice service unreachable", "servicio de voz inalcanzable") + soDono(d, ` (${String(e?.message ?? e).slice(0, 200)})`),
-        dica: d.ehDono ? T("na máquina do bot: `bash scripts/judy-diag.sh`", "on the bot's machine: `bash scripts/judy-diag.sh`", "en la máquina del bot: `bash scripts/judy-diag.sh`") : avisarHost(T) });
+      itens.push({ nivel: "erro", texto: T("serviço de voz inalcançável", "voice service unreachable", "servicio de voz inalcanzable"), dica: avisarHost(T) });
     }
   }
   const c = d.config?.tts;
@@ -316,58 +305,38 @@ async function secaoVoz(d, T) {
   return { titulo: T("🔊 Voz e música", "🔊 Voice and music", "🔊 Voz y música"), itens };
 }
 
+// (P4, 2 nov 2026) O chat IA saiu: o que sobrou é a IA da moderação (modelo.js) —
+// o juiz dos temas proibidos e a visão das imagens e das fotos de perfil.
 async function secaoIA(d, T) {
   const itens = [];
-  if (!d.iaExiste) {
-    itens.push({ nivel: "info", texto: T("a IA de conversa não está liberada neste servidor", "the chat AI isn't enabled on this server", "la IA de conversación no está habilitada en este servidor") + soDono(d, " (`CHAT_SERVIDORES`)") });
-    return { titulo: T("🤖 IA", "🤖 AI", "🤖 IA"), itens };
+  const titulo = T("🤖 IA da moderação", "🤖 Moderation AI", "🤖 IA de la moderación");
+  if (!modelo.ligada()) {
+    itens.push({ nivel: "info", texto: T("IA desligada no bot — os temas proibidos decidem só pela nota; imagens e fotos de perfil não são vistas", "AI off in the bot — banned topics are decided by the score alone; images and profile pictures aren't looked at", "IA desactivada en el bot — los temas prohibidos se deciden solo por la nota; las imágenes y fotos de perfil no se miran") });
+    return { titulo, itens };
   }
-  // (22 out 2026) o chat e a imagem são escolha do servidor (começam desligados)
-  itens.push(d.iaAqui
-    ? { nivel: "ok", texto: T("chat ligado neste servidor", "chat on for this server", "chat activado en este servidor") }
-    : { nivel: "info", texto: T(`chat desligado neste servidor — \`${citarInterno("chat.on")}\` liga`, `chat off for this server — \`${citarInterno("chat.on")}\` turns it on`, `chat desactivado en este servidor — \`${citar("chat.on", "es")}\` lo activa`) });
-  const visao = !!(process.env.LLM_MODEL_VISAO || process.env.LLM_MODEL_MODERACAO);
-  if (!d.imagem) itens.push({ nivel: "info", texto: T("geração de imagem desligada no bot", "image generation off in the bot", "generación de imágenes desactivada en el bot") + soDono(d, " (`IMAGEM=0`)") });
-  else if (!d.imagemAqui) itens.push({ nivel: "info", texto: T(`geração de imagem desligada neste servidor — \`${citarInterno("chat.imagem")} on\` liga`, `image generation off for this server — \`${citarInterno("chat.imagem")} on\` turns it on`, `generación de imágenes desactivada en este servidor — \`${citar("chat.imagem", "es")} on\` la activa`) });
-  else if (!visao) itens.push({ nivel: "aviso", texto: T("geração de imagem ligada, mas sem modelo de visão: toda imagem é conferida antes de sair, então nenhuma sai",
-      "image generation on, but no vision model: every image is checked before it goes out, so none will", "generación de imágenes activada, pero sin modelo de visión: toda imagen se revisa antes de salir, así que no saldrá ninguna"),
-    dica: d.ehDono ? T("defina `MODELO_VISAO` no `.env`", "set `MODELO_VISAO` in `.env`", "define `MODELO_VISAO` en el `.env`") : avisarHost(T) });
-  else itens.push({ nivel: "ok", texto: T("geração de imagem ligada (cada imagem conferida pela visão)", "image generation on (each image checked by the vision model)", "generación de imágenes activada (cada imagen revisada por la visión)") });
-  const servico = (process.env.IA_SERVICO_URL || "").replace(/\/$/, "");
-  if (!servico) itens.push({ nivel: "aviso", texto: T("sem ferramentas (busca, código, imagem)", "no tools (search, code, images)", "sin herramientas (búsqueda, código, imágenes)") + soDono(d, " (`IA_SERVICO_URL`)") });
-  else {
+  itens.push(modelo.temJuiz()
+    ? { nivel: "ok", texto: T("juiz dos temas proibidos ligado", "banned-topics judge on", "juez de los temas prohibidos activado") }
+    : { nivel: "info", texto: T("sem o juiz: os temas proibidos decidem só pela nota", "no judge: banned topics are decided by the score alone", "sin el juez: los temas prohibidos se deciden solo por la nota") });
+  if (!modelo.temServico()) {
+    itens.push({ nivel: "aviso", texto: T("sem o serviço das imagens: imagens e fotos de perfil não são vistas", "no image service: images and profile pictures aren't looked at", "sin el servicio de imágenes: las imágenes y fotos de perfil no se miran") });
+  } else {
     try {
-      const r = await d.fetcher(`${servico}/saude`, { signal: AbortSignal.timeout(6000),
-        headers: chaveServicoIA() ? { "x-chave": chaveServicoIA() } : {} });
-      const s = await r.json();
-      itens.push({ nivel: s.llm?.alcancavel ? "ok" : "erro", texto: s.llm?.alcancavel
-        ? T(`modelo respondendo (${(s.llm.modelos ?? []).length} carregado(s))`, `model answering (${(s.llm.modelos ?? []).length} loaded)`, `modelo respondiendo (${(s.llm.modelos ?? []).length} cargado(s))`)
-        : T("o servidor do modelo não responde — a IA fica muda", "the model server doesn't answer — the AI goes silent", "el servidor del modelo no responde — la IA se queda muda") });
+      const s = await modelo.saude({ fetcher: d.fetcher });
+      itens.push({ nivel: s.alcancavel ? "ok" : "erro", texto: s.alcancavel
+        ? T(`modelo respondendo (${s.modelos.length} carregado(s))`, `model answering (${s.modelos.length} loaded)`, `modelo respondiendo (${s.modelos.length} cargado(s))`)
+        : T("o servidor do modelo não responde — a moderação por IA fica parada", "the model server doesn't answer — AI moderation is on hold", "el servidor del modelo no responde — la moderación por IA queda parada") });
     } catch (e) {
-      itens.push({ nivel: "erro", texto: T("serviço da IA inalcançável", "AI service unreachable", "servicio de la IA inalcanzable") + soDono(d, ` (${String(e?.message ?? e).slice(0, 200)})`) });
+      itens.push({ nivel: "erro", texto: T("serviço da IA fora do ar", "AI service down", "servicio de la IA caído") });
     }
+    itens.push(modelo.modeloVisao()
+      ? { nivel: "ok", texto: T("visão das imagens e das fotos de perfil ligada", "image and profile-picture vision on", "visión de imágenes y fotos de perfil activada") }
+      : { nivel: "info", texto: T("sem modelo de visão: imagens não são vistas (o hash e o texto do perfil continuam)", "no vision model: images aren't looked at (the hash and the profile text still are)", "sin modelo de visión: las imágenes no se miran (el hash y el texto del perfil siguen)") });
   }
-  // (P2) a busca só existe com o SearXNG configurado E o chat ligado aqui (ela é ferramenta do chat)
-  const busca = !!process.env.SEARXNG_URL && d.iaAqui;
-  itens.push({ nivel: busca ? "ok" : "info", texto: busca ? T("busca na web ligada", "web search on", "búsqueda web activada")
-    : T("busca na web desligada", "web search off", "búsqueda web desactivada") + (process.env.SEARXNG_URL ? T(" (o chat está desligado aqui)", " (chat is off here)", " (el chat está desactivado aquí)") : soDono(d, " (`SEARXNG_URL`)")) });
-  return { titulo: T("🤖 IA", "🤖 AI", "🤖 IA"), itens };
+  return { titulo, itens };
 }
 
-function secaoErros(d, T) {
-  if (!d.ehDono) return null;
-  const itens = [];
-  try {
-    const agora = Date.now();
-    const eventos = db.eventosRelatorio(agora - 24 * 3600e3, agora + 1).filter((e) => e.tipo === "erro");
-    const cont = new Map();
-    for (const e of eventos) cont.set(e.titulo, (cont.get(e.titulo) ?? 0) + 1);
-    const top = [...cont].sort((a, b) => b[1] - a[1]).slice(0, 5);
-    if (!top.length) itens.push({ nivel: "ok", texto: T("nenhum erro nas últimas 24 h", "no errors in the last 24 h", "ningún error en las últimas 24 h") });
-    for (const [t, n] of top) itens.push({ nivel: n >= 5 ? "aviso" : "info", texto: `${n}× \`${String(t).slice(0, 140)}\`` });
-  } catch { itens.push({ nivel: "info", texto: T("histórico de erros indisponível", "error history unavailable", "historial de errores no disponible") }); }
-  return { titulo: T("🧾 Erros recentes (só o dono do bot vê, valem para todos os servidores)", "🧾 Recent errors (bot owner only, across all servers)", "🧾 Errores recientes (solo los ve el dueño del bot, valen para todos los servidores)"), itens };
-}
+// (P4, 2 nov 2026) A seção "🧾 Erros recentes" (de todos os servidores, só para o dono do bot) saiu
+// daqui: o que é só do dono vai só na DM (R13). Ela está no `&servidores` (relatorio.errosRecentes).
 
 function secaoBot(d, T) {
   const up = process.uptime();
@@ -394,7 +363,6 @@ export async function relatorioCompleto(d, lang = "pt", l = lang) {
     secaoFerramentas(d, T),
     await secaoVoz(d, T),
     await secaoIA(d, T),
-    secaoErros(d, T),
   ].filter(Boolean);
 
   const todos = secoes.flatMap((s) => s.itens);
@@ -483,7 +451,7 @@ export async function cmdDebug(message, args, ctx) {
   const botMember = (() => { try { return server?.member ?? null; } catch { return null; } })()
     ?? (botId ? await server?.fetchMember?.(botId).catch(() => null) : null);
   const latenciaMs = botMember ? Date.now() - t0 : null;
-  const d = await coletar({ server, client, config, serverId: serverId ?? server?.id, botMember, ehDono: !!ctx.ehSuperAdmin?.(message.authorId) });
+  const d = await coletar({ server, client, config, serverId: serverId ?? server?.id, botMember });
   d.latenciaMs = latenciaMs;
 
   const arg = (args[0] ?? "").trim();
@@ -515,8 +483,7 @@ export async function cmdDebug(message, args, ctx) {
         return sendEmbed(message.channel, { title: T("🔒 Não vejo esse canal", "🔒 I can't see that channel", "🔒 No veo ese canal"), colour: COR.aviso,
           description: daApi
             ? T("Esse canal é de **outro servidor**.", "That channel belongs to **another server**.", "Ese canal es de **otro servidor**.")
-            : T(`Falta **Ver canal** para o cargo da Judy em <#${id}>.`, `Judy's role is missing **View channel** in <#${id}>.`, `Al rol de Judy le falta **Ver canal** en <#${id}>.`)
-              + soDono(d, T(" Se já deu, reinicie o bot.", " If it's already granted, restart the bot.", " Si ya lo diste, reinicia el bot.")) });
+            : T(`Falta **Ver canal** para o cargo da Judy em <#${id}>.`, `Judy's role is missing **View channel** in <#${id}>.`, `Al rol de Judy le falta **Ver canal** en <#${id}>.`) });
       }
     }
     if (!canal) {

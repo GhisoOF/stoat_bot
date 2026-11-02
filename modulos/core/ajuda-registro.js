@@ -118,7 +118,7 @@ export function resolverPedido(args = []) {
   const palavras = args.map((a) => String(a ?? ""));
   const w = (palavras[0] ?? "").toLowerCase();
   if (!w || /^\d+$/.test(w)) return { tipo: "indice" };
-  // 1) o nome do comando (id ou nome de tela) — `&help xp`, `&help game`, `&help automod`
+  // 1) o nome do comando (id ou nome de tela) — `&help xp`, `&help automod`
   //    (P2: antes o grupo vencia e o `&help xp` abria o grupo Diversão)
   // 2) um atalho de mais de uma palavra vence o comando vivo (`&help chat sair`)
   const at = resolverAtalho(palavras);

@@ -179,9 +179,8 @@ fi
 FALTA=""
 grep -qE "^BOT_TOKEN=." .env 2>/dev/null || FALTA="$FALTA BOT_TOKEN"
 grep -qE "^(DONO|SUPER_ADMINS)=." .env 2>/dev/null || FALTA="$FALTA DONO"
-grep -qE "^SEARXNG_SECRET=." .env 2>/dev/null || FALTA="$FALTA SEARXNG_SECRET(openssl-rand-hex-32)"
+# (P4) o SEARXNG_SECRET e o SERVIDOR saíram com o chat IA (a IA ficou só na moderação)
 if ! grep -qE "^IA=(0|false|nao|não|off|no)\b" .env 2>/dev/null; then
-  grep -qE "^(SERVIDOR|CHAT_SERVIDORES)=." .env 2>/dev/null || FALTA="$FALTA SERVIDOR"
   grep -qE "^(IA_MODO|LLM_URL)=." .env 2>/dev/null || FALTA="$FALTA IA_MODO-ou-LLM_URL"
 fi
 if [ -n "$FALTA" ]; then

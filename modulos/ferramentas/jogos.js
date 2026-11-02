@@ -10,6 +10,7 @@
 //             encerra) — é uma brincadeira, não vale guardar no banco.
 
 import { trechoPronto } from "../core/aliases.js";
+import * as aleatorio from "../core/aleatorio.js";
 
 // ── Campo minado ────────────────────────────────────────────────────────────
 export const NIVEIS = {
@@ -38,7 +39,7 @@ const vizinhos = (l, c, L, C) => {
 
 // grade[l][c] = -1 (mina) ou quantas minas há em volta. `inicio` = a casa que vem
 // aberta: uma vazia (0) ao acaso; se não houver, a casa sem mina com menos minas em volta.
-export function gerarCampo({ linhas, colunas, minas }, rng = Math.random) {
+export function gerarCampo({ linhas, colunas, minas }, rng = aleatorio.fracao) {
   const total = linhas * colunas;
   const posicoes = [...Array(total).keys()];
   for (let i = total - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [posicoes[i], posicoes[j]] = [posicoes[j], posicoes[i]]; }
@@ -83,7 +84,7 @@ export function resultado(tab) {
 // A Judy joga bem, mas dá para ganhar dela: fecha a linha dela, fecha a sua, pega o
 // meio, depois um canto, depois o que sobrar. Não enxerga a armadilha de duas
 // ameaças ao mesmo tempo.
-export function jogadaDaJudy(tab, eu, rng = Math.random) {
+export function jogadaDaJudy(tab, eu, rng = aleatorio.fracao) {
   const livres = tab.map((x, i) => (x === null ? i : null)).filter((i) => i !== null);
   const fecha = (quem) => livres.find((i) => LINHAS.some((l) => l.includes(i) && l.filter((j) => j !== i).every((j) => tab[j] === quem)));
   const ganhar = fecha(eu); if (ganhar !== undefined) return ganhar;
@@ -118,7 +119,7 @@ function montar(p) {
 }
 
 // Abre a partida: manda o tabuleiro e reage com as nove casas.
-export async function iniciarVelha({ ctx, canal, jogadores, nomes, rng = Math.random, lang = "pt" }) {
+export async function iniciarVelha({ ctx, canal, jogadores, nomes, rng = aleatorio.fracao, lang = "pt" }) {
   varrer();
   const p = { jogadores, nomes, tab: Array(9).fill(null), vez: 0, lang, COR: ctx.COR, rng, exibir: ctx.exibir ?? ((t) => t), vence: Date.now() + TTL_MS };
   const msg = await ctx.sendEmbed(canal, montar(p));

@@ -101,7 +101,9 @@ export async function verImagem({ url, pergunta, modelo = null, temperatura = nu
     const bruta = await baixarLimitado(url);
     limpa = await reescrever(bruta, LADO_VISAO);
   } catch (e) {
-    return { erro: `não consegui tratar a imagem com segurança: ${e?.message ?? e}` };
+    // (2 nov 2026, P4.1) antes: a mensagem da exceção ia no corpo; agora: o detalhe fica no log do serviço
+    console.warn("[IA] imagem: não consegui tratar com segurança:", e?.message ?? e);
+    return { erro: "não consegui tratar a imagem com segurança" };
   }
   return perguntarSobre(limpa, { pergunta, modelo, temperatura, maxTokens });
 }
@@ -130,7 +132,8 @@ export async function perguntarSobre(limpa, { pergunta, modelo = null, temperatu
     const texto = (j?.choices?.[0]?.message?.content || "").trim();
     return texto ? { descricao: texto } : { erro: "o modelo de visão não respondeu nada" };
   } catch (e) {
-    return { erro: `modelo de visão: ${e?.message ?? e}` };
+    console.warn("[IA] modelo de visão:", e?.message ?? e);
+    return { erro: "o modelo de visão falhou" };
   }
 }
 

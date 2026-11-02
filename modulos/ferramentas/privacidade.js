@@ -14,7 +14,7 @@ import { tr } from "../core/i18n.js";
 import { citar } from "../core/aliases.js";
 import { carimbo } from "../core/tempo.js";
 import { registrarErro } from "../core/erros.js";
-import { randomBytes } from "node:crypto";
+import * as aleatorio from "../core/aleatorio.js";
 import * as retencao from "../core/retencao.js";
 
 // A política de privacidade (o PRIVACIDADE.md do repositório). Quem roda a sua
@@ -69,7 +69,7 @@ export async function cmdPrivacidade(message, args, ctx) {
     }
     if (args.length > 1) return uso();
     const r = retencao.dadosDaPessoa(uid);
-    const codigo = randomBytes(3).toString("hex").slice(0, 4).toUpperCase();
+    const codigo = aleatorio.codigo("0123456789ABCDEF", 4);
     pedidosApagar.set(uid, { codigo, ate: Date.now() + PRAZO_APAGAR_MS });
     const lista = (l) => r.map((x) => `• ${x.rotulo[l]}: **${x.n}**`).join("\n");
     const tela = (l, titulo, fica, confirma) => ({ title: titulo, colour: COR.aviso, description: [

@@ -38,6 +38,7 @@ import * as log from "../core/log.js";
 import { tirarTimeout } from "./timeout.js";
 import { idiomaDe } from "../core/i18n.js";
 import { registrarErro } from "../core/erros.js";
+import * as aleatorio from "../core/aleatorio.js";
 
 export const CAMPOS_TEXTO = ["nome", "apelido", "status", "bio"];
 export const CAMPOS_IMAGEM = ["avatar", "avatarServidor", "banner"];
@@ -342,7 +343,7 @@ export async function aplicarNoServidor({ ctx, server, userId, aval: avalBruta, 
   }
   // a amostra aleatória (a fila decide): só do que não apitou nada
   if (!decididos.length && aval?.vistos?.length && await cz.amostrar({ serverId: server.id })) {
-    const v = aval.vistos[Math.floor(Math.random() * aval.vistos.length)];
+    const v = aleatorio.escolher(aval.vistos);
     await registrarUmaVez(v, { serverId: server.id, userId, acao: "nenhuma", origem: "amostra", certeza: "baixa" });
   }
   console.log(`[PERFIL] ${userId} em ${server.id} (${origem}; ${campos.join(",") || "—"}): ${punir.length ? `PUNIU [${punir.map((p) => `${p.campo}:${p.categoria}`).join(", ")}]` : paraStaff.length ? `staff [${paraStaff.map((p) => `${p.campo}:${p.categoria}:${p.certeza}`).join(", ")}]` : "ok"}${devolveu ? " · voz devolvida" : ""}`);

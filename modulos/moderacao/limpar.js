@@ -4,6 +4,7 @@ import { descreverErro, registrarErro } from "../core/erros.js";
 import { tr, idiomaDe } from "../core/i18n.js";
 import { citar, JA_TRADUZIDO, FIM_PRONTO } from "../core/aliases.js";
 import { erroDeUso, semPermissao, resolverAlvo, responderAlvoRuim } from "./punir.js";
+import * as aleatorio from "../core/aleatorio.js";
 
 const MAX = 100;
 
@@ -17,7 +18,7 @@ setInterval(() => {
 
 function novoCodigo() {
   const alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  return Array.from({ length: 4 }, () => alfabeto[Math.floor(Math.random() * alfabeto.length)]).join("");
+  return aleatorio.codigo(alfabeto, 4);
 }
 
 async function apagarTudo(canal, idComando, aoProgredir) {

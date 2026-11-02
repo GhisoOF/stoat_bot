@@ -150,7 +150,7 @@ const FAIXAS = {
 };
 const TEMPO_MIN = 1000, TEMPO_MAX = 10 * 60_000;
 export function valorDoParametro(chave, bruto) {
-  const t = String(bruto ?? "").trim().toLowerCase().replace(",", ".");
+  const t = String(bruto ?? "").trim().toLowerCase().replaceAll(",", ".");
   const erro = (pt, en, es) => ({ ok: false, pt, en, es });
   if (chave === "windowMs") {
     // número puro é ambíguo (segundos? ms? minutos?): pede a unidade
@@ -161,7 +161,7 @@ export function valorDoParametro(chave, bruto) {
   }
   if (chave === "threshold" || chave === "limiteZalgo") {
     if (!/^\d+(\.\d+)?%?$/.test(t)) return erro("Use uma porcentagem entre **10** e **100** (ex.: `70`).", "Use a percentage between **10** and **100** (e.g. `70`).", "Usa un porcentaje entre **10** y **100** (ej.: `70`).");
-    let v = Number(t.replace("%", ""));
+    let v = Number(t.replaceAll("%", ""));
     if (v > 1) v = v / 100;
     if (!Number.isFinite(v) || v < 0.1 || v > 1) return erro("Use uma porcentagem entre **10** e **100** (ex.: `70`).", "Use a percentage between **10** and **100** (e.g. `70`).", "Usa un porcentaje entre **10** y **100** (ej.: `70`).");
     return { ok: true, valor: Math.round(v * 100) / 100 };

@@ -29,6 +29,19 @@ process.env.IDIOMA_PADRAO = "pt";   // (31 out 2026) `=` e não `??=`: o shell n
 
 const SUITES = {};
 
+// ── (2 nov 2026, P4.1, CodeQL) ajudantes de teste ──────────────────────────────────────────
+// Os dublês de fetch reconhecem o destino pelo host/origem do URL (`new URL(u)`), nunca por um
+// pedaço do texto: "http://autumn.teste.mal.com" ou "http://x/?autumn.teste" não passam por
+// "autumn.teste". Texto que vira regex passa pelo escaparRegex (todo metacaractere, a barra
+// invertida inclusive). Id de mentira sai de um contador (cada suíte é um processo), não de sorteio.
+const urlOuNada = (u) => { try { return new URL(String(u)); } catch { return null; } };
+const hostDe = (u) => urlOuNada(u)?.hostname ?? "";
+const daOrigem = (u, origem) => { const a = urlOuNada(u), b = urlOuNada(origem); return !!a && !!b && a.origin === b.origin; };
+const noDominio = (u, dominio) => { const h = hostDe(u); return h === dominio || h.endsWith(`.${dominio}`); };
+const escaparRegex = (t) => String(t).replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
+let __contadorDeIds = 0;
+const idTeste = () => `${(++__contadorDeIds).toString(36)}${Date.now().toString(36)}`;
+
 // ── O Stoat de mentira ───────────────────────────────────────────────────────
 // Tudo o que a stoat.js exporta continua igual; só o Client é trocado por um
 // que não conecta: o login "dá certo", servidores e canais são Maps que o
@@ -1547,7 +1560,7 @@ console.log("\n── .env de instalações antigas ──");
 const comAmbiente = async (vars) => {
   const antes = { ...process.env };
   Object.assign(process.env, vars);
-  try { await import(`./modulos/core/env.js?compat=${Math.random()}`); return { ...process.env }; }
+  try { await import(`./modulos/core/env.js?compat=${idTeste()}`); return { ...process.env }; }
   finally {
     for (const k of Object.keys(process.env)) if (!(k in antes)) delete process.env[k];
     Object.assign(process.env, antes);
@@ -3144,8 +3157,8 @@ console.log("\n── RSS por categoria ──");
   db.addFeed("SRSS", "https://a.example/feed", "Feed Tech", "tecnologia");
   db.addFeed("SRSS", "https://b.example/feed", "Feed Games");
   const feeds = db.listarFeeds("SRSS");
-  ok(feeds.find((f) => f.url.includes("a.example"))?.categoria === "tecnologia", "★ a categoria é guardada no feed");
-  ok(feeds.find((f) => f.url.includes("b.example"))?.categoria == null, "  → feed sem categoria fica sem");
+  ok(feeds.find((f) => hostDe(f.url) === "a.example")?.categoria === "tecnologia", "★ a categoria é guardada no feed");
+  ok(feeds.find((f) => hostDe(f.url) === "b.example")?.categoria == null, "  → feed sem categoria fica sem");
   ok(db.setCategoriaFeed("SRSS", feeds[1].id, "jogos") === 1, "  → e dá para definir depois, pelo id");
 }
 
@@ -3670,7 +3683,7 @@ for (const mult of [1.0, 1.2, 1.5, 2.0]) {
       }
       // amostras aleatórias
       for (let i = 0; i < 200; i++) {
-        const xp = Math.floor(Math.random() * xpParaNivelOriginal(nivelMax, base, mult) * 1.1);
+        const xp = Math.floor((await import("./modulos/core/aleatorio.js")).fracao() * xpParaNivelOriginal(nivelMax, base, mult) * 1.1);
         const a = nivelPorXpOriginal(xp, mult, nivelMax, base);
         const b = nivelPorXpNovo(xp, mult, nivelMax, base);
         ok(a === b, `divergiu (aleatório): mult=${mult} max=${nivelMax} base=${base} xp=${xp} → ${a} vs ${b}`);
@@ -5341,12 +5354,12 @@ store.inicializar(process.env.CONFIG_PATH, process.env.DB_PATH);
 // Rede falsa: o Autumn guarda o .txt; a API registra as reações removidas.
 const rede = { uploads: [], reacoesTiradas: [], uploadFalha: false };
 globalThis.fetch = async (url, op = {}) => {
-  if (String(url).startsWith("http://autumn.teste")) {
+  if (daOrigem(url, "http://autumn.teste")) {
     if (rede.uploadFalha) return { ok: false, status: 500, text: async () => "erro" };
     rede.uploads.push(Buffer.from(op.body).toString("utf8"));
     return { ok: true, json: async () => ({ id: `ANEXO${rede.uploads.length}` }) };
   }
-  if (String(url).startsWith("http://api.teste")) {
+  if (daOrigem(url, "http://api.teste")) {
     if (op.method === "DELETE") rede.reacoesTiradas.push(String(url));
     return { ok: true, status: 204, text: async () => "" };
   }
@@ -6209,7 +6222,7 @@ const vistas = [];
 globalThis.fetch = async (url, op) => {
   const u = String(url);
   vistas.push({ url: u, metodo: op?.method, corpo: op?.body ? JSON.parse(op.body) : null });
-  if (u.match(/\/$/) || u.endsWith("api.stoat.invalido")) {
+  if (u.match(/\/$/) || (hostDe(u) === "api.stoat.invalido" && urlOuNada(u).pathname === "/" && !urlOuNada(u).search)) {
     // (o chamarApi lê o corpo com text(): a resposta falsa precisa trazer o JSON no texto)
     const raiz = { features: { livekit: { enabled: true, nodes: [
       { name: "eu-west", lat: 50, lon: 3, public_url: "wss://lk1" },
@@ -6980,7 +6993,7 @@ const server = { id: "S1", ownerId: "U1", name: "Test", roles, channels: [canal]
 c.servers.set("S1", server); c.channels.set("C1", canal);
 const say = async (t) => {
   const quieto = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
-  try { await Promise.race([c.emitAll("messageCreate", { id: "X" + Math.random(), authorId: "U1", content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "Ghiso" }, member: membro, replyIds: [] }), new Promise((r) => setTimeout(r, 8000))]); }
+  try { await Promise.race([c.emitAll("messageCreate", { id: "X" + idTeste(), authorId: "U1", content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "Ghiso" }, member: membro, replyIds: [] }), new Promise((r) => setTimeout(r, 8000))]); }
   finally { [console.log, console.info, console.warn, console.error] = quieto; }
 };
 await say("&idioma en");
@@ -7035,7 +7048,7 @@ const lerTudo = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e
 const arquivos = ["main.js", "iniciar.js", ...lerTudo("modulos"), ...lerTudo("scripts"), ...lerTudo("ia-servico"), ...lerTudo("voz-servico")];
 const texto = Object.fromEntries(arquivos.map((a) => [a, fs.readFileSync(a, "utf8")]));
 const testes = fs.readFileSync("testes.mjs", "utf8");
-const conta = (t, n) => (t.match(new RegExp(`(?<![\\w$])${n.replace(/\$/g, "\\$")}(?![\\w$])`, "g")) ?? []).length;
+const conta = (t, n) => (t.match(new RegExp(`(?<![\\w$])${escaparRegex(n)}(?![\\w$])`, "g")) ?? []).length;
 let pass = 0, fail = 0;
 const ok = (cond, msg, extra = "") => { cond ? pass++ : fail++; console.log(`${cond ? "✅" : "❌"} ${msg}${!cond && extra ? `\n     ${extra}` : ""}`); };
 
@@ -7183,7 +7196,7 @@ for (const u of ["http://127.0.0.1:8090/saude", "http://10.0.0.5/", "http://192.
 }
 ok(!(await seg.urlPublica("http://interno.exemplo.com/", { resolver: async () => [{ address: "192.168.0.10" }] })).ok, "★ bloqueia domínio que aponta para IP interno");
 ok((await seg.urlPublica("https://exemplo.com/feed.xml", { resolver: publico })).ok, "deixa a internet pública");
-const fetcherRedirect = async (u) => u.startsWith("https://exemplo.com")
+const fetcherRedirect = async (u) => daOrigem(u, "https://exemplo.com")
   ? { status: 302, headers: { get: () => "http://127.0.0.1:8090/saude" } } : { status: 200, ok: true, headers: { get: () => "text/html" }, text: async () => "segredo" };
 let bloqueou = false;
 try { await seg.buscarSeguro("https://exemplo.com/x", {}, { fetcher: fetcherRedirect, resolver: publico }); } catch { bloqueou = true; }
@@ -7216,7 +7229,7 @@ const server = { id: "S1", ownerId: "DONOSRV", name: "Teste", roles: new Map([["
 c.servers.set("S1", server); c.channels.set("C1", canal);
 const say = async (t) => {
   const q = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
-  try { await Promise.race([c.emitAll("messageCreate", { id: "X" + Math.random(), authorId: "U2", content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: t.includes("<@U3>") ? ["U3"] : [], createdAt: new Date(), author: { username: "Comum" }, member: comum, replyIds: [] }), new Promise((r) => setTimeout(r, 6000))]); }
+  try { await Promise.race([c.emitAll("messageCreate", { id: "X" + idTeste(), authorId: "U2", content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: t.includes("<@U3>") ? ["U3"] : [], createdAt: new Date(), author: { username: "Comum" }, member: comum, replyIds: [] }), new Promise((r) => setTimeout(r, 6000))]); }
   finally { [console.log, console.info, console.warn, console.error] = q; }
 };
 const estado = () => {
@@ -7403,7 +7416,7 @@ process.env.BOT_TOKEN = "tok"; process.env.DB_PATH = "/tmp/ataque.db"; process.e
 process.env.SUPER_ADMINS = "DONO"; process.env.LLM_URL = "http://llm.teste";
 for (const f of ["/tmp/ataque.db", "/tmp/ataque.db-wal", "/tmp/ataque.db-shm", "/tmp/ataque.json", "/tmp/blocklist-cache.bin"]) fs.rmSync(f, { force: true });
 let chamadasLLM = 0;
-globalThis.fetch = async (u) => { if (String(u).includes("llm.teste")) chamadasLLM++; return { ok: false, status: 503, text: async () => "", json: async () => ({}) }; };
+globalThis.fetch = async (u) => { if (hostDe(u) === "llm.teste") chamadasLLM++; return { ok: false, status: 503, text: async () => "", json: async () => ({}) }; };
 await import("./main.js");
 const c = globalThis.__client;
 await c.emitAll("ready");
@@ -7419,7 +7432,7 @@ c.servers.set("S1", server); c.channels.set("C1", canal);
 { const store = await import("./modulos/core/config-store.js"); const cfg = store.configDoServidor("S1");
   for (const [k, v] of Object.entries(store.padraoServidor.automod)) if (v && typeof v === "object" && "enabled" in v) cfg.automod[k].enabled = v.enabled; }
 const manda = async (content, extra = {}) => {
-  const m = { id: "X" + Math.random(), authorId: "TROLL", content, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: content.includes("<@BOT>") ? ["BOT"] : [],
+  const m = { id: "X" + idTeste(), authorId: "TROLL", content, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: content.includes("<@BOT>") ? ["BOT"] : [],
     createdAt: new Date(), author: { username: "troll" }, member: troll, replyIds: [], attachments: [], delete: async () => { apagadas.push(m.id); }, ...extra };
   const q = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
   try { await Promise.race([c.emitAll("messageCreate", m), new Promise((res) => setTimeout(res, 5000))]); } finally { [console.log, console.info, console.warn, console.error] = q; }
@@ -7592,7 +7605,7 @@ c.servers.set("S1", server); c.channels.set("C1", canal);
 { const store = await import("./modulos/core/config-store.js"); const cfg = store.configDoServidor("S1");
   for (const [k, v] of Object.entries(store.padraoServidor.automod)) if (v && typeof v === "object" && "enabled" in v) cfg.automod[k].enabled = v.enabled; }
 const manda = async (autor, content, extra = {}) => {
-  const m = { id: "X" + Math.random(), authorId: autor, content, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(),
+  const m = { id: "X" + idTeste(), authorId: autor, content, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(),
     author: { username: membros[autor]?.user.username ?? "dono" }, member: membros[autor] ?? { roles: [], hasPermission: () => true }, replyIds: [], attachments: [],
     delete: async () => { apagadas.push(m.id); }, ...extra };
   mudo();
@@ -7699,7 +7712,7 @@ db.abrirBanco(process.env.DB_PATH);
 const store = await import("./modulos/core/config-store.js");
 store.inicializar(process.env.CONFIG_PATH, process.env.DB_PATH);
 globalThis.fetch = async (url) => {
-  if (String(url).startsWith("http://api.teste")) return { ok: true, status: 204, text: async () => "", json: async () => ({}) };
+  if (daOrigem(url, "http://api.teste")) return { ok: true, status: 204, text: async () => "", json: async () => ({}) };
   return { ok: true, json: async () => ({ id: "ANEXO" }) };
 };
 const tickets = await import("./modulos/ferramentas/tickets.js");
@@ -8527,7 +8540,7 @@ const c = globalThis.__client;
 await c.emitAll("ready");
 const C1ID = "01KCANA1000000000000000001", C2ID = "01KCANA2000000000000000002";
 const enviados = { [C1ID]: [], [C2ID]: [] };
-const canal = (id, serverId) => ({ id, serverId, sendMessage: async (p) => { enviados[id].push(p); return { id: "M" + Math.random(), react: async () => {} }; }, fetchMessages: async () => [] });
+const canal = (id, serverId) => ({ id, serverId, sendMessage: async (p) => { enviados[id].push(p); return { id: "M" + idTeste(), react: async () => {} }; }, fetchMessages: async () => [] });
 const C1 = canal(C1ID, "S1"), C2 = canal(C2ID, "S2");
 const srv = (id, dono, canais) => ({ id, ownerId: dono, name: id, roles: new Map(), channels: canais, channelIds: new Set(canais.map((x) => x.id)),
   member: { roles: [] }, havePermission: () => true, fetchMember: async () => null, fetchMembers: async () => ({ members: [] }), fetchBans: async () => [] });
@@ -8559,7 +8572,7 @@ await diz("ADM", `&automod blocklist add ${INTERNO}/lista.txt`);
 await espera(200);
 ok(toques === antes && !store.getGlobal().linkBlocklistSources.length, "★ nem faz o bot baixar uma \"lista\" da rede interna");
 await diz("ADM", "&automod blocklist adddomain youtube.com");
-ok(!store.getGlobal().linkBlocklistManual.includes("youtube.com"), "  → nem bloqueia um domínio para todos os servidores");
+ok(!store.getGlobal().linkBlocklistManual.some((d) => /(^|\.)youtube\.com$/i.test(String(d))), "  → nem bloqueia um domínio para todos os servidores");
 await diz("ADM", "&automod blocklist list");
 ok(/golpe\.exemplo/.test(ult()), "  → ver a lista continua livre");
 await diz("ADM", "&automod debug off");
@@ -9703,7 +9716,7 @@ const server = { id: "S1", ownerId: "U1", name: "Test", roles, channels: [canal]
 c.servers.set("S1", server); c.channels.set("C1", canal);
 const say = async (t) => {
   const quieto = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {};
-  try { await Promise.race([c.emitAll("messageCreate", { id: "X" + Math.random(), authorId: "U1", content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "Ghiso" }, member: membro, replyIds: [] }), new Promise((r) => setTimeout(r, 8000))]); }
+  try { await Promise.race([c.emitAll("messageCreate", { id: "X" + idTeste(), authorId: "U1", content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "Ghiso" }, member: membro, replyIds: [] }), new Promise((r) => setTimeout(r, 8000))]); }
   finally { [console.log, console.info, console.warn, console.error] = quieto; }
 };
 const texto = () => env.flatMap((p) => {
@@ -9810,7 +9823,7 @@ ok(n("lol trump is so funny 😂") < as.LIMIAR_ASSUNTO.media && n("the president
 ok(n("the left ruined this country, wake up sheep") >= as.LIMIAR_ASSUNTO.media && n("turn left at the church") < as.LIMIAR_ASSUNTO.media, "  → \"the left\" é política; \"turn left at the church\" não");
 ok(n("selling weed, dm me") >= as.LIMIAR_ASSUNTO.media, "  → drogas: oferta em inglês");
 // mensagem de verdade pelo automod: o termo acrescentado em inglês bloqueia
-const msgAm = (texto) => { const m = { id: "AM" + Math.random(), authorId: "U9", content: texto, channelId: "C1", channel: canal, serverId: "S1", author: { username: "x" }, member: { roles: [] }, apagada: false };
+const msgAm = (texto) => { const m = { id: "AM" + idTeste(), authorId: "U9", content: texto, channelId: "C1", channel: canal, serverId: "S1", author: { username: "x" }, member: { roles: [] }, apagada: false };
   m.delete = async () => { m.apagada = true; }; return m; };
 const ctxAm = { config: cfg(), serverId: "S1", COR: {}, PREFIXO: "&", estado: { blockedDomains: new Set(), spamData: new Map(), ecoData: new Map() },
   getServer: async () => server, membroTemPermissao: () => false, sendEmbed: async () => ({}), client: c, salvarConfig: () => {} };
@@ -9864,7 +9877,7 @@ c.servers.set("S1", server); c.channels.set("C1", canal);
 const say = async (autor, t) => {
   env.length = 0;
   const q = [console.log, console.info, console.warn]; console.log = console.info = console.warn = () => {};
-  try { await c.emitAll("messageCreate", { id: "X" + Math.random(), authorId: autor, content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: autor }, member: { ...membro, id: { server: "S1", user: autor } }, replyIds: [] }); }
+  try { await c.emitAll("messageCreate", { id: "X" + idTeste(), authorId: autor, content: t, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: autor }, member: { ...membro, id: { server: "S1", user: autor } }, replyIds: [] }); }
   finally { [console.log, console.info, console.warn] = q; }
   const e = env[env.length - 1]?.embeds?.[0] ?? {};
   return `${e.title ?? ""}\n${e.description ?? ""}`;
@@ -9926,7 +9939,7 @@ await import("./main.js");
 const c = globalThis.__client;
 await c.emitAll("ready");
 globalThis.fetch = async (url) => {
-  if (String(url).startsWith("http://api.teste")) return { ok: true, status: 204, text: async () => "", json: async () => ({}) };
+  if (daOrigem(url, "http://api.teste")) return { ok: true, status: 204, text: async () => "", json: async () => ({}) };
   return { ok: true, json: async () => ({ id: "ANEXO" }) };
 };
 const store = await import("./modulos/core/config-store.js");
@@ -10585,7 +10598,7 @@ await t("o status mostra os quatro modos", async () => {
     const config = { banGlobal: { modo: m, isentos: [] }, log: {}, language: "pt" };
     const saidas = [];
     await bg.cmdBanGlobal({ authorId: "ADM", channel: {} }, [], { config, serverId: "AQUI", PREFIXO: "&", COR: {}, sendEmbed: async (_c, e) => saidas.push(e), getServer: async () => ({ id: "AQUI" }), membroTemPermissao: () => true });
-    assert.match(JSON.stringify(saidas), new RegExp("Modo: \\*\\*" + m + "\\*\\* — " + bg.MODOS[m].slice(0, 20).replace(/[*]/g, "\\*")), m);
+    assert.match(JSON.stringify(saidas), new RegExp("Modo: \\*\\*" + m + "\\*\\* — " + escaparRegex(bg.MODOS[m].slice(0, 20))), m);
   }
 });
 
@@ -10801,7 +10814,7 @@ c.channels.fetch = async (id) => {
   if (id === CNOVO) { c.channels.set(id, canalNovo); return canalNovo; }
   throw JSON.stringify({ type: "MissingPermission" });
 };
-const msg = (content) => ({ id: "M" + Math.random(), authorId: "01PESSOA000000000000000000", content, channelId: CNOVO, mentionIds: [],
+const msg = (content) => ({ id: "M" + idTeste(), authorId: "01PESSOA000000000000000000", content, channelId: CNOVO, mentionIds: [],
   get channel() { return c.channels.get(CNOVO); }, get server() { return this.channel?.server; },
   author: { username: "Ghiso", bot: false }, member: { roles: [] }, attachments: [], createdAt: new Date() });
 
@@ -10902,7 +10915,7 @@ const server = { id: "SENX", ownerId: "DONO", name: "S", roles: new Map(), chann
 c.servers.set("SENX", server);
 const canal = { id: "C1", serverId: "SENX", server, sendMessage: async (p) => { enviados.push(p); return { id: "R", edit: async () => {}, delete: async () => {} }; } };
 c.channels.set("C1", canal);
-const msg = (content, mentionIds = []) => ({ id: "M" + Math.random(), authorId: "01PESSOA000000000000000000", content, channelId: "C1", channel: canal, server,
+const msg = (content, mentionIds = []) => ({ id: "M" + idTeste(), authorId: "01PESSOA000000000000000000", content, channelId: "C1", channel: canal, server,
   mentionIds, author: { username: "Ghiso", bot: false }, member: { roles: [] }, attachments: [], createdAt: new Date() });
 const titulos = () => enviados.map((p) => p?.embeds?.[0]?.title ?? p?.content ?? (typeof p === "string" ? p : "")).join(" | ");
 // (31 out 2026, P2) o &chat saiu como comando: sem a IA de conversa, `&chat …` é só uma
@@ -11054,7 +11067,7 @@ const server = { id: "OUTRO", ownerId: DONO_ID, name: "Outro", roles: new Map(),
 c.servers.set("OUTRO", server);
 const canal = { id: "CO", serverId: "OUTRO", server, sendMessage: async (p) => { enviados.push(p); return { id: "R", edit: async () => {}, delete: async () => {} }; } };
 c.channels.set("CO", canal);
-const msg = (content) => ({ id: "M" + Math.random(), authorId: DONO_ID, content, channelId: "CO", channel: canal, server,
+const msg = (content) => ({ id: "M" + idTeste(), authorId: DONO_ID, content, channelId: "CO", channel: canal, server,
   mentionIds: [], author: { username: "Admin", bot: false }, member: { roles: [] }, attachments: [], createdAt: new Date() });
 const tudo = () => enviados.map((p) => JSON.stringify(p?.embeds ?? p)).join(" | ");
 // (31 out 2026, P2) o &chat saiu como comando: fora dos servidores da conversa, `&chat …`
@@ -11345,7 +11358,7 @@ const server = { id: "S1", ownerId: "U1", name: "T", roles, channels: [canal], c
 c.servers.set("S1", server); c.channels.set("C1", canal);
 const say = async (txt) => {
   env.length = 0; chamadas.length = 0;
-  await silencio(() => c.emitAll("messageCreate", { id: "X" + Math.random(), authorId: "U1", content: txt, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "Owner" }, member: membro, replyIds: [] }));
+  await silencio(() => c.emitAll("messageCreate", { id: "X" + idTeste(), authorId: "U1", content: txt, serverId: "S1", server, channel: canal, channelId: "C1", mentionIds: [], createdAt: new Date(), author: { username: "Owner" }, member: membro, replyIds: [] }));
   return env.map((p) => `${p?.embeds?.[0]?.title ?? ""}\n${p?.embeds?.[0]?.description ?? ""}`).join("\n");
 };
 await say("&language en");
@@ -11468,7 +11481,7 @@ function montar(sid, roles = new Map()) {
   c.servers.set(sid, server); c.channels.set(canal.id, canal);
   const say = async (txt, autor = "DONO") => {
     const antes = msgs.length;
-    await silencio(() => c.emitAll("messageCreate", { id: "X" + Math.random(), authorId: autor, content: txt, serverId: sid, server, channel: canal, channelId: canal.id,
+    await silencio(() => c.emitAll("messageCreate", { id: "X" + idTeste(), authorId: autor, content: txt, serverId: sid, server, channel: canal, channelId: canal.id,
       mentionIds: [], createdAt: new Date(), author: { username: autor }, member: membro(autor), replyIds: [] }));
     return msgs.slice(antes);
   };
@@ -11920,6 +11933,8 @@ const IA = [...db.TABELAS_CHAT_IA];
 const NOVAS = ["xp_fora", "servidores_saida", "migracoes"];   // tabelas que o P1–P7 criou (o ia_consentimento saiu no P4)
 const PREENCHER = `
   // (servidores_saida e migracoes são marcas, não dados: uma linha nelas mudaria o que se testa)
+  // (2 nov 2026, P4.1) antes: valores sorteados; agora: um contador (este texto roda em outro processo)
+  let seq = 0;
   export function preencher(d, serverId, sufixo = "") {
     const tabelas = d.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").all().map((x) => x.name)
       .filter((t) => !["servidores_saida", "migracoes"].includes(t));
@@ -11930,10 +11945,10 @@ const PREENCHER = `
       const valores = cols.map((c) => {
         if (c.name === "serverId") return serverId;
         const tipo = String(c.type).toUpperCase();
-        if (/INT/.test(tipo)) return Date.now() + Math.floor(Math.random() * 1e6);
+        if (/INT/.test(tipo)) return Date.now() + 1000 * (++seq);
         if (/REAL|FLOA|DOUB/.test(tipo)) return 1.5;
         if (/^(criadoEm|em|atualizadoEm|saiuEm|data|quando)$/i.test(c.name)) return new Date().toISOString();
-        return c.name + "-" + serverId + sufixo + "-" + Math.random().toString(36).slice(2, 8);
+        return c.name + "-" + serverId + sufixo + "-" + (++seq).toString(36);
       });
       try { d.prepare("INSERT INTO " + t + " (" + cols.map((c) => '"' + c.name + '"').join(",") + ") VALUES (" + cols.map(() => "?").join(",") + ")").run(...valores); feitas.push(t); }
       catch (e) { puladas.push(t + ": " + e.message); }
@@ -12229,7 +12244,10 @@ process.exit(falhou ? 1 : 0);
 SUITES["comandos-17out"] = async () => {
 // (21 out 2026) sorteio com semente fixa: a medida do espanhol (etapa 4b) e a comparação das
 // telas entre versões não podem depender de qual frase o 8ball ou o &escolher sortearam
-{ let semente = 20261021; Math.random = () => ((semente = (Math.imul(semente, 1664525) + 1013904223) >>> 0) / 4294967296); }
+// (2 nov 2026, P4.1) antes: a semente ia no Math.random global; agora: na fonte única do sorteio
+// do bot (modulos/core/aleatorio.js), que não usa mais o Math.random — a mesma sequência
+{ let semente = 20261021; (await import("./modulos/core/aleatorio.js"))._trocarFonte(() => ((semente = (Math.imul(semente, 1664525) + 1013904223) >>> 0) / 4294967296)); }
+const { celulaDeTabela } = await import("./modulos/core/markdown.js");   // (2 nov 2026, P4.1) a lista do INVENTARIO.md
 const fs = (await import("node:fs")).default;
 const { createHash } = await import("node:crypto");
 const ARQ_JSON = "docs/comandos/inventario.json", ARQ_MD = "docs/comandos/INVENTARIO.md";
@@ -12495,7 +12513,7 @@ const HANDLER_EN = (() => {
     const src = fs.readFileSync(new URL(c.modulo, new URL("./modulos/comandos/", import.meta.url)), "utf8");
     for (const [pt, ens] of Object.entries(c.subcomandos)) for (const en of [].concat(ens)) {
       if (en === pt) continue;
-      const esc = en.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const esc = escaparRegex(en);
       if (new RegExp(`(\\[[^\\]\\n]*"${esc}"[^\\]\\n]*\\]\\.includes\\(|=== "${esc}"|"${esc}" ===|case "${esc}":)`).test(src)) achados.push(`${c.id}:${en}`);
     }
   }
@@ -13287,7 +13305,7 @@ if (ATUALIZAR) {
     "não a sintaxe. O que a suíte já trava (subcomando desconhecido, exemplo pronto com erro, português na tela em",
     "inglês) não aparece aqui.",
     "",
-    ...execucoes.filter((x) => erroDe(x) || x.estourou).map((x) => `- [${x.lang}] \`${x.ex}\` → ${x.estourou ? "⏱️ não respondeu em 3 s" : x.titulo.replace(/\|/g, "\\|")}`),
+    ...execucoes.filter((x) => erroDe(x) || x.estourou).map((x) => `- [${x.lang}] \`${x.ex}\` → ${x.estourou ? "⏱️ não respondeu em 3 s" : celulaDeTabela(x.titulo)}`),
     "",
   ];
   fs.writeFileSync(ARQ_MD, linhas.join("\n"));
@@ -14938,7 +14956,7 @@ Object.assign(process.env, { DB_PATH: DB, CONFIG_PATH: "/tmp/p1-fj.json", WEBHOO
   WEBHOOK_TETO_ERROS_MIN: "100", AUTUMN_URL: "http://autumn.teste" });
 for (const v of ["WEBHOOK_BIND", "WEBHOOK_ESCUTA", "TOKEN_IA", "RSS_SERVIDORES", "CHAT_SERVIDORES", "WEBHOOK_SERVIDORES"]) delete process.env[v];
 const fetchReal = globalThis.fetch;
-globalThis.fetch = async (url, op) => (String(url).startsWith("http://autumn.teste") ? { ok: false, status: 500, text: async () => "fora" } : fetchReal(url, op));
+globalThis.fetch = async (url, op) => (daOrigem(url, "http://autumn.teste") ? { ok: false, status: 500, text: async () => "fora" } : fetchReal(url, op));
 const db = await import("./modulos/core/db.js"); db.abrirBanco(DB);
 let ok = 0, falhou = 0;
 const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.message ?? e).split("\n").join("\n     ")}`); falhou++; } };
@@ -14948,7 +14966,7 @@ const COR = { info: 1, sucesso: 2, aviso: 3, erro: 4, mod: 5 };
 const U = (n) => `01KFJ${String(n).padStart(21, "0")}`;   // ID com cara de ID do Stoat
 const VER = 2 ** 20, LER = 2 ** 21, ESCREVER = 2 ** 22;
 const canalFalso = (id, serverId, extra = {}) => { const c = { id, serverId, name: id, type: "TextChannel", enviados: [], falhar: false,
-  sendMessage: async (p) => { if (c.falhar) throw new Error("Stoat fora"); c.enviados.push(p); return { id: `M${Math.random()}`, react: async () => {} }; }, ...extra }; return c; };
+  sendMessage: async (p) => { if (c.falhar) throw new Error("Stoat fora"); c.enviados.push(p); return { id: `M${idTeste()}`, react: async () => {} }; }, ...extra }; return c; };
 const servidorFalso = (id, canais, extra = {}) => ({ id, ownerId: U(999), roles: new Map(), defaultPermissions: VER + LER + ESCREVER, channels: canais,
   channelIds: new Set(canais.map((c) => c.id)), categories: [], fetchMember: async () => null, fetchMembers: async () => ({ members: [] }), fetchBans: async () => [], ...extra });
 const textoDe = (x) => JSON.stringify(x ?? {});
@@ -15050,7 +15068,7 @@ function mundoTicket(sid, { entrouEm = new Date(Date.now() - 3600_000) } = {}) {
   const client = { user: { id: "BOT" }, channels: { get: (id) => canais.get(id) ?? null, fetch: async (id) => canais.get(id) ?? null }, servers: { fetch: async () => server } };
   const config = { language: "pt", tickets: { logCanal: log.id } };
   const ctx = { client, config, serverId: sid, PREFIXO: "&", COR, salvarConfig: () => {}, getServer: async () => server, membroTemPermissao: () => true,
-    sendEmbed: async (canal, e) => { if (canal?.falhar) throw new Error("Stoat fora"); canal?.enviados?.push(e); return { id: `M${Math.random()}`, react: async () => {} }; } };
+    sendEmbed: async (canal, e) => { if (canal?.falhar) throw new Error("Stoat fora"); canal?.enviados?.push(e); return { id: `M${idTeste()}`, react: async () => {} }; } };
   return { canais, novoCanal, geral, log, server, client, config, ctx, cargos: () => criouCargo };
 }
 await t("★ &ticket painel <canal de outro servidor> é recusado (antes publicava lá)", async () => {
@@ -15581,7 +15599,7 @@ const ctxBase = (extra = {}) => ({ serverId: SRV, config, cfgGlobal: { linkBlock
   getServer: async () => server, salvarConfig: () => {}, salvarGlobal: () => {},
   membroTemPermissao: (m, _s, p) => m.authorId === DONO || m.authorId === SUPER || permissoes.has(p),
   ehSuperAdmin: (id) => id === SUPER, ...extra });
-const msg = (texto, { autor = MOD, mencoes = [], canalId = C1, apagar = null } = {}) => ({ id: "M" + Math.random().toString(36).slice(2), authorId: autor, content: texto,
+const msg = (texto, { autor = MOD, mencoes = [], canalId = C1, apagar = null } = {}) => ({ id: "M" + idTeste(), authorId: autor, content: texto,
   channelId: canalId, channel: CANAIS[canalId], mentionIds: mencoes, member: MEMBROS.get(autor) ?? pessoa(autor, "x", []), author: { id: autor, username: MEMBROS.get(autor)?.user.username ?? "x" },
   delete: apagar ?? (async () => { acoes.push(["apagou"]); }) });
 const rodar = async (fn, texto, extra = {}, opMsg = {}) => { saidas = []; const ctx = ctxBase(extra); await quieto(() => fn(msg(texto, opMsg), texto.split(/\s+/).filter(Boolean), ctx)); return ultima(); };
@@ -16121,7 +16139,7 @@ globalThis.fetch = async (url, op = {}) => {
     if (url.includes("/saude")) return { ok: true, status: 200, json: async () => saudeVoz };
     return { ok: true, status: 200, json: async () => ({ ok: true }) };
   }
-  if (/spotify\.com/.test(url)) {
+  if (noDominio(url, "spotify.com")) {
     pedidosSpotify.push({ url, signal: op.signal ?? null });
     if (url.includes("/api/token")) return { ok: true, status: 200, json: async () => ({ access_token: "a", expires_in: 3600 }) };
     return { ok: false, status: 404, json: async () => ({}), text: async () => "" };
@@ -17912,7 +17930,7 @@ const ctxBase = (extra = {}) => ({ serverId: SRV, config, cfgGlobal: { linkBlock
   membroTemPermissao: (m, _s, p) => m.authorId === DONO || m.authorId === SUPER || permissoes.has(p),
   ehSuperAdmin: (id) => id === SUPER, configDoServidor: () => config,
   criarContexto: (sid) => ctxBase({ serverId: sid }), ...extra });
-const msg = (texto, { autor = MOD, mencoes = [], canalId = C1, resposta = null } = {}) => ({ id: "M" + Math.random().toString(36).slice(2), authorId: autor, content: texto, serverId: SRV,
+const msg = (texto, { autor = MOD, mencoes = [], canalId = C1, resposta = null } = {}) => ({ id: "M" + idTeste(), authorId: autor, content: texto, serverId: SRV,
   channelId: canalId, channel: CANAIS[canalId], mentionIds: mencoes, replyIds: resposta ? [resposta] : [], member: MEMBROS.get(autor) ?? pessoa(autor, "x", []), author: { id: autor } });
 const rodar = async (fn, texto, extra = {}, opMsg = {}) => { saidas = []; await quieto(() => fn(msg(texto, opMsg), texto.split(/\s+/).filter(Boolean), ctxBase(extra))); return ultima(); };
 const comPerm = async (lista, fn) => { const antes = permissoes; permissoes = new Set(lista); try { return await fn(); } finally { permissoes = antes; } };
@@ -18052,7 +18070,7 @@ await t("★ ↩️ na mensagem do ban: só quem tem BanMembers e está acima de
 });
 
 console.log("── 4. &purge ──");
-const encher = (n, autor = FULANO) => { for (let i = 0; i < n; i++) { const id = "H" + Math.random().toString(36).slice(2); msgs.set(id, { id, authorId: autor, channelId: C1 }); } };
+const encher = (n, autor = FULANO) => { for (let i = 0; i < n; i++) { const id = "H" + idTeste(); msgs.set(id, { id, authorId: autor, channelId: C1 }); } };
 await t("★ `&purge @pessoa 5` e `&purge 5 @pessoa`: só as dela", async () => {
   msgs.clear(); encher(4, FULANO); encher(6, RESP);
   acoes.length = 0;
@@ -21042,7 +21060,7 @@ const engine = await import("./modulos/moderacao/automod-engine.js");
 const ESCADA = "aviso,5m,1h,ban";
 const comEscada = (sid = SID) => { const cfg = config(sid); cfg.automod.punicao = { modo: "avisar", escada: ESCADA }; CONFIGS.set(sid, cfg); return cfg; };
 const casoTema = (alerta, { userId = ANA, sid = SID } = {}) => db.staffInserir({ serverId: sid, tipo: "assunto", categoria: "assunto:politica", nota: 0.8, parte: "ataque", userId,
-  canalId: sid === SID ? C1 : C2, msgId: U(51000 + Math.floor(Math.random() * 9000)), alertaCanalId: ALERTA, alertaMsgId: alerta, criadoEm: Date.now(), impressao: rev.impressaoDeTexto(ATAQUE) });
+  canalId: sid === SID ? C1 : C2, msgId: U(51000 + (__contadorDeIds++ % 9000)), alertaCanalId: ALERTA, alertaMsgId: alerta, criadoEm: Date.now(), impressao: rev.impressaoDeTexto(ATAQUE) });
 await t("★ regressão (corrida no degrau): dois ✅ juntos na mesma pessoa, escada aviso,5m,1h,ban, 2 avisos, moderador com Timeout+ManageMessages → ninguém banido", async () => {
   zerar(); comEscada();
   db.somarAviso(SID, ANA, "a"); db.somarAviso(SID, ANA, "b");
@@ -21324,7 +21342,7 @@ await t("★ (bot inteiro) o evento cru fora do cache também leva a reação à
 await t("★ (bot inteiro) o painel do perfil e o dos temas mostram quantos casos a staff daqui já julgou", async () => {
   const diz = async (autor, conteudo) => {
     saidas.length = 0;
-    const ev = { id: U(60000 + saidas.length + Math.floor(Math.random() * 1e6)), authorId: autor, content: conteudo, serverId: SB, server: srvB, channel: geral, channelId: CB,
+    const ev = { id: U(60000 + saidas.length + 1000 * (++__contadorDeIds)), authorId: autor, content: conteudo, serverId: SB, server: srvB, channel: geral, channelId: CB,
       mentionIds: [], createdAt: new Date(), author: { id: autor, username: autor, bot: false }, member: pessoaB(autor), replyIds: [], attachments: [] };
     await quieto(() => Promise.race([c.emitAll("messageCreate", ev), new Promise((r) => setTimeout(r, 6000))]));
     return saidas.join("\n");
@@ -22593,6 +22611,306 @@ await t("★ /data/imagem-teto.json some na subida (uma linha no log), uma vez s
 
 
 console.log(`\nP4 INTEGRAÇÃO: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// (2 nov 2026, P4.1) os alertas do GitHub code scanning (CodeQL, JavaScript): sorteio inseguro,
+// escape incompleto, regex com backtracking exponencial (ReDoS), checagem de URL por pedaço do
+// texto (nos dublês de teste) e exceção crua na resposta HTTP dos serviços. Cada correção tem aqui
+// o teste que trava a volta do padrão.
+SUITES["p41-codeql"] = async () => {
+const fs = (await import("node:fs")).default;
+const path = (await import("node:path")).default;
+const assert = (await import("node:assert")).default;
+const { spawn } = await import("node:child_process");
+const { pathToFileURL } = await import("node:url");
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.stack ?? e).split("\n").slice(0, 6).join("\n     ")}`); falhou++; } };
+const ler = (a) => fs.readFileSync(a, "utf8");
+const lerTudo = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+  e.isDirectory() ? (e.name === "node_modules" ? [] : lerTudo(path.join(dir, e.name))) : /\.(m?js)$/.test(e.name) ? [path.join(dir, e.name)] : []);
+const semComentarios = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/[^\n]*/g, "$1");
+const CODIGO = ["main.js", "iniciar.js", ...lerTudo("modulos"), ...lerTudo("scripts"), ...lerTudo("ia-servico"), ...lerTudo("voz-servico")];
+
+console.log("── 1. sorteio: uma fonte só, do crypto ──");
+const al = await import("./modulos/core/aleatorio.js");
+await t("★ nenhum Math.random no código do bot, dos scripts, dos serviços nem dos testes (só o helper sorteia)", () => {
+  const RE = /\bMath\s*\.\s*random\s*[^\s\w]/;   // chamada, troca ou passada como função (não o nome numa frase)
+  const achados = [...CODIGO, "testes.mjs"].filter((a) => RE.test(semComentarios(ler(a))));
+  assert.deepEqual(achados, []);
+  const helper = semComentarios(ler("modulos/core/aleatorio.js"));
+  assert.match(helper, /from "node:crypto"/);
+  assert.match(helper, /randomInt\(n\)/);
+  assert.match(helper, /randomBytes\(7\)/);
+});
+await t("★ quem sorteava com Math.random agora importa o helper (códigos, ids, amostras, jogos, XP, economia)", () => {
+  const usam = ["modulos/moderacao/limpar.js", "modulos/moderacao/reset.js", "modulos/moderacao/revisao.js", "modulos/moderacao/montar-servidor.js",
+    "modulos/moderacao/perfil.js", "modulos/core/anexos.js", "modulos/ferramentas/economia.js", "modulos/ferramentas/entretenimento.js",
+    "modulos/ferramentas/dados-rpg.js", "modulos/ferramentas/nivel.js", "modulos/ferramentas/jogos.js", "modulos/ferramentas/privacidade.js", "scripts/simular-automod.mjs"];
+  const sem = usam.filter((a) => !/import (\* as aleatorio|\{ [a-z, ]+ \}) from "(\.\.?\/)+(core\/|modulos\/core\/)?aleatorio\.js"/.test(ler(a)));
+  assert.deepEqual(sem, []);
+  // e os parâmetros de injeção dos testes continuam
+  assert.match(ler("modulos/moderacao/revisao.js"), /export function _trocarSorteio\(fn\)/);
+  assert.match(ler("modulos/ferramentas/jogos.js"), /rng = aleatorio\.fracao/);
+});
+await t("★ fracao(): sempre em [0, 1), espalhada (média ~0,5) e sem repetir", () => {
+  const N = 20000, v = Array.from({ length: N }, () => al.fracao());
+  assert.ok(v.every((x) => typeof x === "number" && x >= 0 && x < 1));
+  const media = v.reduce((a, b) => a + b, 0) / N;
+  assert.ok(Math.abs(media - 0.5) < 0.02, `média ${media}`);
+  assert.ok(new Set(v).size > N - 5, "valores repetidos demais");
+  for (let k = 0; k < 10; k++) assert.ok(v.filter((x) => x >= k / 10 && x < (k + 1) / 10).length > N / 10 * 0.85, `faixa ${k}`);
+});
+await t("★ inteiro(n): só 0..n-1, cada valor com a mesma chance; n inválido lança (nada de NaN calado)", () => {
+  for (let i = 0; i < 200; i++) assert.equal(al.inteiro(1), 0);
+  const conta = new Array(7).fill(0);
+  for (let i = 0; i < 70000; i++) { const x = al.inteiro(7); assert.ok(Number.isInteger(x) && x >= 0 && x < 7, String(x)); conta[x]++; }
+  for (const c of conta) assert.ok(c > 9000 && c < 11000, conta.join(","));
+  for (const ruim of [0, -1, 1.5, NaN, Infinity, 2 ** 48, "3", null, undefined]) assert.throws(() => al.inteiro(ruim), RangeError, String(ruim));
+  assert.ok(al.inteiro(2 ** 48 - 1) < 2 ** 48 - 1);
+});
+await t("★ entre(min, max) inclui as duas pontas; escolher() pega todo elemento; lista vazia → undefined", () => {
+  const vistos = new Set(); for (let i = 0; i < 600; i++) vistos.add(al.entre(3, 5));
+  assert.deepEqual([...vistos].sort(), [3, 4, 5]);
+  assert.equal(al.entre(-2, -2), -2);
+  assert.throws(() => al.entre(5, 3), RangeError); assert.throws(() => al.entre(1.5, 3), RangeError);
+  const lista = ["a", "b", "c", "d"], achou = new Set(); for (let i = 0; i < 400; i++) achou.add(al.escolher(lista));
+  assert.deepEqual([...achou].sort(), lista);
+  assert.equal(al.escolher([]), undefined); assert.equal(al.escolher(null), undefined); assert.equal(al.escolher(["x"]), "x");
+});
+await t("★ codigo(alfabeto, n) e sufixo(n): só caracteres do alfabeto, todos aparecem, tamanho exato", () => {
+  const c = al.codigo("AB", 200);
+  assert.match(c, /^[AB]{200}$/); assert.ok(c.includes("A") && c.includes("B"));
+  assert.equal(al.codigo("XYZ", 0), "");
+  assert.throws(() => al.codigo("", 4), RangeError); assert.throws(() => al.codigo("AB", -1), RangeError);
+  for (let i = 0; i < 50; i++) assert.match(al.sufixo(11), /^[0-9a-z]{11}$/);
+  const todos = new Set(Array.from({ length: 40 }, () => al.sufixo(30)).join(""));
+  assert.equal(todos.size, 36, "o alfabeto inteiro aparece");
+});
+await t("★ _trocarFonte (só testes) troca a fonte de todas as funções e volta ao crypto", () => {
+  const antes = al._trocarFonte(() => 0.999999999);
+  try {
+    assert.equal(al.inteiro(10), 9); assert.equal(al.entre(1, 6), 6); assert.equal(al.escolher(["a", "b"]), "b"); assert.equal(al.codigo("AB", 3), "BBB");
+    al._trocarFonte(() => 0);
+    assert.equal(al.inteiro(10), 0); assert.equal(al.fracao(), 0); assert.equal(al.sufixo(3), "000");
+  } finally { al._trocarFonte(antes); }
+  assert.notEqual(al.fracao(), al.fracao());
+});
+await t("★ os códigos de confirmação saem do helper com o formato de sempre (o do &reset tem sempre 4 caracteres)", () => {
+  assert.match(ler("modulos/moderacao/reset.js"), /const novoCodigo = \(\) => aleatorio\.codigo\(aleatorio\.BASE36, 4\)\.toUpperCase\(\);/);
+  assert.match(ler("modulos/moderacao/limpar.js"), /return aleatorio\.codigo\(alfabeto, 4\);/);
+  assert.match(ler("modulos/ferramentas/privacidade.js"), /const codigo = aleatorio\.codigo\("0123456789ABCDEF", 4\);/);
+  assert.match(ler("modulos/moderacao/perfil.js"), /const v = aleatorio\.escolher\(aval\.vistos\);/);
+});
+
+console.log("── 2. escape da célula de tabela markdown ──");
+const { celulaDeTabela } = await import("./modulos/core/markdown.js");
+// a divisão de uma linha de tabela do GFM: `\` + qualquer caractere é escape; `|` solto separa
+const celulasDaLinha = (linha) => {
+  const s = linha.trim().replace(/^\|/, ""), out = [];
+  let atual = "", i = 0;
+  for (; i < s.length; i++) {
+    if (s[i] === "\\" && i + 1 < s.length) { atual += s[i] + s[i + 1]; i++; continue; }
+    if (s[i] === "|") { out.push(atual); atual = ""; continue; }
+    atual += s[i];
+  }
+  if (atual.trim()) out.push(atual);
+  return out;
+};
+await t("★ barra invertida primeiro, depois `|`; todas as ocorrências; quebra de linha vira espaço", () => {
+  assert.equal(celulaDeTabela("a|b"), "a\\|b");
+  assert.equal(celulaDeTabela("a\\|b"), "a\\\\\\|b");      // a\|b → a\\\|b (a barra do texto não come o escape)
+  assert.equal(celulaDeTabela("\\\\"), "\\\\\\\\");         // \\ → \\\\
+  assert.equal(celulaDeTabela("a|b|c||"), "a\\|b\\|c\\|\\|");
+  assert.equal(celulaDeTabela("x\ny\r\nz\rw"), "x y z w");
+  assert.equal(celulaDeTabela(null), ""); assert.equal(celulaDeTabela("sem nada"), "sem nada");
+});
+await t("★ toda entrada de até 5 caracteres de {a, |, \\, quebra} fica numa célula só (1.365 casos)", () => {
+  const A = ["a", "|", "\\", "\n"]; let n = 0;
+  const gerar = (pref) => {
+    if (pref.length) {
+      n++;
+      const linha = `| ${celulaDeTabela(pref)} | fim |`;
+      assert.equal(linha.split("\n").length, 1, JSON.stringify(pref));
+      assert.deepEqual(celulasDaLinha(linha).map((c) => c.trim()).at(-1), "fim", JSON.stringify(pref));
+      assert.equal(celulasDaLinha(linha).length, 2, `${JSON.stringify(pref)} → ${linha}`);
+    }
+    if (pref.length < 5) for (const c of A) gerar(pref + c);
+  };
+  gerar("");
+  assert.equal(n, 1364);
+});
+await t("★ a tabela de variáveis do README: valor e descrição com `\\|`, `\\\\` e `|` repetido não partem a linha; o corte (160) vem antes do escape", async () => {
+  const rd = await import("./scripts/gerar-readme.js");
+  const env = ["# Barra \\| no meio, \\\\ duas, a|b|c.", "AB=x\\|y", "", `# ${"a".repeat(158)}\\|\\|\\|fim.`, "CD=1", ""].join("\n");
+  const tab = rd.tabelaDeVariaveis(env, "pt").split("\n").slice(2);
+  assert.equal(tab.length, 2);
+  for (const l of tab) assert.equal(celulasDaLinha(l).length, 3, l);
+  assert.match(tab[0], /`x\\\\\\\|y`/);
+  assert.match(tab[0], /Barra \\\\\\\| no meio, \\\\\\\\ duas, a\\\|b\\\|c\./);
+  assert.match(rd.tabelaDeVariaveis("AB=1 | 2\n", "pt"), /`1 \\\| 2`/, "o texto sem barra invertida sai igual a antes");
+});
+await t("★ a tabela de comandos do README (3 idiomas): toda linha tem exatamente 2 células", async () => {
+  const { tabelaDeComandos } = await import("./modulos/core/ajuda-registro.js");
+  for (const l of ["pt", "en", "es"]) {
+    const linhas = tabelaDeComandos(l, "&").split("\n").filter((x) => x.startsWith("| `"));
+    assert.ok(linhas.length > 30, l);
+    const ruins = linhas.filter((x) => celulasDaLinha(x).length !== 2);
+    assert.deepEqual(ruins, [], l);
+  }
+  for (const a of ["scripts/gerar-readme.js", "modulos/core/ajuda-registro.js"]) {
+    assert.match(ler(a), /celulaDeTabela\(/, a);
+    assert.doesNotMatch(semComentarios(ler(a)), /replace\(\/\\\|\/g, "\\\\\|"\)/, `${a}: escape de \`|\` fora do helper`);
+  }
+});
+await t("★ escape de regex dos testes (escaparRegex): todo metacaractere, a barra invertida inclusive", () => {
+  for (const s of ["a.b*c", "\\d+", "$x", "(a|b)", "[x]{2}", "^/fim$", "a\\|b", "?+"]) {
+    assert.ok(new RegExp(`^${escaparRegex(s)}$`).test(s), s);
+    assert.ok(!new RegExp(`^${escaparRegex(s)}$`).test(s + "x"), s);
+  }
+});
+await t("★ número com `%` ou `,`: troca todas as ocorrências (antes: só a primeira)", async () => {
+  const am = await import("./modulos/moderacao/automod-comandos.js");
+  assert.deepEqual(am.valorDoParametro("threshold", "70%"), { ok: true, valor: 0.7 });
+  assert.equal(am.valorDoParametro("threshold", "70%%").ok, false);
+  assert.deepEqual(am.valorDoParametro("threshold", "0,5"), { ok: true, valor: 0.5 });
+  const fontes = ["modulos/moderacao/automod-comandos.js", "modulos/ferramentas/musica.js", "modulos/ferramentas/tts.js", "modulos/core/cores.js"].map((a) => semComentarios(ler(a))).join("\n");
+  assert.doesNotMatch(fontes, /\.replace\("[%,#]",/);
+});
+
+console.log("── 3. ReDoS: o nome do canal de regras ──");
+const si = await import("./modulos/ferramentas/servidor-info.js");
+// O que a regex de antes (/^(📜|📌|❗|⚠️|\W)*\s*(regras|rules)\s*$/i) decidia, escrito sem regex: pula
+// o prefixo de unidades UTF-16 que não são [A-Za-z0-9_] (sem a flag u, cada metade de um emoji é \W),
+// e o resto é "regras"/"rules" (sem caixa) mais só espaço. (A regex de antes não fica no código: o
+// CodeQL a aponta de novo onde ela estiver; a comparação direta com ela, feita no P4.1, deu igual.)
+const ANTIGA = { test: (nome) => {
+  let i = 0; while (i < nome.length && !/\w/.test(nome[i])) i++;
+  const resto = nome.slice(i);
+  return ["regras", "rules"].some((p) => resto.slice(0, p.length).toLowerCase() === p && /^\s*$/.test(resto.slice(p.length)));
+} };
+await t("★ a regex nova dá o mesmo resultado que a antiga (lista de nomes + todas as combinações curtas)", () => {
+  const nomes = ["📜regras", "📌 rules", "❗️regras ", "⚠️-regras", "#regras", "regras", "Regras", "RULES", "regras-da-staff", "minhas regras",
+    "📜 regras gerais", "a regras", "  regras", "—regras", "éregras", "regras2", "_regras", "📜📜📜 rules  ", "regrasx", "📜regra", "", "📜", " \t regras\t"];
+  for (const n of nomes) assert.equal(si.RE_NOME_SO_REGRAS.test(n), ANTIGA.test(n), JSON.stringify(n));
+  const PEDACOS = ["📜", "⚠️", " ", "-", "a", "_", "é", "#"], FINS = ["regras", "rules", "regra", "REGRAS ", "rules!"];
+  let n = 0;
+  const gerar = (pref) => {
+    for (const f of FINS) { n++; assert.equal(si.RE_NOME_SO_REGRAS.test(pref + f), ANTIGA.test(pref + f), JSON.stringify(pref + f)); }
+    if (pref.length < 6) for (const p of PEDACOS) gerar(pref + p);
+  };
+  gerar("");
+  assert.ok(n > 5000, String(n));
+});
+await t("★ nome adversário (milhares de emojis/espaços sem \"regras\" no fim): < 50 ms (antes: exponencial)", () => {
+  for (const nome of ["📜".repeat(5000) + " regra x", "⚠️ ".repeat(5000) + "regrasx", " ".repeat(20000) + "!", "📌❗".repeat(3000) + "\u0000"]) {
+    const t0 = performance.now();
+    assert.equal(si.RE_NOME_SO_REGRAS.test(nome), false);
+    assert.ok(performance.now() - t0 < 50, `${(performance.now() - t0).toFixed(1)} ms`);
+  }
+  assert.doesNotMatch(semComentarios(ler("modulos/ferramentas/servidor-info.js")), /\(📜\|/);
+});
+await t("★ canalDeRegras: com um canal de nome adversário, termina rápido e ainda prefere o \"📜regras\"", () => {
+  const canais = [
+    { id: "C_RUIM", name: "📜".repeat(4000) + " regra x", type: "TextChannel" },
+    { id: "C_OUTRA", name: "regras-antigas", type: "TextChannel" },
+    { id: "C_REGRAS", name: "📜regras", type: "TextChannel" },
+  ];
+  const server = { id: "S1", channels: canais, channelIds: new Set(canais.map((c) => c.id)), defaultPermissions: 2 ** 20 + 2 ** 21 + 2 ** 22, roles: new Map() };
+  const t0 = performance.now();
+  const r = si.canalDeRegras(server, {});
+  assert.ok(performance.now() - t0 < 100, `${(performance.now() - t0).toFixed(1)} ms`);
+  assert.equal(r?.id, "C_REGRAS");
+});
+
+console.log("── 4. URL pelo host, nunca por pedaço do texto ──");
+await t("★ daOrigem/noDominio/hostDe (os dublês de fetch dos testes) não caem em host parecido", () => {
+  assert.equal(daOrigem("http://autumn.teste/attachments", "http://autumn.teste"), true);
+  assert.equal(daOrigem("http://autumn.teste", "http://autumn.teste"), true);
+  for (const u of ["http://autumn.teste.mal.com/x", "http://mal.com/?u=http://autumn.teste", "https://autumn.teste/", "http://autumn.teste:81/", "http://user@mal.com/autumn.teste", "lixo"])
+    assert.equal(daOrigem(u, "http://autumn.teste"), false, u);
+  assert.equal(noDominio("https://accounts.spotify.com/api/token", "spotify.com"), true);
+  assert.equal(noDominio("https://spotify.com/x", "spotify.com"), true);
+  for (const u of ["https://spotify.com.mal.com/", "https://naospotify.com/", "https://mal.com/spotify.com"]) assert.equal(noDominio(u, "spotify.com"), false, u);
+  assert.equal(hostDe("http://llm.teste/v1"), "llm.teste"); assert.equal(hostDe("não é url"), "");
+});
+await t("★ nenhum dublê de fetch nos testes reconhece o destino por startsWith/includes/endsWith do texto do URL", () => {
+  const fonte = semComentarios(ler("testes.mjs"));
+  const ruins = fonte.split("\n").filter((l) => /\b(url|u|href|link)\)?\.(startsWith|includes|endsWith)\("(https?:\/\/[^"/]+|[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,})"\)/.test(l)
+    || /linkBlocklistManual\.includes\("[^"]+\.[a-z]+"\)/.test(l));
+  assert.deepEqual(ruins.map((l) => l.trim().slice(0, 120)), []);
+});
+await t("★ o código do bot também não decide host por pedaço do texto", () => {
+  const ruins = CODIGO.flatMap((a) => semComentarios(ler(a)).split("\n").filter((l) => /\.(startsWith|includes|endsWith|indexOf)\("(https?:\/\/[^"/]+|[a-z0-9-]+\.(com|net|org|io|chat))"\)/.test(l)).map((l) => `${a}: ${l.trim().slice(0, 100)}`));
+  assert.deepEqual(ruins, []);
+});
+
+console.log("── 5. serviços: exceção interna nunca vai no corpo da resposta ──");
+const http = (await import("node:http")).default;
+const TMP = "/tmp/p41-codeql";
+fs.rmSync(TMP, { recursive: true, force: true }); fs.mkdirSync(TMP, { recursive: true });
+const SEGREDO = "SEGREDO-INTERNO em /caminho/secreto/arquivo.js";
+// um carregador que troca UMA função de um módulo do serviço por uma que lança (o resto é o módulo real)
+const preparar = (nome, servico, modulo, funcao) => {
+  const real = pathToFileURL(path.resolve(servico, modulo)).href;
+  const stub = `export * from ${JSON.stringify(real)}; export async function ${funcao}() { const e = new Error(${JSON.stringify(SEGREDO)}); e.stack = "Error: " + ${JSON.stringify(SEGREDO)} + "\\n    at x (/caminho/secreto/arquivo.js:1:1)"; throw e; }`;
+  fs.writeFileSync(`${TMP}/${nome}-ganchos.mjs`, `export async function resolve(esp, ctx, proximo) {
+  if (esp === ${JSON.stringify("./" + modulo)} && String(ctx.parentURL ?? "").endsWith(${JSON.stringify(`/${servico}/servidor.js`)})) return { url: "data:text/javascript," + encodeURIComponent(${JSON.stringify(stub)}), shortCircuit: true };
+  return proximo(esp, ctx);
+}\n`);
+  fs.writeFileSync(`${TMP}/${nome}-pre.mjs`, `import { register } from "node:module"; register(${JSON.stringify(pathToFileURL(`${TMP}/${nome}-ganchos.mjs`).href)});\n`);
+  return `${TMP}/${nome}-pre.mjs`;
+};
+const sobe = (dir, pre, env) => new Promise((ok_, erro_) => {
+  const p = spawn(process.execPath, ["--import", pre, "servidor.js"], { cwd: dir, env: { PATH: process.env.PATH, HOME: process.env.HOME, DOTENV_CONFIG_PATH: "/dev/null", ...env }, stdio: ["ignore", "pipe", "pipe"] });
+  const s = { p, saida: "" };
+  p.stdout.on("data", (d) => { s.saida += d; }); p.stderr.on("data", (d) => { s.saida += d; });
+  const fim = setTimeout(() => erro_(new Error(`não subiu: ${s.saida.slice(0, 400)}`)), 8000);
+  const olhar = setInterval(() => { if (/ouvindo na porta|serviço de IA na porta/.test(s.saida)) { clearInterval(olhar); clearTimeout(fim); ok_(s); } }, 50);
+  p.on("exit", (c) => { clearInterval(olhar); clearTimeout(fim); erro_(new Error(`saiu (${c}): ${s.saida.slice(0, 400)}`)); });
+});
+const pedir = (porta, rota, { metodo = "GET", corpo = null, chave }) => new Promise((ok_, erro_) => {
+  const r = http.request({ host: "127.0.0.1", port: porta, path: rota, method: metodo, headers: { "x-chave": chave, ...(corpo != null ? { "content-type": "application/json" } : {}) } }, (res) => {
+    let d = ""; res.on("data", (x) => { d += x; }); res.on("end", () => ok_({ status: res.statusCode, texto: d }));
+  });
+  r.on("error", erro_); if (corpo != null) r.write(corpo); r.end();
+});
+const CRU = /SEGREDO|caminho|secreto|\bat \w|Unexpected|SyntaxError|JSON at position|is not valid JSON|TypeError|Cannot read/;
+const conferirServico = async ({ nome, dir, modulo, funcao, rotaQueLanca, env, porta, chave, generico }) => {
+  const s = await sobe(dir, preparar(nome, dir, modulo, funcao), env);
+  try {
+    const r = await pedir(porta, rotaQueLanca, { chave });
+    assert.equal(r.status, 500, r.texto);
+    assert.deepEqual(JSON.parse(r.texto), { erro: generico, codigo: "interno" });
+    assert.doesNotMatch(r.texto, CRU);
+    for (const [corpo, texto] of [["{nao é json", "corpo não é JSON válido"], ["null", "o corpo tem de ser um objeto JSON"], ["[1,2]", "o corpo tem de ser um objeto JSON"], ["42", "o corpo tem de ser um objeto JSON"]]) {
+      const v = await pedir(porta, nome === "ia" ? "/moderar-imagem" : "/entrar", { metodo: "POST", corpo, chave });
+      assert.equal(v.status, 400, `${corpo}: ${v.texto}`);
+      assert.deepEqual(JSON.parse(v.texto), { erro: texto, codigo: "pedido" }, corpo);
+      assert.doesNotMatch(v.texto, CRU, corpo);
+    }
+    const grande = await pedir(porta, nome === "ia" ? "/moderar-imagem" : "/entrar", { metodo: "POST", corpo: `{"x":"${"a".repeat(nome === "ia" ? 2_100_000 : 70_000)}"}`, chave }).catch(() => ({ status: 413, texto: "{}" }));
+    assert.ok(grande.status === 413 || grande.status === 0, String(grande.status));
+    await new Promise((r) => setTimeout(r, 100));
+    assert.match(s.saida, /SEGREDO-INTERNO/, "o detalhe vai para o log do processo");
+    assert.match(s.saida, /caminho\/secreto\/arquivo\.js:1:1/, "com a stack");
+  } finally { s.p.kill("SIGKILL"); }
+};
+await t("★ ia-servico: exceção interna → 500 { erro genérico, codigo: \"interno\" } e o detalhe (mensagem e stack) só no log; corpo ruim → 400 com texto fixo", () =>
+  conferirServico({ nome: "ia", dir: "ia-servico", modulo: "dns-fallback.js", funcao: "garantirDNS", rotaQueLanca: "/dns", porta: 18590, chave: "k-ia",
+    env: { PORTA: "18590", IA_SERVICO_CHAVE: "k-ia", LLM_URL: "http://127.0.0.1:1" }, generico: "erro interno do serviço de IA" }));
+await t("★ voz-servico: exceção interna → 500 { erro genérico, codigo: \"interno\" } e o detalhe (mensagem e stack) só no log; corpo ruim → 400 com texto fixo", () =>
+  conferirServico({ nome: "voz", dir: "voz-servico", modulo: "voz.js", funcao: "estado", rotaQueLanca: "/estado", porta: 18591, chave: "k-voz",
+    env: { VOZ_PORTA: "18591", VOZ_CHAVE: "k-voz", PIPER_BIN: "/bin/false", PIPER_VOZES: TMP }, generico: "erro interno do serviço de voz" }));
+await t("★ nenhum serviço devolve texto cru de exceção (String(e), e.stack, `${e.message}` num campo erro)", () => {
+  const fontes = [...lerTudo("ia-servico"), ...lerTudo("voz-servico")];
+  const ruins = fontes.flatMap((a) => semComentarios(ler(a)).split("\n").filter((l) => /\berro:\s*(String\(e\)|e\??\.stack\b|`[^`]*\$\{e\??\.message|\(?e\??\.message \?\? String\(e\))/.test(l)).map((l) => `${a}: ${l.trim().slice(0, 120)}`));
+  assert.deepEqual(ruins, []);
+  // o motivo que o bot reconhece pelo nome continua chegando (o resgate do AlreadyConnected)
+  assert.match(ler("voz-servico/voz.js"), /if \(\/AlreadyConnected\/i\.test\(msg\)\) return ALREADY_CONNECTED;/);
+});
+
+console.log(`\nP4.1 CODEQL: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

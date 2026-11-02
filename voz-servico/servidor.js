@@ -22,6 +22,13 @@ if (!CHAVE) {
   process.exit(1);
 }
 
+// (2 nov 2026, P4.1, CodeQL "stack trace exposure") O corpo de um erro leva só o texto fixo que o
+// próprio código escreve (ErroDoPedido, as validações das rotas, os motivos que o voz.js escolhe)
+// ou a mensagem genérica com o código "interno"; mensagem e stack da exceção ficam no log.
+class ErroDoPedido extends Error {
+  constructor(texto, status = 400) { super(texto); this.status = status; }
+}
+
 function responder(res, status, corpo) {
   const txt = JSON.stringify(corpo);
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
@@ -33,9 +40,14 @@ function lerCorpo(req) {
     let d = "";
     req.on("data", (c) => {
       d += c;
-      if (d.length > 64_000) { rej(new Error("corpo grande demais")); req.destroy(); }
+      if (d.length > 64_000) { rej(new ErroDoPedido("corpo grande demais", 413)); req.destroy(); }
     });
-    req.on("end", () => { try { res(d ? JSON.parse(d) : {}); } catch (e) { rej(e); } });
+    req.on("end", () => {
+      let v;
+      try { v = d ? JSON.parse(d) : {}; } catch { return rej(new ErroDoPedido("corpo não é JSON válido")); }
+      if (v === null || typeof v !== "object" || Array.isArray(v)) return rej(new ErroDoPedido("o corpo tem de ser um objeto JSON"));
+      res(v);
+    });
     req.on("error", rej);
   });
 }
@@ -153,9 +165,10 @@ const servidor = createServer(async (req, res) => {
 
     return responder(res, 404, { erro: "rota desconhecida" });
   } catch (e) {
-    erro(rota, e?.message ?? e);
-    // só a frase escrita para o usuário (e.publico) sai; o resto fica no log
-    return responder(res, 500, { erro: e?.publico ? e.message : "erro interno do serviço de voz" });
+    if (e instanceof ErroDoPedido) return responder(res, e.status, { erro: e.message, codigo: "pedido" });
+    // só a frase escrita para o usuário (e.publico) sai; o resto (mensagem e stack) fica no log
+    erro(rota, e?.stack ?? e?.message ?? e);
+    return responder(res, 500, e?.publico ? { erro: e.message, codigo: "publico" } : { erro: "erro interno do serviço de voz", codigo: "interno" });
   }
 });
 

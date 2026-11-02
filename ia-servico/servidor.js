@@ -26,6 +26,15 @@ if (!CHAVE) {
   process.exit(1);
 }
 
+// (2 nov 2026, P4.1, CodeQL "stack trace exposure") O que volta no corpo de um erro: só o texto
+// fixo que o próprio código escreve (ErroDoPedido: corpo grande, JSON inválido) ou, para qualquer
+// outra exceção, a mensagem genérica com o código "interno". Mensagem e stack da exceção ficam no
+// log do processo. O bot só confere se `erro` veio (e loga): nada nele depende do texto.
+class ErroDoPedido extends Error {
+  constructor(texto, status = 400) { super(texto); this.status = status; }
+}
+const ERRO_INTERNO = { erro: "erro interno do serviço de IA", codigo: "interno" };
+
 const json = (res, code, obj) => {
   const corpo = JSON.stringify(obj);
   res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(corpo) });
@@ -37,9 +46,14 @@ function lerCorpo(req) {
     let dados = "";
     req.on("data", (c) => {
       dados += c;
-      if (dados.length > 2_000_000) { reject(new Error("corpo grande demais")); req.destroy(); }
+      if (dados.length > 2_000_000) { reject(new ErroDoPedido("corpo grande demais", 413)); req.destroy(); }
     });
-    req.on("end", () => { try { resolve(dados ? JSON.parse(dados) : {}); } catch (e) { reject(e); } });
+    req.on("end", () => {
+      let v;
+      try { v = dados ? JSON.parse(dados) : {}; } catch { return reject(new ErroDoPedido("corpo não é JSON válido")); }
+      if (v === null || typeof v !== "object" || Array.isArray(v)) return reject(new ErroDoPedido("o corpo tem de ser um objeto JSON"));
+      resolve(v);
+    });
     req.on("error", reject);
   });
 }
@@ -91,8 +105,9 @@ const servidor = createServer(async (req, res) => {
 
     json(res, 404, { erro: "rota desconhecida" });
   } catch (e) {
-    log("erro:", e?.message ?? e);
-    json(res, 500, { erro: (e?.message ?? String(e)).slice(0, 400) });
+    if (e instanceof ErroDoPedido) return json(res, e.status, { erro: e.message, codigo: "pedido" });
+    log("erro:", e?.stack ?? e?.message ?? e);
+    json(res, 500, ERRO_INTERNO);
   }
 });
 

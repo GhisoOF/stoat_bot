@@ -1261,7 +1261,7 @@ export async function cmdTts(message, args, ctx) {
         { title: "🚫 Missing permission", description: "You need **ManageMessages**.", colour: COR.erro },
         { title: "🚫 Permiso insuficiente", description: "Necesitas **ManageMessages**.", colour: COR.erro }));
     }
-    const n = Number(String(resto).replace(",", ".").replace(/s$/i, ""));
+    const n = Number(String(resto).replaceAll(",", ".").replace(/s$/i, ""));
     if (!Number.isFinite(n) || n < 0 || n > 300) {
       return sendEmbed(message.channel, tr(ctx,
         { title: "❌ Valor inválido", description: "Um número de segundos entre 0 e 300.", colour: COR.erro },
@@ -1310,7 +1310,7 @@ export async function cmdTts(message, args, ctx) {
     }
 
     if (ehTom) {
-      const n = Number(String(resto).replace(",", "."));
+      const n = Number(String(resto).replaceAll(",", "."));
       if (!Number.isFinite(n) || n < 0.5 || n > 2) {
         return erroDeUso(ctx, message.channel, "tts", "Um número entre 0.5 e 2.", "A number between 0.5 and 2.", "Un número entre 0.5 y 2.");
       }

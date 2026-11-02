@@ -1,6 +1,7 @@
 // Sobe um arquivo para o Autumn (o CDN de anexos do Stoat) e devolve o id
 // para mandar numa mensagem: { attachments: [id] }. Veio do chat.js (imagens
 // da IA); os tickets usam para o .txt da transcrição.
+import { sufixo } from "./aleatorio.js";
 
 export async function subirAnexo({ base64, mime = "image/jpeg", nome = "imagem.jpg" }, client = null) {
   // A URL de upload vem da configuração VIVA da API (o servidor anuncia o seu
@@ -18,7 +19,7 @@ export async function subirAnexo({ base64, mime = "image/jpeg", nome = "imagem.j
   // Esse streaming automático corta o corpo no meio em conexões com MTU
   // reduzido (o túnel WireGuard usa 1420 em vez de 1500) e o Autumn recusava
   // com "incomplete multipart stream" — sem pista nenhuma do lado do cliente.
-  const boundary = `----judy${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`;
+  const boundary = `----judy${Date.now().toString(36)}${sufixo(16)}`;
   const dados = Buffer.from(base64, "base64");
   const abre = Buffer.from(
     `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${nome.replace(/"/g, "")}"\r\nContent-Type: ${mime}\r\n\r\n`,

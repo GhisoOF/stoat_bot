@@ -21,6 +21,11 @@ const dbg = (...a) => { if (DEBUG) console.log(new Date().toISOString(), "[VOZ][
 const log = (...a) => console.log(new Date().toISOString(), "[VOZ]", ...a);
 
 const TOKEN = process.env.BOT_TOKEN || "";
+// (2 nov 2026, P4.1) erro com texto escrito AQUI (motivo fixo, sem dado de fora): pode voltar a
+// quem pediu. Qualquer outra exceção (da lib, da rede) vira um motivo fixo no `explicar` e o
+// texto cru fica só no log.
+const erroProprio = (texto) => Object.assign(new Error(texto), { publico: true });
+const ALREADY_CONNECTED = "AlreadyConnected: o Stoat me registra como já estando nesta call";
 const ESPERA_JOIN_MS = Number(process.env.VOZ_JOIN_TIMEOUT_MS || 25_000);
 const ENTRAR_MAX_MS = Number(process.env.VOZ_ENTRAR_TIMEOUT_MS || 20_000);
 
@@ -57,7 +62,7 @@ export const ganchosDeSaida = new Set();   // (canalVoz) => void
 export async function criarPlayerExtra(canalVoz, nome) {
   if (!conexoes.has(canalVoz)) {
     const r = await entrar(canalVoz);
-    if (!r?.ok) throw new Error(r?.erro || "não consegui entrar na call");
+    if (!r?.ok) throw erroProprio(r?.erro || "não consegui entrar na call");
   }
   const c = conexoes.get(canalVoz);
   c.extras ??= {};
@@ -92,7 +97,7 @@ function comLimite(promessa, ms, ondeParou, aoChegarTarde = null) {
   return Promise.race([
     p.finally(() => clearTimeout(t)),
     new Promise((_, rej) => {
-      t = setTimeout(() => { estourou = true; rej(new Error(ondeParou)); }, ms);
+      t = setTimeout(() => { estourou = true; rej(erroProprio(ondeParou)); }, ms);
     }),
   ]);
 }
@@ -120,7 +125,9 @@ async function bater(metodo, rota, corpo = null, ms = 8000) {
       ehHtml: /^\s*<(!doctype|html)/i.test(txt),
     };
   } catch (e) {
-    return { metodo, rota, ok: false, ms: Date.now() - t, erro: e?.message ?? String(e) };
+    // (2 nov 2026, P4.1) antes: o texto cru da exceção ia no relatório; agora: motivo fixo, detalhe no log
+    if (!e?.publico) log(`${metodo} ${rota} falhou: ${e?.message ?? e}`);
+    return { metodo, rota, ok: false, ms: Date.now() - t, erro: explicar(e) ?? "a chamada falhou (o detalhe está no log do serviço de voz)" };
   }
 }
 
@@ -150,8 +157,9 @@ export async function iniciar() {
     erroCarga = null;
     return { ok: true };
   } catch (e) {
-    erroCarga = `revoice.js não carregou: ${e?.message ?? e}`;
-    log(`ERRO: ${erroCarga}`);
+    // (2 nov 2026, P4.1) antes: a mensagem da exceção ia junto para quem pedia; agora: só no log
+    erroCarga = "revoice.js não carregou (o detalhe está no log do serviço de voz)";
+    log(`ERRO: revoice.js não carregou: ${e?.message ?? e}`);
     return { ok: false, erro: erroCarga };
   }
 }
@@ -174,9 +182,14 @@ function explicar(e) {
   if (st === 404) return "canal não encontrado (404) — confira o ID e se o bot está no servidor";
   if (st === 400) return "o Stoat recusou (400) — o ID pode ser de um canal de TEXTO, não de voz";
   if (/device not supported/i.test(msg)) return "falta a flag --no-experimental-global-navigator no Node";
-  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED/i.test(msg)) return `sem acesso de rede à API do Stoat (${msg})`;
-  return msg;
+  // (2 nov 2026, P4.1, CodeQL "stack trace exposure") antes: o texto cru da exceção (com host/IP)
+  // ia na resposta; agora: só os motivos fixos acima, ou null — quem chama loga o detalhe
+  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED/i.test(msg)) return "sem acesso de rede à API do Stoat";
+  if (e?.publico) return e.message;
+  if (/AlreadyConnected/i.test(msg)) return ALREADY_CONNECTED;   // o bot reconhece pelo nome e faz o resgate
+  return null;
 }
+const FALHA_INESPERADA = "falha inesperada ao entrar na call (o detalhe está no log do serviço de voz)";
 
 export async function entrar(canalVoz, serverId = null, servidores = null, credenciais = null) {
   if (serverId) servidorDoCanal.set(canalVoz, serverId);
@@ -228,7 +241,7 @@ async function entrarDeFato(canalVoz, serverId = null, credenciais = null) {
     if (abriu?.node) marco(`sala-aberta(${abriu.node})`);
     if (abriu?.recusa === "AlreadyConnected") {
       marco("sala-recusou(AlreadyConnected)");
-      throw new Error("AlreadyConnected: o Stoat me registra como já estando nesta call");
+      throw erroProprio(ALREADY_CONNECTED);
     }
 
     marco(credenciais ? `chamando-revoice.join(token-do-mover:${credenciais.node ?? "?"})` : "chamando-revoice.join");
@@ -248,7 +261,7 @@ async function entrarDeFato(canalVoz, serverId = null, credenciais = null) {
 
     await new Promise((res, rej) => {
       const t = setTimeout(
-        () => rej(new Error(`${ESPERA_JOIN_MS / 1000}s sem a sala confirmar a entrada (etapa: sala)`)),
+        () => rej(erroProprio(`${ESPERA_JOIN_MS / 1000}s sem a sala confirmar a entrada (etapa: sala)`)),
         ESPERA_JOIN_MS
       );
       try {
@@ -271,8 +284,8 @@ async function entrarDeFato(canalVoz, serverId = null, credenciais = null) {
     log(`entrou na call ${canalVoz} (faixa de áudio publicada)`);
     return { ok: true, canalVoz };
   } catch (e) {
-    const erro = explicar(e);
-    log(`falha ao entrar em ${canalVoz}: ${erro}`);
+    const erro = explicar(e) ?? FALHA_INESPERADA;
+    log(`falha ao entrar em ${canalVoz}: ${erro} — ${e?.response?.data?.type ?? e?.message ?? e}`);
     marcos.push({ nome: "falhou", ms: Date.now() - t0 });
     ultimaFalha = { canalVoz, erro, quando: Date.now(), marcos: [...marcos] };
 
@@ -493,7 +506,7 @@ export async function diagnosticar(canalVoz) {
       const net = await import("node:net");
       await new Promise((res, rej) => {
         const sock = net.connect({ host: u.hostname, port: porta });
-        const t = setTimeout(() => { sock.destroy(); rej(new Error("8s sem abrir o TCP")); }, 8000);
+        const t = setTimeout(() => { sock.destroy(); rej(erroProprio("8s sem abrir o TCP")); }, 8000);
         sock.once("connect", () => { clearTimeout(t); sock.end(); res(); });
         sock.once("error", (err) => { clearTimeout(t); rej(err); });
       });
@@ -578,7 +591,7 @@ async function processarFila(canalVoz) {
       log(`sala de ${canalVoz} caiu — reconectando antes de falar`);
       conexoes.delete(canalVoz);
       const r = await entrar(canalVoz);
-      if (!r.ok) throw new Error(`reconexão falhou: ${r.erro}`);
+      if (!r.ok) throw erroProprio(`reconexão falhou: ${r.erro}`);
       const novo = conexoes.get(canalVoz);   // já vem com player publicado
       novo.fila = c.fila; novo.falas = c.falas;
       c = novo;
@@ -586,7 +599,7 @@ async function processarFila(canalVoz) {
 
     // Reusa o player já publicado no join: só troca o arquivo tocado.
     const media = c.media;
-    if (!media) throw new Error("conexão sem player publicado — reentre na call");
+    if (!media) throw erroProprio("conexão sem player publicado — reentre na call");
 
     const t0 = Date.now();
     let comecou = false, quadros = 0;

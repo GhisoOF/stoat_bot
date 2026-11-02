@@ -33,6 +33,8 @@ export async function hashImagem({ url }) {
   try {
     return await hashDoBuffer(await baixarLimitado(url));
   } catch (e) {
-    return { erro: `não consegui calcular o hash: ${e?.message ?? e}` };
+    // (2 nov 2026, P4.1) antes: a mensagem da exceção ia no corpo; agora: o detalhe fica no log do serviço
+    console.warn("[IA] hash:", e?.message ?? e);
+    return { erro: "não consegui calcular o hash" };
   }
 }

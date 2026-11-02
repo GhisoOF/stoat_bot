@@ -31,6 +31,7 @@ import { pseudonimo } from "../core/pseudonimo.js";
 import { textoDeFora } from "../core/seguranca.js";
 import { registrarErro } from "../core/erros.js";
 import { tr } from "../core/i18n.js";
+import * as aleatorio from "../core/aleatorio.js";
 import { donos, ehDono, idiomaDoDono, dmDoDono as abrirDmDoDono, esquecerDm } from "../core/dono.js";
 
 // ── vocabulário da interface (BRIEF-P3a) ──
@@ -73,7 +74,7 @@ const ctxDono = () => ({ config: { language: idiomaDoDono() } });
 const LETRAS = "BCDFGHJKLMNPQRSTVWXZ", DIGITOS = "23456789";
 export const CODIGO = /^[B-DF-HJ-NP-TV-XZ][2-9][B-DF-HJ-NP-TV-XZ]{2}[2-9]$/;
 export function ehCodigo(txt) { return CODIGO.test(String(txt ?? "").toUpperCase()); }
-function novoCodigo(sorteio = Math.random) {
+function novoCodigo(sorteio = aleatorio.fracao) {
   const l = () => LETRAS[Math.floor(sorteio() * LETRAS.length)], d = () => DIGITOS[Math.floor(sorteio() * DIGITOS.length)];
   for (let i = 0; i < 50; i++) {
     const c = `${l()}${d()}${l()}${l()}${d()}`;
@@ -180,7 +181,7 @@ export function maisParecido(refs, { hash = null, impressao = null, texto = null
 // O detector chama para o que NÃO puniu; com true, registra o caso com `origem: "amostra"`.
 // As decisões do detector (punidas, alertadas à staff) passam pelo mesmo sorteio e pelos mesmos
 // tetos dentro do `registrarCaso` (o resto não é guardado).
-let sortear = Math.random;
+let sortear = aleatorio.fracao;
 export function amostrar({ serverId } = {}, { agora = Date.now(), sorteio = sortear } = {}) {
   try {
     if (!cfg || !serverId || sorteio() >= fracaoDaAmostra()) return false;   // fila desligada: nada
@@ -318,7 +319,7 @@ export function julgar(codigo, veredito, { agora = Date.now() } = {}) {
 // Só a amostra: sorteada, um caso por servidor, até as vagas do dia (REVISAO_POR_DIA menos os
 // já enviados hoje). (31 out 2026, P3a, staff) antes: primeiro os casos de dúvida (candidatos),
 // com vagas reservadas à amostra e no máximo 3 sinais da staff — eles agora são da staff.
-export function escolherDoDia({ agora = Date.now(), vagas = null, sorteio = Math.random } = {}) {
+export function escolherDoDia({ agora = Date.now(), vagas = null, sorteio = aleatorio.fracao } = {}) {
   const livres = vagas ?? Math.max(0, porDia() - db.filaEnviadosDesde(inicioDoDia(agora)));
   if (livres <= 0) return [];
   const pool = db.filaPorEstado(["amostra", "registro"], agora - db.FILA_DIAS_PENDENTE * DIA);
@@ -568,8 +569,8 @@ export function exportar(agora = Date.now()) {
 }
 
 // testes
-export function _zerar() { limiaresCache.clear(); padroes.clear(); sortear = Math.random; desligar(); }
+export function _zerar() { limiaresCache.clear(); padroes.clear(); sortear = aleatorio.fracao; desligar(); }
 // Só para testes: a fila ligada (grava casos), sem cliente e sem o timer da rodada.
 export function _ligarParaTestes({ editar = null } = {}) { desligar(); cfg = { client: null, enviar: null, editar, semTimer: true }; }
 // Só para testes: o sorteio da amostra (inclusive o da certeza alta dentro do `registrarCaso`).
-export function _trocarSorteio(fn) { const antes = sortear; sortear = typeof fn === "function" ? fn : Math.random; return antes; }
+export function _trocarSorteio(fn) { const antes = sortear; sortear = typeof fn === "function" ? fn : aleatorio.fracao; return antes; }

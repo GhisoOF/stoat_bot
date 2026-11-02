@@ -22,6 +22,7 @@ import { quantiaValida } from "../core/seguranca.js";
 import { editarCargos, podeUsarCargo } from "../core/hierarquia.js";
 import { carimbo } from "../core/tempo.js";
 import { erroDeUso, semPermissao } from "../core/saida.js";
+import * as aleatorio from "../core/aleatorio.js";
 
 export const PADRAO = { nome: "Moeda", simbolo: "🪙", ganhoMin: 10, ganhoMax: 30, intervaloMs: 3600e3 };
 
@@ -80,11 +81,11 @@ export function totalEmCirculacao(sid) {
 }
 
 // Mineração: um sorteio entre o mínimo e o máximo, e a espera.
-export function minerar(sid, uid, cfg, { agora = Date.now(), aleatorio = Math.random } = {}) {
+export function minerar(sid, uid, cfg, { agora = Date.now(), aleatorio: sorteio = aleatorio.fracao } = {}) {
   const l = linha(sid, uid);
   const falta = (l.ultimaMineracao + cfg.intervaloMs) - agora;
   if (l.ultimaMineracao && falta > 0) return { ok: false, faltaMs: falta };
-  const ganho = cfg.ganhoMin + Math.floor(aleatorio() * (cfg.ganhoMax - cfg.ganhoMin + 1));
+  const ganho = cfg.ganhoMin + Math.floor(sorteio() * (cfg.ganhoMax - cfg.ganhoMin + 1));
   garantirLinha(sid, uid);
   tabelas().prepare("UPDATE eco_saldos SET saldo = saldo + ?, totalMinerado = totalMinerado + ?, ultimaMineracao = ? WHERE serverId=? AND userId=?")
     .run(ganho, ganho, agora, sid, uid);

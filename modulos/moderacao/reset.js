@@ -21,6 +21,7 @@ import { citar, citarInterno } from "../core/aliases.js";
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
 import { tr } from "../core/i18n.js";
+import * as aleatorio from "../core/aleatorio.js";
 
 const CONFIRMAR_MS = 2 * 60_000;
 const DESFAZER_MS = 24 * 3600_000;
@@ -32,7 +33,8 @@ export function podeResetar(message, server, ctx) {
   return !!server?.ownerId && server.ownerId === message.authorId;
 }
 
-const novoCodigo = () => Math.random().toString(36).slice(2, 6).toUpperCase();
+// (2 nov 2026, P4.1) antes: o sorteio comum do JS em base 36 (previsível, e às vezes com menos de 4 caracteres)
+const novoCodigo = () => aleatorio.codigo(aleatorio.BASE36, 4).toUpperCase();
 
 export async function cmdReset(message, args, ctx) {
   const { sendEmbed, COR, PREFIXO: P } = ctx;

@@ -39,7 +39,7 @@ export function normalizarCor(v) {
   if (CORES[CORES_ES[t]]) return CORES[CORES_ES[t]];
   if (/^#?[0-9a-f]{6}$/i.test(t)) return (t.startsWith("#") ? t : `#${t}`).toUpperCase();
   if (/^#?[0-9a-f]{3}$/i.test(t)) {                 // #f0f → #FF00FF
-    const h = t.replace("#", "");
+    const h = t.replaceAll("#", "");
     return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`.toUpperCase();
   }
   if (/^rgba?\([\d\s.,%]+\)$/i.test(t)) return t;   // rgb()/rgba() são CSS válidos

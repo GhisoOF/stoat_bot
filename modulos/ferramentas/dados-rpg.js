@@ -13,10 +13,11 @@
 import { lingua, idiomaDe, tr } from "../core/i18n.js";
 import { trechoPronto } from "../core/aliases.js";
 import { erroDeUso, ajudaDe } from "../core/saida.js";
+import * as aleatorio from "../core/aleatorio.js";
 
 const MAX_DADOS = 100, MAX_LADOS = 10_000, MAX_TERMOS = 20, MAX_REPETE = 20, MAX_EXPLODE = 50;
 
-const rngPadrao = (lados) => 1 + Math.floor(Math.random() * lados);
+const rngPadrao = (lados) => 1 + aleatorio.inteiro(lados);
 
 // ── Motor (puro; rng injetável para testes determinísticos) ─────────────────
 export function rolarExpressao(entrada, rng = rngPadrao) {

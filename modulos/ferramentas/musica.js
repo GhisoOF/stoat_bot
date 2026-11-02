@@ -163,7 +163,7 @@ export async function cmdMusica(msg, args, ctx) {
     const server = await Promise.resolve(ctx.getServer?.(msg)).catch(() => null);
     r = await pedirVoz("/musica/tocar", { canal, consulta: resto, prioridade: nivelDePrioridade({ userId: msg.authorId, serverId: ctx.serverId, server }) });
   } else if (sub === "volume") {
-    const v = Number(String(resto).replace("%", ""));
+    const v = Number(String(resto).replaceAll("%", ""));
     r = await pedirVoz("/musica/volume", { canal, valor: Number.isFinite(v) ? v / 100 : NaN });
   } else if (sub === "loop") {
     r = await pedirVoz("/musica/loop", { canal, modo: modoDoLoop(resto) });

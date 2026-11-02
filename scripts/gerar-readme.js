@@ -11,6 +11,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { celulaDeTabela } from "../modulos/core/markdown.js";
 
 export const READMES = [
   { arquivo: "README.md", lang: "en" },
@@ -49,7 +50,8 @@ export function variaveisDoEnv(texto) {
   return out;
 }
 
-const celula = (t) => String(t ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ").trim();
+// (2 nov 2026, P4.1) o corte vem ANTES do escape (cortar depois podia partir um `\|` ao meio)
+const celula = (t, max) => celulaDeTabela(String(t ?? "").replace(/\n/g, " ").trim().slice(0, max));
 
 export function tabelaDeVariaveis(texto, lang = "en") {
   const cab = {
@@ -58,7 +60,7 @@ export function tabelaDeVariaveis(texto, lang = "en") {
     es: "| Variable | Ejemplo | Descripción (del `.env.example`, en portugués) |",
   }[lang];
   const linhas = [cab, "|---|---|---|"];
-  for (const v of variaveisDoEnv(texto)) linhas.push(`| \`${v.nome}\` | ${v.valor ? `\`${celula(v.valor).replace(/`/g, "'")}\`` : "—"} | ${celula(v.desc).slice(0, 160) || "—"} |`);
+  for (const v of variaveisDoEnv(texto)) linhas.push(`| \`${v.nome}\` | ${v.valor ? `\`${celula(v.valor).replace(/`/g, "'")}\`` : "—"} | ${celula(v.desc, 160) || "—"} |`);
   return linhas.join("\n");
 }
 

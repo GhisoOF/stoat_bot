@@ -12,6 +12,7 @@
 import { analisarConteudo } from "../modulos/moderacao/scorecard.js";
 import { analisarCaracteres } from "../modulos/moderacao/caracteres.js";
 import { registrarDano, esquecerSinais } from "../modulos/moderacao/confianca.js";
+import { sufixo } from "../modulos/core/aleatorio.js";
 
 const LIMIAR = 6;          // sensibilidade "media" (o padrão)
 const ALERTA = 4;          // a partir daqui o sentinela avisa a staff
@@ -104,7 +105,7 @@ export const CONVERSAS = [
 ];
 
 export function simularConversa(msgs, minutos) {
-  const uid = `sim-${Math.random().toString(36).slice(2)}`;
+  const uid = `sim-${sufixo(11)}`;
   let t = Date.now(), resultado = { alertar: false }, soma = 0, categorias = [];
   for (const m of msgs) {
     const r = analisarConteudo(m, { rate: 1, repetidas: 1 });

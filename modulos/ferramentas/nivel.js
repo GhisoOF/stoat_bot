@@ -12,6 +12,7 @@ import { canalDesteServidor, cargoDoServidor } from "../moderacao/pertence.js";
 import { resolverCargo } from "../core/ids.js";
 import { podeUsarCargo } from "../core/hierarquia.js";
 import { erroDeUso } from "../core/saida.js";
+import * as aleatorio from "../core/aleatorio.js";
 
 // Cada membro escolhe se o XP dele conta (privacidade P3). `participar: false` apaga o
 // XP dele neste servidor e para de contar; `true` volta (do zero). É a função que o
@@ -214,7 +215,7 @@ export async function aoMensagem(message, ctx) {
     return;
   }
 
-  const ganho = Math.floor(g.xpMin + Math.random() * (g.xpMax - g.xpMin + 1));
+  const ganho = Math.floor(g.xpMin + aleatorio.fracao() * (g.xpMax - g.xpMin + 1));
   const novoXp = atual.xp + ganho;
   const novoNivel = nivelPorXp(novoXp, g.multiplicador, g.nivelMaximo);
 

@@ -13,6 +13,7 @@
 import { REGISTRO } from "../comandos/index.js";
 import { citarNoTexto, citar, SUB, NOME_PARA_ID_TELA, COMANDO_EXTRA, resolverAtalho, nomeExibido, subExibido } from "./aliases.js";
 import { GRUPOS, ORDEM, grupoDoNome } from "../moderacao/help-grupos.js";
+import { celulaDeTabela } from "./markdown.js";
 
 const LANGS = ["pt", "en", "es"];
 export const entrada = (id) => REGISTRO.find((c) => c.id === id) ?? null;
@@ -238,7 +239,7 @@ export function tabelaDeComandos(lang = "en", P = "&") {
     linhas.push("", `**${tituloDoGrupo(g, lang)}**`, "", `| ${cab[0]} | ${cab[1]} |`, "|---|---|");
     for (const id of porGrupo[g]) {
       const c = entrada(id);
-      linhas.push(`| \`${citar(id, lang, P)}\` | ${resumoDe(c, lang, P).replace(/\|/g, "\\|").replace(/`\{&[^}]+\}`/g, "")} |`);
+      linhas.push(`| \`${citar(id, lang, P)}\` | ${celulaDeTabela(resumoDe(c, lang, P).replace(/`\{&[^}]+\}`/g, ""))} |`);
     }
   }
   return linhas.join("\n").trim();

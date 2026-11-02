@@ -173,6 +173,12 @@ export function canaisOrganizados(server, quem = null) {
 }
 
 const RE_CANAL_REGRAS = /regra|rule|norma|diretriz|guideline|conduta/i;
+// O canal que se chama só "regras"/"rules" (com emoji, #, traço… na frente) ganha dos outros.
+// (2 nov 2026, P4.1, CodeQL ReDoS) antes: /^(📜|📌|❗|⚠️|\W)*\s*(regras|rules)\s*$/i — os emojis e o \s
+// já são \W (sem a flag u, cada metade do emoji é \W), e as alternativas sobrepostas sob o `*`
+// davam backtracking exponencial num nome de muitos emojis sem "regras" no fim. Agora: uma
+// classe só no prefixo, mesmo resultado.
+export const RE_NOME_SO_REGRAS = /^\W*(?:regras|rules)\s*$/i;
 export function canalDeRegras(server, config) {
   const fixo = config?.servidorInfo?.regrasCanal;
   const canais = canaisDe(server);
@@ -181,7 +187,7 @@ export function canalDeRegras(server, config) {
   // a busca automática só pega canal que o @everyone vê: um "#regras-da-staff"
   // privado não vira as regras de todo mundo (nem material da IA)
   const candidatos = canais.filter((c) => RE_CANAL_REGRAS.test(c?.name ?? "") && !/voice/i.test(c?.type ?? "") && veCanal(server, c, null));
-  return candidatos.find((c) => /^(📜|📌|❗|⚠️|\W)*\s*(regras|rules)\s*$/i.test(c.name ?? "")) ?? candidatos[0] ?? null;
+  return candidatos.find((c) => RE_NOME_SO_REGRAS.test(c.name ?? "")) ?? candidatos[0] ?? null;
 }
 
 function textoDaMensagem(m) {

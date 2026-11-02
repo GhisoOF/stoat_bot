@@ -23,6 +23,7 @@ import { lingua, idiomaDe, tr } from "../core/i18n.js";
 import { citar, citarInterno, trechoPronto } from "../core/aliases.js";
 import * as jogos from "./jogos.js";
 import { erroDeUso } from "../core/saida.js";
+import * as aleatorio from "../core/aleatorio.js";
 
 // ── Utilidades puras ────────────────────────────────────────────────────────
 // FNV-1a de 32 bits: barato, estável entre versões do Node, bom o bastante
@@ -46,7 +47,7 @@ const idDaMencao = (t) => {
   if (m) return m[1].toUpperCase();
   return ULID.test(s) ? s.toUpperCase() : null;
 };
-const rngPadrao = () => Math.random();
+const rngPadrao = () => aleatorio.fracao();
 const sortear = (lista, rng = rngPadrao) => lista[Math.floor(rng() * lista.length) % lista.length];
 const barra = (valor, max, cheio, vazio, n = 10) => {
   const k = Math.max(0, Math.min(n, Math.round((valor / max) * n)));

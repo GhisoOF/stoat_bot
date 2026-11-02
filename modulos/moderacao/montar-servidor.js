@@ -21,6 +21,7 @@ import { Permission } from "stoat.js";
 import { segundosPara } from "../core/ritmo-api.js";
 import { editarCargos } from "../core/hierarquia.js";
 import { descreverErro } from "../core/erros.js";
+import * as aleatorio from "../core/aleatorio.js";
 
 const P = Permission;
 // o que cada cargo novo pode no servidor (o Stoat só deixa o bot dar o que ELE tem: o
@@ -266,7 +267,7 @@ async function desfazer(server, criados, categoriasAntes) {
 }
 
 // id de categoria: o Stoat aceita qualquer texto único (até 32 caracteres)
-const idDeCategoria = () => (Date.now().toString(36) + Math.random().toString(36).slice(2, 10)).toUpperCase().slice(0, 26);
+const idDeCategoria = () => (Date.now().toString(36) + aleatorio.sufixo(8)).toUpperCase().slice(0, 26);
 
 // ── O que vai para a config já agora (a parte que não é pergunta do assistente) ──
 export function aplicarNaConfig(config, plano, res) {

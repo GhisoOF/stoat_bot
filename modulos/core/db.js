@@ -1348,3 +1348,74 @@ export function staffDaPessoa(userId, { apagar = false } = {}) {
     ? prep("DELETE FROM staff_casos WHERE userId = ? AND veredito IS NULL").run(String(userId)).changes ?? 0
     : prep("SELECT COUNT(*) AS n FROM staff_casos WHERE userId = ? AND veredito IS NULL").get(String(userId))?.n ?? 0;
 }
+
+// ── P4.3 bateria ──
+// (2 nov 2026, P4.3) A bateria de teste da moderação de imagem (modulos/moderacao/bateria.js):
+// imagens que o DONO do bot manda na DM com a Judy (`&bateria <categoria>`), cada uma com a
+// categoria que ele deu. NUNCA a imagem: só o link do anexo no CDN do Stoat e o que o próprio
+// Stoat informa do anexo (nome, tipo, tamanho, largura, altura). O id do anexo e o link são
+// únicos (a mesma imagem não entra duas vezes). Fica até o dono remover.
+const _bateriaPronta = new WeakSet();
+function prepararBateria() {
+  if (_bateriaPronta.has(db)) return;
+  db.exec(`CREATE TABLE IF NOT EXISTS bateria_imagens (
+    codigo    TEXT PRIMARY KEY,
+    anexoId   TEXT NOT NULL UNIQUE,
+    url       TEXT NOT NULL UNIQUE,
+    categoria TEXT NOT NULL,
+    nome      TEXT,
+    tipo      TEXT,
+    tamanho   INTEGER,
+    largura   INTEGER,
+    altura    INTEGER,
+    criadoEm  INTEGER NOT NULL
+  )`);
+  db.exec("CREATE INDEX IF NOT EXISTS idx_bateria_categoria ON bateria_imagens (categoria)");
+  _bateriaPronta.add(db);
+}
+const BATERIA_COLUNAS = ["codigo", "anexoId", "url", "categoria", "nome", "tipo", "tamanho", "largura", "altura", "criadoEm"];
+// O caminho do arquivo do banco (null em memória): a bateria grava o arquivo dela ao lado
+export function caminhoDoBanco() {
+  try { return db?.location?.() || null; } catch { return null; }
+}
+// "ok" | "repetida" (o anexo ou o link já está) | "codigo" (o código já existe: sorteie outro)
+export function bateriaInserir(r) {
+  prepararBateria();
+  if (prep("SELECT 1 FROM bateria_imagens WHERE anexoId = ? OR url = ?").get(String(r.anexoId), String(r.url))) return "repetida";
+  const n = prep(`INSERT INTO bateria_imagens (${BATERIA_COLUNAS.join(", ")}) VALUES (${BATERIA_COLUNAS.map(() => "?").join(", ")})
+    ON CONFLICT DO NOTHING`).run(...BATERIA_COLUNAS.map((k) => r[k] ?? null)).changes ?? 0;
+  return n ? "ok" : "codigo";
+}
+export function bateriaTotal() {
+  prepararBateria();
+  return prep("SELECT COUNT(*) AS n FROM bateria_imagens").get()?.n ?? 0;
+}
+export function bateriaContarCategoria(categoria) {
+  prepararBateria();
+  return prep("SELECT COUNT(*) AS n FROM bateria_imagens WHERE categoria = ?").get(String(categoria))?.n ?? 0;
+}
+export function bateriaPorCategoria() {
+  prepararBateria();
+  return prep("SELECT categoria, COUNT(*) AS n FROM bateria_imagens GROUP BY categoria ORDER BY n DESC, categoria").all();
+}
+// Todas, na ordem em que entraram (o arquivo da bateria)
+export function bateriaTodas() {
+  prepararBateria();
+  return prep("SELECT * FROM bateria_imagens ORDER BY criadoEm, rowid").all();
+}
+export function bateriaPorCodigo(codigo) {
+  prepararBateria();
+  return prep("SELECT * FROM bateria_imagens WHERE codigo = ?").get(String(codigo)) ?? null;
+}
+export function bateriaUltima() {
+  prepararBateria();
+  return prep("SELECT * FROM bateria_imagens ORDER BY criadoEm DESC, rowid DESC LIMIT 1").get() ?? null;
+}
+export function bateriaRemover(codigo) {
+  prepararBateria();
+  return prep("DELETE FROM bateria_imagens WHERE codigo = ?").run(String(codigo)).changes ?? 0;
+}
+export function bateriaLimpar(categoria) {
+  prepararBateria();
+  return prep("DELETE FROM bateria_imagens WHERE categoria = ?").run(String(categoria)).changes ?? 0;
+}

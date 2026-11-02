@@ -81,6 +81,11 @@
    "rota": "banglobal",
    "funcao": "cmdBanGlobal"
   },
+  "bateria": {
+   "canonico": "bateria",
+   "rota": "bateria",
+   "funcao": "cmdBateria"
+  },
   "bemvindo": {
    "canonico": "boasvindas",
    "rota": "boasvindas",
@@ -686,6 +691,11 @@
    "rota": "staff",
    "funcao": "cmdStaff"
   },
+  "testset": {
+   "canonico": "bateria",
+   "rota": "bateria",
+   "funcao": "cmdBateria"
+  },
   "ticket": {
    "canonico": "ticket",
    "rota": "ticket",
@@ -1097,6 +1107,16 @@
    "view": "historico",
    "warn": "avisar",
    "yes": "confirmar"
+  },
+  "bateria": {
+   "clear": "limpar",
+   "confirm": "confirmar",
+   "delete": "remover",
+   "last": "ultima",
+   "latest": "ultima",
+   "quitar": "remover",
+   "remove": "remover",
+   "vaciar": "limpar"
   },
   "blocklist": {
    "add": "add",
@@ -1788,6 +1808,12 @@
    "servidor": "server",
    "varrer": "sweep"
   },
+  "bateria": {
+   "confirmar": "confirm",
+   "limpar": "clear",
+   "remover": "remove",
+   "ultima": "last"
+  },
   "blocklist": {
    "add": "add",
    "adddomain": "adddomain",
@@ -2180,6 +2206,10 @@
    "lista",
    "varrer"
   ],
+  "bateria": [
+   "limpar",
+   "remover"
+  ],
   "config.acesso": [
    "canais",
    "canal",
@@ -2376,6 +2406,12 @@
    "revisar": "revisar",
    "servidor": "servidor",
    "varrer": "barrer"
+  },
+  "bateria": {
+   "confirmar": "confirmar",
+   "limpar": "vaciar",
+   "remover": "quitar",
+   "ultima": "ultima"
   },
   "blocklist": {
    "dominios": "dominios"
@@ -2735,6 +2771,7 @@
   "pt\t&help reset",
   "pt\t&help privacidade",
   "pt\t&help caso",
+  "pt\t&help bateria",
   "pt\t&help automod filtro",
   "pt\t&help automod sentinela",
   "pt\t&help automod sentinela sensibilidade",
@@ -2865,6 +2902,7 @@
   "en\t&help reset",
   "en\t&help privacidade",
   "en\t&help caso",
+  "en\t&help bateria",
   "en\t&help automod filtro",
   "en\t&help automod sentinela",
   "en\t&help automod sentinela sensibilidade",

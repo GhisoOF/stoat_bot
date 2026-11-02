@@ -31,7 +31,8 @@ política.
 | Configuração do servidor (canais, cargos, módulos) | sempre | até 30 dias depois de a Judy sair do servidor |
 | Relatório de ataques ao operador | só se o servidor **aderir** (`&config log relatorio on`), e **anônimo**: o servidor vira um código, e só entram bans, punições, raids e imagens suspeitas — sem nomes, IDs nem conversa. Nos servidores do próprio operador, o relatório é completo. Sai do código (sem modelo de IA nem trecho de conversa) e chega ao operador por **mensagem privada com a Judy**, nunca num canal | 48 horas |
 | Log técnico do bot (eventos e erros, com os IDs trocados por **pseudônimos**). O filtro do automod não grava o conteúdo; trechos curtos das mensagens e dos comandos só entram com a depuração ligada pelo dono do bot (`&automod debug`, desligada por padrão) | sempre | tamanho limitado — os mais antigos saem primeiro |
-| Comandos do dono do bot num servidor que não é dele | quando ele usa um comando ali, ou age nele pela DM com a Judy (os comandos só dele — painel, lista global, lista de bloqueio, amostra — só funcionam na DM; os que mexem num servidor recebem o ID dele) | vão para o **canal de log daquele servidor**, para a staff ver |
+| Imagens de teste que o dono do bot envia na DM com a Judy (`&bateria`): só o link do anexo no Stoat, a categoria que ele dá e os metadados do anexo que o Stoat informa (nome, tipo, tamanho, largura e altura) — **nunca a imagem**: a Judy não baixa nem copia; o programa de teste da moderação de imagem do dono lê esses links num arquivo ao lado do banco e abre cada imagem no Stoat na hora | só quando o dono do bot manda imagens com `&bateria` na DM com a Judy (no máximo 5000) | até o dono remover (`&bateria remover` ou `limpar`) |
+| Comandos do dono do bot num servidor que não é dele | quando ele usa um comando ali, ou age nele pela DM com a Judy (os comandos só dele — painel, lista global, lista de bloqueio, amostra, imagens de teste — só funcionam na DM; os que mexem num servidor recebem o ID dele) | vão para o **canal de log daquele servidor**, para a staff ver |
 | Cópias de segurança do banco | a cada atualização do bot | **30 dias** |
 
 Em 2 nov 2026 a conversa com a Judy e o RPG saíram, e os dados deles foram apagados do
@@ -92,8 +93,8 @@ subida. As cópias de segurança de antes saem no prazo delas (30 dias).
   veredito dele só mede o acerto e calibra o padrão global da moderação, sem modelo novo
   — nunca age sobre ninguém nem muda o que a staff de um servidor decidiu. O arquivo que
   ele pode exportar não tem nome, ID de pessoa nem de servidor (imagem só como hash). Os
-  comandos do dono do bot (`&caso`, `&servidores`, os dele no `&banglobal` e na lista de
-  bloqueio) só funcionam na DM com a Judy. O caso fica pelo prazo acima; com
+  comandos do dono do bot (`&caso`, `&servidores`, `&bateria`, os dele no `&banglobal` e
+  na lista de bloqueio) só funcionam na DM com a Judy. O caso fica pelo prazo acima; com
   `&privacidade apagar`, sai dele a sua conta, o canal, a mensagem, o trecho, o link e o
   código do servidor, e a mensagem do caso na DM do dono é editada para tirar o trecho e
   o link. Num desenho feito de caracteres no perfil, o trecho é só um resumo em números
@@ -136,7 +137,8 @@ their own Judy is responsible for that instance and should publish their own pol
 | Server configuration (channels, roles, modules) | always | until 30 days after Judy leaves the server |
 | Attack report to the operator | only if the server **opts in** (`&config log report on`), and **anonymous**: the server becomes a code, and only bans, punishments, raids and suspicious images go in — no names, IDs or conversation. On the operator's own servers, the report is complete. It comes from the code (no AI model, no conversation excerpts) and reaches the operator by **direct message with Judy**, never in a channel | 48 hours |
 | Bot technical log (events and errors, with IDs replaced by **pseudonyms**). The automod filter doesn't record content; short excerpts of messages and commands only go in with debugging turned on by the bot owner (`&automod debug`, off by default) | always | size-capped — the oldest goes first |
-| The bot owner's commands on a server that isn't theirs | when they use a command there, or act on it from their DM with Judy (their own commands — panel, global list, blocklist, sample — only work in that DM; the ones that change a server take its ID) | go to **that server's log channel**, for its staff to see |
+| Test images the bot owner sends in their DM with Judy (`&testset`): only the attachment's Stoat link, the category they give and the attachment's metadata as Stoat reports it (name, type, size, width and height) — **never the image**: Judy doesn't download or copy it; the owner's image moderation test program reads those links from a file next to the database and opens each image on Stoat when it runs | only when the bot owner sends images with `&testset` in their DM with Judy (at most 5000) | until the owner removes them (`&testset remove` or `clear`) |
+| The bot owner's commands on a server that isn't theirs | when they use a command there, or act on it from their DM with Judy (their own commands — panel, global list, blocklist, sample, test images — only work in that DM; the ones that change a server take its ID) | go to **that server's log channel**, for its staff to see |
 | Database backups | on each bot update | **30 days** |
 
 On 2 Nov 2026 chatting with Judy and the RPG were removed, and their data was deleted
@@ -199,13 +201,13 @@ before go after their usual period (30 days).
   The owner's verdict only measures accuracy and calibrates moderation's global default,
   with no new model — it never acts on anyone or changes what a server's staff decided.
   The file the owner can export has no names, no user IDs and no server IDs (images only
-  as a hash). The bot owner's commands (`&caso`, `&servidores`, their `&banglobal` and
-  blocklist ones) only work in the DM with Judy. A case stays for the period above; with
-  `&privacy delete`, your account, the channel, the message, the excerpt, the link and
-  the server's code are removed from it, and the case's message in the owner's DM is
-  edited to remove the excerpt and the link. For a drawing made of characters in a
-  profile, the excerpt is only a summary in numbers and the language of the text next to
-  it, **never the drawing** or the text.
+  as a hash). The bot owner's commands (`&caso`, `&servidores`, `&bateria`, their
+  `&banglobal` and blocklist ones) only work in the DM with Judy. A case stays for the
+  period above; with `&privacy delete`, your account, the channel, the message, the
+  excerpt, the link and the server's code are removed from it, and the case's message in
+  the owner's DM is edited to remove the excerpt and the link. For a drawing made of
+  characters in a profile, the excerpt is only a summary in numbers and the language of
+  the text next to it, **never the drawing** or the text.
 - Nothing is sold or used for ads.
 
 ### Your rights
@@ -245,7 +247,8 @@ su propia política.
 | Configuración del servidor (canales, roles, módulos) | siempre | hasta 30 días después de que Judy salga del servidor |
 | Informe de ataques al operador | solo si el servidor **se adhiere** (`&config log informe on`), y **anónimo**: el servidor se vuelve un código, y solo entran bans, sanciones, raids e imágenes sospechosas — sin nombres, IDs ni conversación. En los servidores del propio operador, el informe es completo. Sale del código (sin modelo de IA ni fragmentos de conversación) y llega al operador por **mensaje privado con Judy**, nunca en un canal | 48 horas |
 | Log técnico del bot (eventos y errores, con los IDs cambiados por **seudónimos**). El filtro del automod no guarda el contenido; fragmentos cortos de los mensajes y de los comandos solo entran con la depuración activada por el dueño del bot (`&automod debug`, desactivada por defecto) | siempre | tamaño limitado — los más antiguos salen primero |
-| Comandos del dueño del bot en un servidor que no es suyo | cuando usa un comando allí, o actúa en él desde su DM con Judy (sus propios comandos — panel, lista global, lista de bloqueo, muestra — solo funcionan en ese DM; los que cambian un servidor reciben su ID) | van al **canal de log de ese servidor**, para que su staff lo vea |
+| Imágenes de prueba que el dueño del bot envía por DM a Judy (`&bateria`): solo el enlace del adjunto en Stoat, la categoría que él da y los metadatos del adjunto que informa Stoat (nombre, tipo, tamaño, ancho y alto) — **nunca la imagen**: Judy no la descarga ni la copia; el programa de prueba de la moderación de imágenes del dueño lee esos enlaces en un archivo junto a la base de datos y abre cada imagen en Stoat en el momento | solo cuando el dueño del bot envía imágenes con `&bateria` por DM a Judy (como máximo 5000) | hasta que el dueño las quite (`&bateria quitar` o `vaciar`) |
+| Comandos del dueño del bot en un servidor que no es suyo | cuando usa un comando allí, o actúa en él desde su DM con Judy (sus propios comandos — panel, lista global, lista de bloqueo, muestra, imágenes de prueba — solo funcionan en ese DM; los que cambian un servidor reciben su ID) | van al **canal de log de ese servidor**, para que su staff lo vea |
 | Copias de seguridad de la base de datos | en cada actualización del bot | **30 días** |
 
 El 2 nov 2026 la conversación con Judy y el RPG salieron, y sus datos se borraron de la
@@ -312,12 +315,13 @@ copias de seguridad de antes salen en su plazo (30 días).
   modelo nuevo — nunca actúa sobre nadie ni cambia lo que decidió el staff de un
   servidor. El archivo que puede exportar no tiene nombres, ni IDs de personas ni de
   servidores (imágenes solo como hash). Los comandos del dueño del bot (`&caso`,
-  `&servidores`, los suyos del `&banglobal` y de la lista de bloqueo) solo funcionan por
-  DM con Judy. El caso se queda por el plazo de arriba; con `&privacidad borrar`,
-  salen de él tu cuenta, el canal, el mensaje, el fragmento, el enlace y el código del
-  servidor, y el mensaje del caso en el DM del dueño se edita para quitar el fragmento y
-  el enlace. En un dibujo hecho con caracteres en el perfil, el fragmento es solo un
-  resumen en números y el idioma del texto de al lado, **nunca el dibujo** ni el texto.
+  `&servidores`, `&bateria`, los suyos del `&banglobal` y de la lista de bloqueo) solo
+  funcionan por DM con Judy. El caso se queda por el plazo de arriba; con `&privacidad
+  borrar`, salen de él tu cuenta, el canal, el mensaje, el fragmento, el enlace y el
+  código del servidor, y el mensaje del caso en el DM del dueño se edita para quitar el
+  fragmento y el enlace. En un dibujo hecho con caracteres en el perfil, el fragmento es
+  solo un resumen en números y el idioma del texto de al lado, **nunca el dibujo** ni el
+  texto.
 - Nada se vende ni se usa para anuncios.
 
 ### Tus derechos

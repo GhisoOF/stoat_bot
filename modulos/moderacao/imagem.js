@@ -16,8 +16,8 @@ import * as confianca from "./confianca.js";
 import * as relatorioHora from "../ferramentas/relatorio.js";
 import { canalDaStaff } from "./pertence.js";
 import * as modelo from "./modelo.js";   // (P4) a IA da moderação, num lugar só
+import { ehImagem, idDoAnexo, urlDoAnexo } from "../core/anexos.js";   // (P4.3) o anexo recebido, uma fonte só
 
-const CDN = (process.env.CDN_URL || "https://cdn.stoatusercontent.com").replace(/\/$/, "");
 const ALERTA = 4;
 const FILA_MAX = Number(process.env.IMAGEM_FILA_MAX || 20);
 
@@ -91,8 +91,8 @@ export function deveAnalisar(config, serverId, userId) {
 
 export function imagensDa(message) {
   return (message?.attachments ?? [])
-    .filter((a) => /^image\//.test(String(a?.metadata?.type ?? a?.contentType ?? a?.content_type ?? "")) || a?.metadata?.type === "Image")
-    .map((a) => ({ id: a?.id ?? a?._id, url: `${CDN}/attachments/${a?.id ?? a?._id}`,
+    .filter(ehImagem)
+    .map((a) => ({ id: idDoAnexo(a), url: urlDoAnexo(a),
       digital: `${a?.size ?? "?"}:${a?.metadata?.width ?? "?"}x${a?.metadata?.height ?? "?"}` }))
     .filter((a) => a.id);
 }

@@ -4,6 +4,7 @@ import { trechoPronto } from "./aliases.js";
 import { carimbo } from "./tempo.js";
 import * as relatorioHora from "../ferramentas/relatorio.js";
 import { canalDeOutroServidor } from "../moderacao/pertence.js";
+import { cdnDosAnexos } from "./anexos.js";
 
 // Rótulos amigáveis de cada categoria
 export const EVENTOS = {
@@ -40,7 +41,7 @@ const CORES = {
 
 const RESGATE_MAX_BYTES = Number(process.env.LOG_MIDIA_MAX_BYTES || 10 * 1024 * 1024);
 export async function resgatarMidias(atts, { baixar = fetch, subir } = {}) {
-  const CDN = (process.env.CDN_URL || "https://cdn.stoatusercontent.com").replace(/\/$/, "");
+  const CDN = cdnDosAnexos();   // (P4.3) o CDN dos anexos, uma fonte só (core/anexos.js)
   const ids = [];
   const perdidas = [];
   if (typeof subir !== "function") return { ids, perdidas };

@@ -42,6 +42,7 @@ const MAPA = {
   tts: { padrao: "membro", subs: { filtro: "staff", cooldown: "staff", nomes: "staff", dicionario: "staff", "dicionário": "staff", reiniciar: "staff", destravar: "staff", resgatar: "staff", diagnostico: "staff", "diagnóstico": "staff" } },
   entrar: { padrao: "membro" }, sair: { padrao: "membro" }, musica: { padrao: "membro" },
   servidores: { padrao: "dono" }, caso: { padrao: "dono" },   // (31 out 2026, P3a) a fila de revisão é só do dono do bot
+  bateria: { padrao: "dono" },   // (2 nov 2026, P4.3) as imagens da bateria de teste da visão: só o dono, só na DM
   // (P2) a staff vê o modo, isenta e consulta o histórico; o resto é do dono do bot
   // (P4) `desfazer <pessoa>` é o `isentar` da staff; `desfazer [confirmar]` sozinho, do dono
   banglobal: { padrao: "staff", subs: { ...Object.fromEntries(["off", "avisar", "imediato", "consenso", "lista", "varrer", "revisar", "add", "esquecer", "lembrar", "ignorados", "bots"].map((s) => [s, "dono"])),

@@ -20690,9 +20690,10 @@ await t("★ PRIVACIDADE.md (staff): casos duvidosos com a staff (14 dias; julga
   for (const re of [/Nada disso vai para o banco, exceto os casos duvidosos com a staff e a amostra do dono/, /None of it goes to the database, except the doubtful cases with the staff and the owner's sample/, /Nada de esto va a la base de datos, salvo los casos dudosos con el staff y la muestra del dueño/,
     // (2 nov 2026, P4) antes: "o `&caso` (o comando do dono) só funciona na DM". agora: todos os comandos só do dono do bot
     // (`&caso`, `&servidores`, os dele no `&banglobal` e na lista de bloqueio) só funcionam na DM
-    /Os comandos do dono do bot \(`&caso`, `&servidores`, os dele no `&banglobal` e na lista de bloqueio\) só funcionam na DM com a Judy/,
-    /The bot owner's commands \(`&caso`, `&servidores`, their `&banglobal` and blocklist ones\) only work in the DM with Judy/,
-    /Los comandos del dueño del bot \(`&caso`, `&servidores`, los suyos del `&banglobal` y de la lista de bloqueo\) solo funcionan por DM con Judy/,
+    // (2 nov 2026, P4.3) antes: sem o `&bateria`; agora: a lista cita também o `&bateria`
+    /Os comandos do dono do bot \(`&caso`, `&servidores`, `&bateria`, os dele no `&banglobal` e na lista de bloqueio\) só funcionam na DM com a Judy/,
+    /The bot owner's commands \(`&caso`, `&servidores`, `&bateria`, their `&banglobal` and blocklist ones\) only work in the DM with Judy/,
+    /Los comandos del dueño del bot \(`&caso`, `&servidores`, `&bateria`, los suyos del `&banglobal` y de la lista de bloqueo\) solo funcionan por DM con Judy/,
     /o link e o código do servidor, e a mensagem do caso na DM do dono é editada/, /the link and the server's code are removed from it, and the case's message in the owner's DM is edited/, /el enlace y el código del servidor, y el mensaje del caso en el DM del dueño se edita/,
     /resumo em números e o idioma do texto ao lado, \*\*nunca o desenho\*\* nem o texto/, /summary in numbers and the language of the text next to it, \*\*never the drawing\*\* or the text/, /resumen en números y el idioma del texto de al lado, \*\*nunca el dibujo\*\* ni el texto/,
     /O veredito dele só mede o acerto e calibra o padrão global da moderação, sem modelo novo — nunca age sobre ninguém nem muda o que a staff de um servidor decidiu/,
@@ -22529,12 +22530,13 @@ await t("★ o relatório: sai do código e chega por DM ao operador, nunca num 
   assert.doesNotMatch(semComentarios(src), /channels\.(get|fetch)|\bfetch\(|modelo\.js/);
 });
 await t("★ os comandos do dono: os só dele só na DM; no servidor alheio, o log de lá — a lista da política é a do visao.soDoDono", async () => {
-  for (const re of [/\| Comandos do dono do bot num servidor que não é dele \| quando ele usa um comando ali, ou age nele pela DM com a Judy \(os comandos só dele — painel, lista global, lista de bloqueio, amostra — só funcionam na DM; os que mexem num servidor recebem o ID dele\) \| vão para o \*\*canal de log daquele servidor\*\*/,
-    /\| The bot owner's commands on a server that isn't theirs \| when they use a command there, or act on it from their DM with Judy \(their own commands — panel, global list, blocklist, sample — only work in that DM; the ones that change a server take its ID\) \| go to \*\*that server's log channel\*\*/,
-    /\| Comandos del dueño del bot en un servidor que no es suyo \| cuando usa un comando allí, o actúa en él desde su DM con Judy \(sus propios comandos — panel, lista global, lista de bloqueo, muestra — solo funcionan en ese DM; los que cambian un servidor reciben su ID\) \| van al \*\*canal de log de ese servidor\*\*/]) assert.match(POL, re);
+  // (2 nov 2026, P4.3) antes: a lista da política sem as imagens de teste; agora: com elas (e o `&bateria` no soDoDono)
+  for (const re of [/\| Comandos do dono do bot num servidor que não é dele \| quando ele usa um comando ali, ou age nele pela DM com a Judy \(os comandos só dele — painel, lista global, lista de bloqueio, amostra, imagens de teste — só funcionam na DM; os que mexem num servidor recebem o ID dele\) \| vão para o \*\*canal de log daquele servidor\*\*/,
+    /\| The bot owner's commands on a server that isn't theirs \| when they use a command there, or act on it from their DM with Judy \(their own commands — panel, global list, blocklist, sample, test images — only work in that DM; the ones that change a server take its ID\) \| go to \*\*that server's log channel\*\*/,
+    /\| Comandos del dueño del bot en un servidor que no es suyo \| cuando usa un comando allí, o actúa en él desde su DM con Judy \(sus propios comandos — panel, lista global, lista de bloqueo, muestra, imágenes de prueba — solo funcionan en ese DM; los que cambian un servidor reciben su ID\) \| van al \*\*canal de log de ese servidor\*\*/]) assert.match(POL, re);
   const { soDoDono } = await import("./modulos/moderacao/visao.js");
-  // painel, amostra, lista global, lista de bloqueio
-  for (const [c, a] of [["servidores", []], ["caso", []], ["banglobal", ["add"]], ["banglobal", ["imediato"]], ["automod", ["blocklist", "add"]]]) assert.equal(soDoDono(c, a), true, `${c} ${a.join(" ")}`);
+  // painel, amostra, lista global, lista de bloqueio — (2 nov 2026, P4.3) e as imagens de teste (`&bateria`)
+  for (const [c, a] of [["servidores", []], ["caso", []], ["bateria", []], ["bateria", ["remover", "ultima"]], ["banglobal", ["add"]], ["banglobal", ["imediato"]], ["automod", ["blocklist", "add"]]]) assert.equal(soDoDono(c, a), true, `${c} ${a.join(" ")}`);
   for (const [c, a] of [["banglobal", []], ["automod", ["blocklist"]], ["privacidade", []], ["debug", []]]) assert.equal(soDoDono(c, a), false, `${c} ${a.join(" ")}`);
   const main = ler("main.js");
   assert.match(main, /if \(serverId && ehSuperAdmin\(message\.authorId\) && soDoDono\(canonico, args\)\) \{\n\s+return sendEmbed\(message\.channel, pedirDM\(ctx\)\);/);
@@ -22953,6 +22955,316 @@ await t("★ nenhum serviço devolve texto cru de exceção (String(e), e.stack,
 });
 
 console.log(`\nP4.1 CODEQL: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// p43-bateria  (2 nov 2026, P4.3)
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p43-bateria"] = async () => {
+// (P4.3, 2 nov 2026, pedido do dono) "quero poder enviar, pelo próprio privado do bot, a imagem com a
+// categoria dela" — para a bateria de teste da moderação de imagem (programa à parte, no MiniPC).
+// Regra inegociável: o bot NUNCA baixa nem copia a imagem — guarda só o link do anexo no CDN do
+// Stoat e os metadados que o Stoat manda; a cada mudança reescreve ATOMICAMENTE o
+// bateria-imagens.jsonl na pasta do banco (o contrato com a bateria). Só o dono, só na DM.
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const http = (await import("node:http")).default, https = (await import("node:https")).default;
+const { syncBuiltinESMExports } = await import("node:module");
+const DIR = "/tmp/p43-bateria";
+fs.rmSync(DIR, { recursive: true, force: true }); fs.mkdirSync(DIR, { recursive: true });
+const DB = `${DIR}/p43.db`, ARQ = `${DIR}/bateria-imagens.jsonl`;
+const U = (n) => `01KP43${String(n).padStart(20, "0")}`;
+const DONO = U(1), OUTRO = U(2), SID = U(100);
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: `${DIR}/p43.json`, SUPER_ADMINS: DONO, LOG_SEGREDO: "segredo-de-teste" });
+for (const v of ["IA_MODO", "IA", "IA_SERVICO_URL", "LLM_URL", "RELATORIO_SERVIDOR", "CDN_URL"]) delete process.env[v];
+// Toda saída de rede é anotada: o registro de imagens não pode chamar nenhuma (nem fetch, nem http/https)
+const rede = [];
+globalThis.fetch = async (u) => { rede.push(`fetch ${String(u)}`); return { ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() }; };
+for (const [nome, mod] of [["http", http], ["https", https]]) for (const f of ["request", "get"]) {
+  const orig = mod[f];
+  mod[f] = function (...a) { rede.push(`${nome}.${f}`); return orig.apply(this, a); };
+}
+syncBuiltinESMExports();
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.stack ?? e).split("\n").slice(0, 6).join("\n     ")}`); falhou++; } };
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const mudo = async (fn) => { const o = [process.stdout.write, process.stderr.write]; process.stdout.write = process.stderr.write = () => true; try { return await fn(); } finally { [process.stdout.write, process.stderr.write] = o; } };
+
+const bat = await import("./modulos/moderacao/bateria.js");
+const LINHA = /^🔒 (Use na DM com a Judy|Use it in your DM with Judy|Úsalo por DM con Judy)\.$/;
+const CDN = "https://cdn.stoatusercontent.com/attachments/";
+
+console.log("── 1. o motor (sem o bot) ──");
+await t("★ categoria normalizada: minúsculas, sem acento, espaço/sublinhado → hífen; só [a-z0-9-], 2–30 caracteres", () => {
+  for (const [entra, sai] of [["anime", "anime"], ["Anime", "anime"], ["Símbolo Ódio", "simbolo-odio"], ["simbolo_odio", "simbolo-odio"], ["  meme   gato ", "meme-gato"],
+    ["ação", "acao"], ["NUDEZ", "nudez"], ["gore-2", "gore-2"], ["--praia--", "praia"], ["a--b", "a-b"], ["x".repeat(30), "x".repeat(30)], ["Ñandú", "nandu"]]) assert.equal(bat.normalizarCategoria(entra), sai, entra);
+  for (const ruim of ["", "a", "-a-", "x".repeat(31), "anime!", "meme/gato", "../etc", "gatos🐱", "猫猫", "a.b", null, undefined, "<@x>"]) assert.equal(bat.normalizarCategoria(ruim), null, String(ruim));
+});
+await t("★ a linha do arquivo: só os campos do contrato, na ordem; o que não veio é omitido (nunca null)", () => {
+  const cheio = { codigo: "K7F2Q", categoria: "anime", url: `${CDN}abc`, nome: "x.png", tipo: "image/png", tamanho: 12345, largura: 800, altura: 600, criadoEm: Date.UTC(2026, 10, 2, 22), anexoId: "abc" };
+  assert.equal(bat.linhaDoArquivo(cheio), `{"id":"K7F2Q","categoria":"anime","url":"${CDN}abc","nome":"x.png","tipo":"image/png","tamanho":12345,"largura":800,"altura":600,"criadoEm":"2026-11-02T22:00:00.000Z"}`);
+  assert.equal(bat.linhaDoArquivo({ ...cheio, nome: null, tipo: null, tamanho: null, largura: null, altura: null }),
+    `{"id":"K7F2Q","categoria":"anime","url":"${CDN}abc","criadoEm":"2026-11-02T22:00:00.000Z"}`);
+  assert.equal(bat.ehCodigo("k7f2q"), true); assert.equal(bat.ehCodigo("K7F2"), false); assert.equal(bat.ehCodigo("K7F2O"), false);
+});
+await t("★ nada de download no código: a bateria não importa rede nem sobe/baixa anexo", () => {
+  for (const arq of ["modulos/moderacao/bateria.js", "modulos/moderacao/bateria-comando.js"]) {
+    const src = fs.readFileSync(arq, "utf8");
+    assert.doesNotMatch(src, /\bfetch\s*\(|node:https?\b|buscarSeguro|subirAnexo|resgatarMidias|\bbaixar\s*\(|arrayBuffer|createWriteStream/, arq);
+  }
+  assert.match(fs.readFileSync("modulos/moderacao/bateria.js", "utf8"), /import \{ linkDeOrigem \} from "\.\/revisao\.js"/, "a validação do link é a da fila (DRY)");
+  assert.match(fs.readFileSync("modulos/core/db.js", "utf8"), /\n\/\/ ── P4\.3 bateria ──\n[\s\S]*CREATE TABLE IF NOT EXISTS bateria_imagens/);
+});
+
+// ════ o bot inteiro, com o Stoat de mentira ════
+console.log("── 2. integração (main.js) ──");
+await mudo(() => import("./main.js"));
+const db = await import("./modulos/core/db.js");
+const c = globalThis.__client;
+const saidas = [];
+const textoDe = (p) => typeof p === "string" ? p : `${p?.embeds?.[0]?.title ?? ""}\n${p?.embeds?.[0]?.description ?? ""}${typeof p?.content === "string" ? "\n" + p.content : ""}`.trim();
+let nMsg = 0;
+const novaMsg = (canalId) => ({ id: U(90000 + ++nMsg), channelId: canalId, edit: async () => {}, delete: async () => {}, react: async () => {} });
+const canal = (id, serverId, tipo = "TextChannel") => ({ id, serverId, name: id, type: tipo, nsfw: false, enviados: [],
+  sendMessage: async function (p) { this.enviados.push(textoDe(p)); saidas.push(textoDe(p)); return novaMsg(id); }, fetchMessages: async () => [], deleteMessages: async () => {} });
+const CG = U(101), CL = U(102), DMID = U(700), DMOUTRO = U(701);
+const geral = canal(CG, SID), logc = canal(CL, SID);
+const dm = canal(DMID, undefined, "DirectMessage"), dmOutro = canal(DMOUTRO, undefined, "DirectMessage");
+const pessoa = (sid, uid) => ({ id: { server: sid, user: uid }, roles: [], hasPermission: () => true, user: { id: uid, username: uid }, nickname: uid, joinedAt: new Date(0) });
+await quieto(() => c.emitAll("ready"));
+c.servers.set(SID, { id: SID, ownerId: OUTRO, name: "S", roles: new Map(), channels: [geral, logc], channelIds: new Set([CG, CL]), member: { roles: [] }, havePermission: () => true,
+  fetchMember: async (u) => pessoa(SID, String(u?.id ?? u?.user ?? u)), fetchMembers: async () => ({ members: [], users: [] }), fetchBans: async () => [] });
+for (const x of [geral, logc, dm, dmOutro]) c.channels.set(x.id, x);
+c.users.set(DONO, { id: DONO, username: "dono", bot: false, openDM: async () => dm });
+c.users.set(OUTRO, { id: OUTRO, username: "outro", bot: false, openDM: async () => dmOutro });
+let nEv = 0;
+async function diz(autor, conteudo, { onde = "dm", anexos = [] } = {}) {
+  saidas.length = 0;
+  const ch = onde === "dm" ? (autor === DONO ? dm : dmOutro) : geral;
+  const sid = ch.serverId ?? null;
+  const ev = { id: U(20000 + ++nEv), authorId: autor, content: conteudo, serverId: sid, server: sid ? c.servers.get(sid) : undefined, channel: ch, channelId: ch.id,
+    mentionIds: [], createdAt: new Date(), author: { id: autor, username: autor, bot: false }, member: sid ? pessoa(sid, autor) : undefined, replyIds: [], attachments: anexos };
+  await quieto(() => Promise.race([c.emitAll("messageCreate", ev), new Promise((r) => setTimeout(r, 6000))]));
+  return saidas.join("\n");
+}
+// o anexo como o stoat.js entrega (classe File: id, tag, filename, metadata, contentType, size)
+let nAnexo = 0;
+const img = (extra = {}) => ({ id: `ANX${String(++nAnexo).padStart(8, "0")}`, tag: "attachments", filename: `foto${nAnexo}.png`,
+  metadata: { type: "Image", width: 800, height: 600 }, contentType: "image/png", size: 12345, ...extra });
+const linhas = () => (fs.existsSync(ARQ) ? fs.readFileSync(ARQ, "utf8") : "").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const total = () => db.bateriaTotal();
+await diz(OUTRO, "&config idioma pt", { onde: "srv" });
+
+await t("★ registra 1 a 10 imagens anexadas: uma linha com a quantidade, a categoria, o total e o código de cada uma — e o JSONL na pasta do banco", async () => {
+  rede.length = 0;
+  const a = img(), b = img({ filename: "b.jpg", contentType: "image/jpeg", metadata: { type: "Image", width: 1024, height: 768 }, size: 999 });
+  const out = await diz(DONO, "&bateria anime", { anexos: [a, b] });
+  const m = out.match(/^📥 2 imagem\(ns\) em `anime` · 2 no total · `([2-9BCDFGHJKMNPQRSTVWXZ]{5})` `([2-9BCDFGHJKMNPQRSTVWXZ]{5})`$/);
+  assert.ok(m, JSON.stringify(out));
+  assert.equal(saidas.length, 1, "uma mensagem só");
+  assert.equal(total(), 2);
+  const l = linhas();
+  assert.equal(l.length, 2);
+  assert.deepEqual(Object.keys(l[0]), ["id", "categoria", "url", "nome", "tipo", "tamanho", "largura", "altura", "criadoEm"]);
+  assert.deepEqual({ ...l[0], criadoEm: 0 }, { id: m[1], categoria: "anime", url: `${CDN}${a.id}`, nome: a.filename, tipo: "image/png", tamanho: 12345, largura: 800, altura: 600, criadoEm: 0 });
+  assert.deepEqual({ ...l[1], criadoEm: 0 }, { id: m[2], categoria: "anime", url: `${CDN}${b.id}`, nome: "b.jpg", tipo: "image/jpeg", tamanho: 999, largura: 1024, altura: 768, criadoEm: 0 });
+  assert.match(l[0].criadoEm, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+  assert.ok(Math.abs(Date.parse(l[0].criadoEm) - Date.now()) < 60_000);
+  assert.ok(fs.readFileSync(ARQ, "utf8").endsWith("}\n"), "cada linha termina em \\n");
+  assert.deepEqual(rede, [], "nenhuma requisição de rede ao registrar");
+});
+await t("★ o anexo cru da API (`_id`, `content_type`) também; metadado que não veio ou veio inválido é omitido", async () => {
+  rede.length = 0;
+  const cru = { _id: "CRU00000001", tag: "attachments", metadata: { type: "Image" }, content_type: "image/webp" };
+  const torto = img({ filename: "\u0000\u001b[31mx\u0007.png", metadata: { type: "Image", width: -5, height: 1.5 }, size: "grande", contentType: "image/png; charset=x" });
+  assert.match(await diz(DONO, "&bateria meme", { anexos: [cru, torto] }), /^📥 2 imagem\(ns\) em `meme` · 4 no total · /);
+  const [x, y] = linhas().slice(-2);
+  assert.deepEqual(Object.keys(x), ["id", "categoria", "url", "tipo", "criadoEm"]);
+  assert.equal(x.url, `${CDN}CRU00000001`); assert.equal(x.tipo, "image/webp");
+  assert.deepEqual(Object.keys(y), ["id", "categoria", "url", "nome", "criadoEm"], JSON.stringify(y));
+  assert.equal(y.nome, "[31mx.png", "sem caractere de controle");
+  assert.deepEqual(rede, []);
+});
+await t("★ anexo que não é imagem: recusado, dito na mesma linha (e não grava)", async () => {
+  const pdf = { id: "PDF00000001", tag: "attachments", filename: "a.pdf", metadata: { type: "File" }, contentType: "application/pdf", size: 10 };
+  const video = { id: "VID00000001", tag: "attachments", filename: "v.mp4", metadata: { type: "Video", width: 10, height: 10 }, contentType: "video/mp4", size: 10 };
+  const boa = img();
+  assert.match(await diz(DONO, "&bateria praia", { anexos: [pdf, boa, video] }), /^📥 1 imagem\(ns\) em `praia` · 5 no total · `[2-9A-Z]{5}` · ⚠️ 2 não é imagem$/);
+  assert.equal(saidas.length, 1);
+  assert.ok(!linhas().some((l) => /PDF|VID/.test(l.url)));
+  assert.match(await diz(DONO, "&bateria praia", { anexos: [pdf] }), /^📥 0 imagem\(ns\) em `praia` · 5 no total · ⚠️ 1 não é imagem$/);
+  assert.equal(total(), 5);
+});
+await t("★ link fora do CDN do Stoat: recusado (CDN_URL apontando para outro lugar ou http; id que muda o caminho)", async () => {
+  const antes = linhas().length, mtime = fs.statSync(ARQ).mtimeMs;
+  try {
+    for (const cdn of ["https://cdn.malicioso.example", "http://cdn.stoatusercontent.com", "https://cdn.stoatusercontent.com.malicioso.example", "https://user:senha@cdn.stoatusercontent.com"]) {
+      process.env.CDN_URL = cdn;
+      assert.match(await diz(DONO, "&bateria gore", { anexos: [img()] }), /^📥 0 imagem\(ns\) em `gore` · 5 no total · ⚠️ 1 fora do CDN do Stoat$/, cdn);
+    }
+  } finally { delete process.env.CDN_URL; }
+  for (const id of ["../../etc/passwd", "a?b=1", "x/y", "", 42]) {
+    assert.match(await diz(DONO, "&bateria gore", { anexos: [img({ id })] }), /⚠️ 1 fora do CDN do Stoat$/, String(id));
+  }
+  assert.equal(linhas().length, antes); assert.equal(fs.statSync(ARQ).mtimeMs, mtime, "nada mudou: o arquivo nem foi reescrito");
+  // o antigo do Revolt e o atual do Stoat valem (a mesma lista da fila de revisão)
+  try { process.env.CDN_URL = "https://autumn.revolt.chat/"; assert.match(await diz(DONO, "&bateria gore", { anexos: [img()] }), /^📥 1 imagem\(ns\) em `gore` · 6 no total/); }
+  finally { delete process.env.CDN_URL; }
+  assert.equal(linhas().at(-1).url.startsWith("https://autumn.revolt.chat/attachments/ANX"), true);
+});
+await t("★ imagem repetida (mesmo anexo/link) não duplica — nem noutra categoria, nem duas vezes na mesma mensagem", async () => {
+  const [primeira] = linhas();
+  const id = primeira.url.slice(CDN.length);
+  assert.match(await diz(DONO, "&bateria meme", { anexos: [img({ id })] }), /^📥 0 imagem\(ns\) em `meme` · 6 no total · 1 já estava$/);
+  assert.equal(linhas()[0].categoria, "anime", "a categoria de antes fica");
+  const nova = img();
+  assert.match(await diz(DONO, "&bateria meme", { anexos: [nova, { ...nova }] }), /^📥 1 imagem\(ns\) em `meme` · 7 no total · `[2-9A-Z]{5}` · 1 já estava$/);
+  assert.equal(total(), 7);
+  assert.equal(new Set(linhas().map((l) => l.url)).size, 7);
+});
+await t("★ categoria: normalizada na hora de gravar (`Símbolo Ódio` → `simbolo-odio`); inválida → erro de uso e nada gravado", async () => {
+  assert.match(await diz(DONO, "&bateria Símbolo Ódio", { anexos: [img()] }), /^📥 1 imagem\(ns\) em `simbolo-odio` · 8 no total/);
+  assert.equal(linhas().at(-1).categoria, "simbolo-odio");
+  for (const cmd of ["&bateria a", "&bateria anime!", `&bateria ${"x".repeat(31)}`, "&bateria 🐱🐱"]) {
+    const out = await diz(DONO, cmd, { anexos: [img()] });
+    assert.match(out, /^❌ Categoria: 2 a 30 caracteres, só letras, números e hífen\. · `&help bateria`$/, cmd);
+  }
+  assert.match(await diz(DONO, "&bateria anime"), /^❌ Anexe de 1 a 10 imagens na mesma mensagem\. · `&help bateria`$/);
+  assert.match(await diz(DONO, "&bateria", { anexos: [img()] }), /^❌ Diga a categoria das imagens\. · `&help bateria`$/);
+  assert.match(await diz(DONO, "&bateria anime", { anexos: Array.from({ length: 11 }, () => img()) }), /^❌ No máximo 10 imagens por mensagem\.$/);
+  assert.equal(total(), 8, "nenhuma das recusadas entrou");
+});
+await t("★ `&bateria` sozinho: a contagem por categoria e o total", async () => {
+  const out = await diz(DONO, "&bateria");
+  assert.equal(out, "🧪 **8**/5000 imagem(ns)\n`meme` — **3**\n`anime` — **2**\n`gore` — **1**\n`praia` — **1**\n`simbolo-odio` — **1**");
+  assert.equal(saidas.length, 1);
+});
+await t("★ remover ‹código› e `ultima` (pt/en/es): tira só aquele, e o arquivo acompanha", async () => {
+  const [x] = linhas();
+  assert.equal(await diz(DONO, `&bateria remover ${x.id.toLowerCase()}`), `🗑️ \`${x.id}\` (\`anime\`) removida · 7 no total`);
+  assert.ok(!linhas().some((l) => l.id === x.id)); assert.equal(linhas().length, 7);
+  const ultima = linhas().at(-1);
+  assert.equal(await diz(DONO, "&bateria remover ultima"), `🗑️ \`${ultima.id}\` (\`simbolo-odio\`) removida · 6 no total`);
+  const penultima = linhas().at(-1);
+  assert.match(await diz(DONO, "&testset remove last"), new RegExp(`^🗑️ \`${penultima.id}\``));
+  assert.match(await diz(DONO, "&bateria quitar última"), /^🗑️ `[2-9A-Z]{5}` .* removida · 4 no total$/);
+  assert.equal(linhas().length, 4);
+  assert.match(await diz(DONO, "&bateria remover ZZZZZ"), /^❌ Não há registro `ZZZZZ`\.$/);
+  assert.match(await diz(DONO, "&bateria remover ../x"), /^❌ Não há registro/);
+  assert.match(await diz(DONO, "&bateria remover"), /^❌ Use um código ou `ultima`\. · `&help bateria`$/);
+  assert.equal(total(), 4);
+});
+await t("★ limpar ‹categoria›: pede confirmação com código (2 min); só o código certo, uma vez, apaga", async () => {
+  const doMeme = () => linhas().filter((l) => l.categoria === "meme").length;
+  const n = doMeme();
+  assert.ok(n >= 2, String(n));
+  const pede = await diz(DONO, "&bateria limpar Meme");
+  const m = pede.match(new RegExp(`^⚠️ Apagar \\*\\*${n}\\*\\* imagem\\(ns\\) de \`meme\`\\? Confirme até .+: \`&bateria limpar confirmar ([0-9A-F]{4})\`$`));
+  assert.ok(m, pede);
+  assert.equal(doMeme(), n, "nada apagado só de pedir");
+  const errado = m[1] === "0000" ? "1111" : "0000";
+  assert.match(await diz(DONO, `&bateria limpar confirmar ${errado}`), /^❌ Código errado ou vencido — `&bateria limpar`\.$/);
+  assert.equal(doMeme(), n);
+  const antes = total();
+  assert.equal(await diz(DONO, `&bateria limpar confirmar ${m[1].toLowerCase()}`), `🗑️ ${n} imagem(ns) de \`meme\` removida(s) · ${antes - n} no total`);
+  assert.equal(doMeme(), 0); assert.equal(total(), antes - n); assert.equal(linhas().length, antes - n);
+  assert.match(await diz(DONO, `&bateria limpar confirmar ${m[1]}`), /^❌ Código errado ou vencido/, "o código vale uma vez");
+  assert.match(await diz(DONO, "&bateria limpar meme"), /^❌ Não há imagens em `meme`\.$/);
+  assert.match(await diz(DONO, "&bateria limpar"), /^❌ Diga a categoria\. · `&help bateria`$/);
+  // vencido: passados 2 min, o código não vale
+  const p = (await diz(DONO, "&bateria limpar praia")).match(/confirmar ([0-9A-F]{4})/)[1];
+  const agora = Date.now, n2 = total();
+  Date.now = () => agora() + 2 * 60_000 + 1000;
+  try { assert.match(await diz(DONO, `&bateria limpar confirmar ${p}`), /^❌ Código errado ou vencido/); } finally { Date.now = agora; }
+  assert.equal(total(), n2);
+  // em inglês (o registro traduz `clear confirm`)
+  const q = (await diz(DONO, "&testset clear praia")).match(/confirmar ([0-9A-F]{4})/)[1];
+  assert.match(await diz(DONO, `&testset clear confirm ${q}`), /^🗑️ 1 imagem\(ns\) de `praia` removida\(s\)/);
+});
+await t("★ o JSONL é reescrito por inteiro e de forma atômica (rename): quem já leu vê o arquivo antigo inteiro; nada de temporário sobrando", async () => {
+  const fd = fs.openSync(ARQ, "r");
+  const inoAntes = fs.statSync(ARQ).ino, textoAntes = fs.readFileSync(ARQ, "utf8");
+  await diz(DONO, "&bateria anime", { anexos: [img(), img()] });
+  const velho = Buffer.alloc(textoAntes.length + 100);
+  const lidos = fs.readSync(fd, velho, 0, velho.length, 0); fs.closeSync(fd);
+  assert.equal(velho.subarray(0, lidos).toString("utf8"), textoAntes, "o leitor antigo continua com o arquivo velho, inteiro");
+  assert.notEqual(fs.statSync(ARQ).ino, inoAntes, "arquivo novo no lugar (rename), não escrito por cima");
+  assert.deepEqual(fs.readdirSync(DIR).filter((f) => /^\.bateria-imagens\.jsonl\..*\.tmp$/.test(f)), []);
+  // o arquivo é exatamente o banco, na ordem em que entraram
+  assert.deepEqual(linhas().map((l) => l.id), db.bateriaTodas().map((r) => r.codigo));
+  assert.equal(linhas().length, total());
+  assert.equal(fs.statSync(ARQ).mode & 0o777 & 0o044, 0o044, "legível pela bateria (outro usuário, volume só leitura)");
+});
+await t("★ se o arquivo não pode ser gravado: o registro fica no banco, a linha avisa, nenhum temporário sobra — e a próxima mudança conserta", async () => {
+  fs.rmSync(ARQ); fs.mkdirSync(ARQ);   // um diretório no lugar do arquivo: o rename falha
+  const n = total();
+  let out;
+  try { out = await diz(DONO, "&bateria anime", { anexos: [img()] }); }
+  finally { fs.rmSync(ARQ, { recursive: true, force: true }); }
+  assert.match(out, /^📥 1 imagem\(ns\) em `anime` · \d+ no total · `[2-9A-Z]{5}` · ⚠️ arquivo da bateria não gravado$/);
+  assert.equal(total(), n + 1);
+  assert.deepEqual(fs.readdirSync(DIR).filter((f) => /^\.bateria-imagens\.jsonl\..*\.tmp$/.test(f)), []);
+  await diz(DONO, "&bateria remover ultima");
+  assert.equal(linhas().length, total(), "a próxima mudança reescreve o arquivo inteiro");
+});
+await t("★ teto de 5000: o que passa é recusado com aviso (e o que cabe entra)", async () => {
+  const falta = bat.TETO - 1 - total();
+  for (let i = 0; i < falta; i++) assert.equal(db.bateriaInserir({ codigo: `T${i}`, anexoId: `TETO${i}`, url: `${CDN}TETO${i}`, categoria: "carga", criadoEm: Date.now() }), "ok");
+  assert.equal(total(), 4999);
+  rede.length = 0;
+  assert.match(await diz(DONO, "&bateria anime", { anexos: [img(), img(), img()] }), /^📥 1 imagem\(ns\) em `anime` · 5000 no total · `[2-9A-Z]{5}` · ⚠️ 2 acima do teto \(5000\)$/);
+  assert.equal(total(), 5000); assert.equal(linhas().length, 5000);
+  assert.match(await diz(DONO, "&bateria anime", { anexos: [img()] }), /^📥 0 imagem\(ns\) em `anime` · 5000 no total · ⚠️ 1 acima do teto \(5000\)$/);
+  assert.deepEqual(rede, []);
+  assert.equal(db.bateriaLimpar("carga"), falta);
+  assert.equal(bat.reescreverArquivo(), true);
+  assert.equal(linhas().length, total());
+});
+await t("★ nada de download em toda a suíte de registro: nenhuma requisição (fetch, http, https) saiu", () => {
+  assert.deepEqual(rede.filter((r) => /stoatusercontent|revolt|ANX|CRU|TETO/.test(r)), []);
+  assert.deepEqual(rede, []);
+});
+await t("★ num servidor (mesmo o dono): SÓ a linha da DM — e nada grava nem reescreve", async () => {
+  const n = total(), ino = fs.statSync(ARQ).ino, mtime = fs.statSync(ARQ).mtimeMs;
+  for (const cmd of ["&bateria anime", "&bateria", "&bateria remover ultima", "&bateria limpar anime", "&testset anime"]) {
+    logc.enviados.length = 0;
+    const out = await diz(DONO, cmd, { onde: "srv", anexos: [img()] });
+    assert.match(out, LINHA, `${cmd} → ${JSON.stringify(out)}`);
+    assert.equal(saidas.length, 1, cmd);
+    assert.deepEqual(logc.enviados, [], `${cmd}: nada no log`);
+  }
+  assert.equal(total(), n); assert.equal(fs.statSync(ARQ).ino, ino); assert.equal(fs.statSync(ARQ).mtimeMs, mtime);
+});
+await t("★ quem não é o dono não consegue: na DM e no servidor, a recusa de sempre — nada grava", async () => {
+  const n = total(), mtime = fs.statSync(ARQ).mtimeMs;
+  for (const onde of ["dm", "srv"]) for (const cmd of ["&bateria anime", "&bateria", "&bateria remover ultima", "&bateria limpar anime"]) {
+    const out = await diz(OUTRO, cmd, { onde, anexos: [img()] });
+    assert.match(out, /^🚫 Só o dono do bot\.$/, `${onde} ${cmd} → ${out}`);
+    assert.doesNotMatch(out, LINHA);
+  }
+  assert.equal(total(), n); assert.equal(fs.statSync(ARQ).mtimeMs, mtime);
+});
+await t("★ nível \"dono\" no MAPA e no &help: na DM o dono vê `&bateria`; num servidor, não; quem não é dono, nunca", async () => {
+  const visao = await import("./modulos/moderacao/visao.js");
+  for (const a of [[], ["anime"], ["remover", "ultima"], ["limpar", "x"]]) { assert.equal(visao.soDoDono("bateria", a), true, a.join(" ")); assert.equal(visao.soDoDono("testset", a), true); }
+  assert.equal(visao.funcionaNaDM("bateria", ["anime"]), true);
+  assert.match(await diz(DONO, "&help"), /&bateria/);
+  assert.doesNotMatch(await diz(DONO, "&help", { onde: "srv" }), /&bateria|&testset/);
+  assert.doesNotMatch(await diz(OUTRO, "&help"), /&bateria|&testset/);
+  const pag = await diz(DONO, "&help bateria");
+  assert.match(pag, /Só o dono do bot, só na DM com a Judy/); assert.match(pag, /nunca baixa nem copia a imagem/);
+  assert.match(await diz(DONO, "&help bateria", { onde: "srv" }), /Não há ajuda|There's no help/);
+});
+await t("PRIVACIDADE.md: as imagens de teste do dono (só o link, a categoria e os metadados; nunca a imagem; até ele remover) nos 3 idiomas", () => {
+  const p = fs.readFileSync("PRIVACIDADE.md", "utf8");
+  assert.match(p, /\| Imagens de teste que o dono do bot envia na DM com a Judy \(`&bateria`\): só o link do anexo no Stoat, a categoria que ele dá e os metadados do anexo .*\*\*nunca a imagem\*\*.*\| até o dono remover/);
+  assert.match(p, /\| Test images the bot owner sends in their DM with Judy \(`&testset`\): only the attachment's Stoat link, the category they give and the attachment's metadata .*\*\*never the image\*\*.*\| until the owner removes them/);
+  assert.match(p, /\| Imágenes de prueba que el dueño del bot envía por DM a Judy \(`&bateria`\): solo el enlace del adjunto en Stoat, la categoría que él da y los metadatos del adjunto .*\*\*nunca la imagen\*\*.*\| hasta que el dueño las quite/);
+});
+
+console.log(`\nP4.3 BATERIA: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 

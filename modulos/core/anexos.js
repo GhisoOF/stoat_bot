@@ -1,7 +1,29 @@
 // Sobe um arquivo para o Autumn (o CDN de anexos do Stoat) e devolve o id
 // para mandar numa mensagem: { attachments: [id] }. Veio do chat.js (imagens
 // da IA); os tickets usam para o .txt da transcrição.
+// (P4.3, 2 nov 2026) E o anexo de uma mensagem RECEBIDA, uma fonte só: o CDN, o link dele
+// (`urlDoAnexo`) e se é imagem (`ehImagem`) — a visão (imagem.js), o resgate do log (log.js) e a
+// bateria de teste do dono (bateria.js) usam estes; nenhum baixa nada aqui.
 import { sufixo } from "./aleatorio.js";
+
+// O CDN dos anexos do Stoat (lido a cada chamada: CDN_URL no .env, senão o atual do Stoat)
+export const CDN_PADRAO = "https://cdn.stoatusercontent.com";
+export const cdnDosAnexos = () => (process.env.CDN_URL || CDN_PADRAO).replace(/\/$/, "");
+// O id de um anexo (o File do stoat.js tem `id`; o objeto cru da API, `_id`): só letras, dígitos,
+// `_` e `-` (R6) — um id com `/`, `?` ou `..` mudaria o caminho do link.
+export function idDoAnexo(a) {
+  const id = a?.id ?? a?._id;
+  return typeof id === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(id) ? id : null;
+}
+// O link do anexo no CDN do Stoat (o mesmo que a visão analisa), ou null
+export function urlDoAnexo(a) {
+  const id = idDoAnexo(a);
+  return id ? `${cdnDosAnexos()}/attachments/${id}` : null;
+}
+// É imagem? O que o Stoat diz do anexo: `metadata.type` "Image" ou o tipo `image/*`
+export function ehImagem(a) {
+  return /^image\//.test(String(a?.metadata?.type ?? a?.contentType ?? a?.content_type ?? "")) || a?.metadata?.type === "Image";
+}
 
 export async function subirAnexo({ base64, mime = "image/jpeg", nome = "imagem.jpg" }, client = null) {
   // A URL de upload vem da configuração VIVA da API (o servidor anuncia o seu

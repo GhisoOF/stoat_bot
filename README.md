@@ -105,6 +105,7 @@ Generated from the command registry (`modulos/comandos/`); `&help <command>` exp
 |---|---|
 | `&servers` | where the bot is, the hourly report, notices to every server |
 | `&case` | the daily moderation sample (by DM) |
+| `&testset` | labelled images for the vision test set (by DM) |
 <!-- /gerado:comandos -->
 
 ## Environment variables

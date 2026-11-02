@@ -105,6 +105,7 @@ Generado del registro de comandos (`modulos/comandos/`); `&ayuda <comando>` expl
 |---|---|
 | `&servidores` | dónde está el bot, el informe por hora, avisos a todos los servidores |
 | `&caso` | la muestra diaria de la moderación (por DM) |
+| `&bateria` | imágenes etiquetadas para la batería de prueba de la visión (por DM) |
 <!-- /gerado:comandos -->
 
 ## Variables de entorno

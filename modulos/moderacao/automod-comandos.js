@@ -7,6 +7,7 @@ import * as engine from "./automod-engine.js";
 import * as db  from "../core/db.js";
 import * as log from "../core/log.js";
 import { analisarConteudo } from "./scorecard.js";
+import { classesAcima } from "./classificador-texto.js";   // (P5) o `test` dá a nota que o automod daria
 import { registrarErro } from "../core/erros.js";
 import { tr, lingua, idiomaDe } from "../core/i18n.js";
 import { maisParecido } from "../core/parecido.js";
@@ -1031,6 +1032,7 @@ export async function cmdScam(message, args, ctx) {
       if (pol.silenceRoleId) await removerCargoSilence(server, uid, pol.silenceRoleId, ctx).catch(() => {});
       db.limparPunicao(ctx.serverId, uid);   // some do banco: não reaplica ao reentrar
       liberarQuarentena(ctx.serverId, uid);
+      (await import("./segunda-analise.js")).aoDesfazer(ctx.serverId, uid);   // (P5) era automática? segunda análise do dono
       await log.registrar(ctx, "punicoes", { titulo: "✅ Punição removida",
         descricao: `<@${uid}> foi liberado por <@${message.authorId}>.`,
         en: { titulo: "✅ Punishment removed", descricao: `<@${uid}> was released by <@${message.authorId}>.` },
@@ -1052,7 +1054,8 @@ export async function cmdScam(message, args, ctx) {
   if (sub === "test") {
     const texto = args.slice(1).join(" ");
     if (!texto) return erroDeUso(ctx, message.channel, "automod", "Testar o quê?", "Test what?", "¿Probar qué?");
-    const r = analisarConteudo(texto, { rate: 1 });
+    // (P5) com o classificador de texto, como no automod de verdade (sem modelo: null, nada muda)
+    const r = analisarConteudo(texto, { rate: 1, classes: classesAcima(texto) });
     const limiar = limiarDe(cfg.sensitivity);
     const flag = r.nota >= limiar;
     const sinais = r.sinais.join(", ") || "—";

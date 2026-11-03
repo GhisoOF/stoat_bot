@@ -23,6 +23,14 @@ import { citarNoTexto, marcarTraduzido } from "../core/aliases.js";
 // citação, e uma inventada aborta o build do Docker (aconteceu do P5 ao P7).
 export const NOVIDADES = [
   {
+    id: "2026-11-03-p5",
+    pacote: "P5",
+    data: "2026-11-03",
+    pt: "• **Ameaças sem palavrão:** o `{&automod.sentinela}` agora reconhece cobrança com ultimato (\"paga até sexta ou…\") e ameaça de expor dados ou fotos de alguém (\"se você não… vou mandar seu endereço pro grupo\"), em português, inglês e espanhol.\n• **Motivos no idioma do servidor:** os motivos das punições automáticas saem no idioma de `{&config.idioma}`.",
+    en: "• **Threats without swear words:** `{&automod.sentinela}` now recognizes payment ultimatums (\"pay by Friday or…\") and threats to expose someone's data or photos (\"if you don't… I'll send your address to the group\"), in English, Portuguese and Spanish.\n• **Reasons in the server's language:** automatic punishment reasons now come in the language set in `{&config.idioma}`.",
+    es: "• **Amenazas sin groserías:** `{&automod.sentinela}` ahora reconoce cobros con ultimátum (\"págame antes del viernes o…\") y amenazas de exponer datos o fotos de alguien (\"si no… mando tu dirección al grupo\"), en español, portugués e inglés.\n• **Motivos en el idioma del servidor:** los motivos de los castigos automáticos salen en el idioma de `{&config.idioma}`.",
+  },
+  {
     id: "2026-11-02-p4",
     pacote: "P4",
     data: "2026-11-02",

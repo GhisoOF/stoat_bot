@@ -987,6 +987,10 @@ export function usoDeComandos() {
 // de cada servidor (bloco "P3a staff", abaixo). As linhas antigas continuam legíveis.
 export const FILA_DIAS_TRECHO = 7;
 export const FILA_DIAS_PENDENTE = 14;
+// (P5) a impressão de treino (o vetor) — do dono e da staff — fica no máximo isto depois do REGISTRO
+// do caso (modulos/moderacao/treino.js). (3 nov 2026, P5 revisão) antes: 365 dias depois do veredito.
+// agora: o vetor permite reconstruir a mensagem, então vale o MESMO prazo do trecho (uma fonte só).
+export const TREINO_DIAS_VETOR = FILA_DIAS_TRECHO;
 let _filaDb = null;
 function prepararFila() {
   if (_filaDb === db) return;
@@ -1017,10 +1021,16 @@ function prepararFila() {
     violacao   INTEGER,       -- 1 = o dono disse que é violação
     julgadoEm  INTEGER,
     limpoEm    INTEGER,       -- quando os campos de identificação foram apagados
-    dmLimpar   INTEGER        -- 1 = a mensagem na DM ainda mostra o que a pessoa pediu para apagar
+    dmLimpar   INTEGER,       -- 1 = a mensagem na DM ainda mostra o que a pessoa pediu para apagar
+    vetor      TEXT,          -- (P5) a impressão de treino: [[índice, valor], …] do texto (treino.js); sem texto
+    versaoSinais TEXT,        -- (P5) a versão do extrator que fez o vetor
+    evento     TEXT           -- (P5) segunda análise: o que deu problema (desfeita, staff-errou, discordancia, quarentena)
   )`);
-  // (revisão P3a) coluna nova num banco que já tinha a tabela: acrescenta, sem perder linhas
-  if (!db.prepare("PRAGMA table_info(revisao_casos)").all().some((c) => c.name === "dmLimpar")) db.exec("ALTER TABLE revisao_casos ADD COLUMN dmLimpar INTEGER");
+  // (revisão P3a; P5) coluna nova num banco que já tinha a tabela: acrescenta, sem perder linhas
+  const colsFila = new Set(db.prepare("PRAGMA table_info(revisao_casos)").all().map((c) => c.name));
+  for (const [col, tipo] of [["dmLimpar", "INTEGER"], ["vetor", "TEXT"], ["versaoSinais", "TEXT"], ["evento", "TEXT"]]) {
+    if (!colsFila.has(col)) db.exec(`ALTER TABLE revisao_casos ADD COLUMN ${col} ${tipo}`);
+  }
   db.exec("CREATE INDEX IF NOT EXISTS idx_revisao_estado ON revisao_casos (estado, criadoEm)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_revisao_dm ON revisao_casos (dmMsgId)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_revisao_julgados ON revisao_casos (categoria, julgadoEm)");
@@ -1036,7 +1046,7 @@ function prepararFila() {
 }
 const FILA_COLUNAS = new Set(["criadoEm", "tipo", "categoria", "origem", "certeza", "nota", "acao", "detector", "serverId", "servidor",
   "userId", "canalId", "msgId", "link", "trecho", "hash", "impressao", "estado", "enviadoEm", "dmCanalId", "dmMsgId",
-  "veredito", "violacao", "julgadoEm", "limpoEm", "dmLimpar"]);
+  "veredito", "violacao", "julgadoEm", "limpoEm", "dmLimpar", "vetor", "versaoSinais", "evento"]);
 export function filaExiste(codigo) {
   prepararFila();
   return !!prep("SELECT 1 FROM revisao_casos WHERE codigo = ?").get(String(codigo));
@@ -1072,9 +1082,25 @@ export function filaContar(estados, desde = 0) {
   const lista = [].concat(estados).map(String);
   return prep(`SELECT COUNT(*) AS n FROM revisao_casos WHERE estado IN (${lista.map(() => "?").join(", ")}) AND criadoEm >= ?`).get(...lista, desde)?.n ?? 0;
 }
-export function filaEnviadosDesde(desde) {
+// (P5) a amostra e a segunda análise têm tetos separados: `problema` conta só a segunda análise
+export function filaEnviadosDesde(desde, { problema = false } = {}) {
   prepararFila();
-  return prep("SELECT COUNT(*) AS n FROM revisao_casos WHERE enviadoEm >= ?").get(desde)?.n ?? 0;
+  return prep(`SELECT COUNT(*) AS n FROM revisao_casos WHERE enviadoEm >= ? AND origem ${problema ? "=" : "<>"} 'problema'`).get(desde)?.n ?? 0;
+}
+// (P5) a segunda análise registrada desde `desde` (o teto diário dela: REVISAO_PROBLEMAS_POR_DIA)
+// (P5 revisão) `serverId`: só os daquele servidor (o teto de 3 por servidor por dia)
+export function filaProblemasDesde(desde, serverId = null) {
+  prepararFila();
+  return serverId
+    ? prep("SELECT COUNT(*) AS n FROM revisao_casos WHERE origem = 'problema' AND criadoEm >= ? AND serverId = ?").get(desde, String(serverId))?.n ?? 0
+    : prep("SELECT COUNT(*) AS n FROM revisao_casos WHERE origem = 'problema' AND criadoEm >= ?").get(desde)?.n ?? 0;
+}
+// (P5) a mesma pessoa, no mesmo servidor, com o mesmo problema desde `desde`: não entra de novo
+export function filaProblemaRepetido({ serverId, userId, evento, categoria }, desde) {
+  prepararFila();
+  if (!serverId || !userId) return false;
+  return !!prep(`SELECT 1 FROM revisao_casos WHERE origem = 'problema' AND serverId = ? AND userId = ? AND evento = ? AND categoria = ? AND criadoEm >= ? LIMIT 1`)
+    .get(String(serverId), String(userId), String(evento), String(categoria), desde);
 }
 // A amostra guardada desde `desde`: a de `origem: "amostra"` (o que o detector não puniu) e a
 // das decisões dos detectores (punidas, alertadas à staff) — as duas dividem os mesmos tetos.
@@ -1109,7 +1135,7 @@ export function filaTemLinhas() {
 // (`ate` = agora − 7 dias) ou marcado pelo `&privacidade apagar` (dmLimpar)
 export function filaDmsParaLimpar(ate, limite = 500) {
   prepararFila();
-  return prep(`SELECT codigo, categoria, veredito, dmCanalId, dmMsgId FROM revisao_casos
+  return prep(`SELECT codigo, categoria, veredito, origem, dmCanalId, dmMsgId FROM revisao_casos
     WHERE dmMsgId IS NOT NULL AND (criadoEm < ? OR dmLimpar = 1) LIMIT ?`).all(ate, limite);
 }
 // Retenção. Devolve quantos casos perderam o trecho/os IDs e quantos foram apagados.
@@ -1122,13 +1148,22 @@ export function filaDmsParaLimpar(ate, limite = 500) {
 export function filaReter(agora = Date.now()) {
   prepararFila();
   const dia = 86400e3;
+  const vetores = filaReterVetores(agora);   // (P5 revisão) primeiro o vetor, depois a pessoa
   const trecho = prep("UPDATE revisao_casos SET trecho = NULL, link = NULL WHERE criadoEm < ? AND (trecho IS NOT NULL OR link IS NOT NULL)").run(agora - FILA_DIAS_TRECHO * dia).changes ?? 0;
   const limpos = prep(`UPDATE revisao_casos SET serverId = NULL, servidor = NULL, userId = NULL, canalId = NULL, msgId = NULL, trecho = NULL, link = NULL, limpoEm = ?
     WHERE estado IN ('julgado', 'herdado') AND limpoEm IS NULL AND criadoEm < ?`).run(agora, agora - FILA_DIAS_TRECHO * dia).changes ?? 0;
   // o herdado já nasce sem pseudônimo; o antigo (de antes da revisão) perde agora
   prep("UPDATE revisao_casos SET servidor = NULL WHERE estado IN ('julgado', 'herdado') AND limpoEm IS NOT NULL AND servidor IS NOT NULL").run();
   const apagados = prep("DELETE FROM revisao_casos WHERE estado <> 'julgado' AND criadoEm < ? AND dmMsgId IS NULL").run(agora - FILA_DIAS_PENDENTE * dia).changes ?? 0;
-  return { trecho, limpos, apagados };
+  // (P5 revisão) a impressão de treino sai com o trecho (já saiu acima, antes da pessoa: `filaReterVetores`)
+  return vetores ? { trecho, limpos, apagados, vetores } : { trecho, limpos, apagados };
+}
+// (3 nov 2026, P5 revisão) o vetor de todo caso (julgado ou não) sai TREINO_DIAS_VETOR (7) dias depois do
+// registro — na rodada (filaReter) e no ciclo de 6 h (retencao.limparVencidos). Sai ANTES (ou junto) da
+// pessoa: dentro da janela, o caso ainda está ligado a ela e o `&privacidade apagar` o alcança.
+export function filaReterVetores(agora = Date.now()) {
+  prepararFila();
+  return prep("UPDATE revisao_casos SET vetor = NULL, versaoSinais = NULL WHERE vetor IS NOT NULL AND criadoEm < ?").run(agora - TREINO_DIAS_VETOR * 86400e3).changes ?? 0;
 }
 // A amostra e o registro (certeza alta) que a escolha do dia não pegou: apagados logo (privacidade)
 export function filaDescartarNaoEscolhidos(ate) {
@@ -1137,10 +1172,11 @@ export function filaDescartarNaoEscolhidos(ate) {
 }
 // `&privacidade` / pedido de apagar: a pessoa some dos casos (o caso fica, sem ela nem o
 // pseudônimo do servidor); a mensagem na DM do dono, se houver, é editada na próxima rodada (dmLimpar)
+// (P5) e a impressão de treino (o vetor) também sai: uma frase curta pode ser adivinhada por ele
 export function filaEsquecerUsuario(userId) {
   prepararFila();
   return prep(`UPDATE revisao_casos SET userId = NULL, canalId = NULL, msgId = NULL, trecho = NULL, link = NULL, servidor = NULL,
-    dmLimpar = CASE WHEN dmMsgId IS NOT NULL THEN 1 ELSE dmLimpar END WHERE userId = ?`).run(String(userId)).changes ?? 0;
+    vetor = NULL, versaoSinais = NULL, dmLimpar = CASE WHEN dmMsgId IS NOT NULL THEN 1 ELSE dmLimpar END WHERE userId = ?`).run(String(userId)).changes ?? 0;
 }
 export function filaLimiar(categoria) {
   prepararFila();
@@ -1251,10 +1287,18 @@ function prepararStaff() {
     criadoEm      INTEGER NOT NULL,
     veredito      TEXT,               -- certo (✅ a staff aplicou) | errou (❌ não era)
     julgadoEm     INTEGER,
-    ensina        INTEGER             -- 0 = o ✅ valeu só para o caso (quem decidiu não tinha a permissão mais forte do módulo)
+    ensina        INTEGER,            -- 0 = o ✅ valeu só para o caso (quem decidiu não tinha a permissão mais forte do módulo)
+    certeza       TEXT,               -- (P5) a certeza do detector (media | baixa), se ele disse
+    vetor         TEXT,               -- (P5) a impressão de treino (treino.js) — só MEDE; 7 dias depois do registro, sai
+    versaoSinais  TEXT,
+    vetorPessoa   TEXT                -- (P5 revisão) o pseudônimo (HMAC com o segredo) da pessoa, SÓ enquanto há vetor:
+                                      -- o julgado perde o userId na hora, e o pedido de apagar (privacidade) ainda tem de achar o vetor
   )`);
   // coluna nova num banco que já tinha a tabela: acrescenta, sem perder linhas
-  if (!db.prepare("PRAGMA table_info(staff_casos)").all().some((c) => c.name === "ensina")) db.exec("ALTER TABLE staff_casos ADD COLUMN ensina INTEGER");
+  const colsStaff = new Set(db.prepare("PRAGMA table_info(staff_casos)").all().map((c) => c.name));
+  for (const [col, tipo] of [["ensina", "INTEGER"], ["certeza", "TEXT"], ["vetor", "TEXT"], ["versaoSinais", "TEXT"], ["vetorPessoa", "TEXT"]]) {
+    if (!colsStaff.has(col)) db.exec(`ALTER TABLE staff_casos ADD COLUMN ${col} ${tipo}`);
+  }
   db.exec("CREATE INDEX IF NOT EXISTS idx_staff_alerta ON staff_casos (alertaMsgId)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_staff_servidor ON staff_casos (serverId, categoria, julgadoEm)");
   db.exec("CREATE INDEX IF NOT EXISTS idx_staff_criado ON staff_casos (criadoEm)");
@@ -1264,7 +1308,8 @@ function prepararStaff() {
     precisao REAL, calculadoEm INTEGER NOT NULL, PRIMARY KEY (serverId, categoria))`);
   _staffPronto.add(db);
 }
-const STAFF_COLUNAS = ["serverId", "tipo", "categoria", "nota", "parte", "userId", "canalId", "msgId", "alertaCanalId", "alertaMsgId", "hash", "impressao", "criadoEm"];
+const STAFF_COLUNAS = ["serverId", "tipo", "categoria", "nota", "parte", "userId", "canalId", "msgId", "alertaCanalId", "alertaMsgId", "hash", "impressao", "criadoEm",
+  "certeza", "vetor", "versaoSinais", "vetorPessoa"];
 export function staffInserir(caso) {
   prepararStaff();
   return Number(prep(`INSERT INTO staff_casos (${STAFF_COLUNAS.join(", ")}) VALUES (${STAFF_COLUNAS.map(() => "?").join(", ")})`)
@@ -1333,7 +1378,11 @@ export function staffReter(agora = Date.now()) {
   const antigos = prep(`DELETE FROM staff_casos WHERE id IN (SELECT id FROM (
     SELECT id, ROW_NUMBER() OVER (PARTITION BY serverId, categoria ORDER BY julgadoEm DESC, id DESC) AS rn FROM staff_casos WHERE veredito IS NOT NULL) WHERE rn > ?)`)
     .run(STAFF_JULGADOS_POR_GRUPO).changes ?? 0;
-  return { pendentes, antigos };
+  // (P5) a impressão de treino (e o pseudônimo que a liga à pessoa) sai TREINO_DIAS_VETOR (7) dias depois do registro.
+  // (3 nov 2026, P5 revisão) antes: 365 dias depois do veredito.
+  const vetores = prep("UPDATE staff_casos SET vetor = NULL, versaoSinais = NULL, vetorPessoa = NULL WHERE (vetor IS NOT NULL OR vetorPessoa IS NOT NULL) AND criadoEm < ?")
+    .run(agora - TREINO_DIAS_VETOR * 86400e3).changes ?? 0;
+  return vetores ? { pendentes, antigos, vetores } : { pendentes, antigos };
 }
 // O estado de punição de antes (o aviso que a punição somou e desfez: o ✅ de quem não tinha a permissão do degrau)
 export function restaurarPunicao(serverId, userId, anterior) {
@@ -1341,12 +1390,45 @@ export function restaurarPunicao(serverId, userId, anterior) {
   prep(`UPDATE punicoes SET avisos = ?, silenciado = ?, silencioAte = ?, motivo = ?, atualizadoEm = ? WHERE serverId = ? AND userId = ?`)
     .run(anterior.avisos ?? 0, anterior.silenciado ? 1 : 0, anterior.silencioAte ?? 0, anterior.motivo ?? null, anterior.atualizadoEm ?? null, serverId, userId);
 }
-// `&privacidade apagar`: os casos que esperam reação e são da pessoa saem (o julgado já não a tem)
-export function staffDaPessoa(userId, { apagar = false } = {}) {
+// `&privacidade apagar`: os casos que esperam reação e são da pessoa saem (o julgado já não a tem).
+// (3 nov 2026, P5 revisão) `pseudo` (o pseudônimo dela): o vetor dos julgados que ainda o têm também sai.
+export function staffDaPessoa(userId, { apagar = false, pseudo = null } = {}) {
   prepararStaff();
-  return apagar
-    ? prep("DELETE FROM staff_casos WHERE userId = ? AND veredito IS NULL").run(String(userId)).changes ?? 0
-    : prep("SELECT COUNT(*) AS n FROM staff_casos WHERE userId = ? AND veredito IS NULL").get(String(userId))?.n ?? 0;
+  if (!apagar) return prep("SELECT COUNT(*) AS n FROM staff_casos WHERE userId = ? AND veredito IS NULL").get(String(userId))?.n ?? 0;
+  const n = prep("DELETE FROM staff_casos WHERE userId = ? AND veredito IS NULL").run(String(userId)).changes ?? 0;
+  if (pseudo) prep("UPDATE staff_casos SET vetor = NULL, versaoSinais = NULL, vetorPessoa = NULL WHERE vetorPessoa = ?").run(String(pseudo));
+  return n;
+}
+
+// ── P5 treino ──
+// (3 nov 2026, P5) O arquivo de treino e medição da bateria (modulos/moderacao/treino.js, contrato 3):
+// os julgados que têm vetor — do dono (`revisao_casos`, uso treino) e da staff (`staff_casos`, uso
+// medir). `treinoChaves`: só as chaves dos `teto` mais recentes, do mais velho ao mais novo
+// (f: "d" dono, pelo rowid; "s" staff, pelo id) — as linhas inteiras saem em lotes pequenos.
+// (3 nov 2026, P5 revisão) `desde`: só o vetor VIVO (registrado há menos de TREINO_DIAS_VETOR dias), mesmo
+// que a limpeza do banco ainda não tenha passado.
+export function treinoChaves(teto, desde = 0) {
+  prepararFila(); prepararStaff();
+  return prep(`SELECT f, k FROM (
+    SELECT 'd' AS f, rowid AS k, julgadoEm FROM revisao_casos WHERE estado = 'julgado' AND vetor IS NOT NULL AND julgadoEm IS NOT NULL AND criadoEm >= ?
+    UNION ALL
+    SELECT 's' AS f, id AS k, julgadoEm FROM staff_casos WHERE veredito IS NOT NULL AND vetor IS NOT NULL AND julgadoEm IS NOT NULL AND criadoEm >= ?
+    ORDER BY julgadoEm DESC, f, k DESC LIMIT ?) ORDER BY julgadoEm, f, k`).all(Number(desde) || 0, Number(desde) || 0, Math.max(0, Math.floor(Number(teto) || 0)));
+}
+const _lista = (ks) => ks.map(Number).filter(Number.isSafeInteger);
+export function treinoDono(rowids) {
+  prepararFila();
+  const ks = _lista(rowids);
+  if (!ks.length) return [];
+  return db.prepare(`SELECT rowid, codigo, estado, origem, categoria, violacao, certeza, nota, versaoSinais, vetor, julgadoEm
+    FROM revisao_casos WHERE rowid IN (${ks.map(() => "?").join(", ")})`).all(...ks);
+}
+export function treinoStaff(ids) {
+  prepararStaff();
+  const ks = _lista(ids);
+  if (!ks.length) return [];
+  return db.prepare(`SELECT id, categoria, veredito, certeza, nota, versaoSinais, vetor, julgadoEm
+    FROM staff_casos WHERE id IN (${ks.map(() => "?").join(", ")})`).all(...ks);
 }
 
 // ── P4.3 bateria ──

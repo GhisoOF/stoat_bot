@@ -2,7 +2,7 @@
 
 [Português](#português) · [English](#english) · [Español](#español)
 
-_Última atualização / Last updated / Última actualización: 2 nov 2026._
+_Última atualização / Last updated / Última actualización: 3 nov 2026._
 
 ---
 
@@ -21,8 +21,10 @@ política.
 |---|---|---|
 | Avisos e punições | quando a moderação de um servidor age | enquanto forem relevantes (os avisos zeram depois de 30 dias sem um novo) |
 | Silêncio por causa do perfil: o servidor, a conta, **quais partes** do perfil apitaram (ex. "bio") e o motivo — nunca o conteúdo | quando o filtro de perfil silencia alguém | até a pessoa trocar o que apitou (no máximo 28 dias) |
-| **Casos duvidosos com a staff do servidor**: o servidor, a pessoa, o canal e a mensagem (ou a parte do perfil, ex. "bio"), a categoria, a nota do detector, uma impressão/hash (uma assinatura que não permite reconstruir o texto nem a imagem) e o alerta enviado à staff | quando a moderação automática fica em dúvida (certeza média ou baixa, ou dois detectores discordam): ninguém é punido e a staff **daquele servidor** recebe um alerta com ✅/❌ no canal de alertas do sentinela (sem ele, no canal de log; sem nenhum dos dois, nada é enviado nem guardado) | esperando a staff: no máximo **14 dias**. Julgado: a pessoa, o canal, a mensagem e o alerta saem na hora; fica só a impressão/hash, a categoria, o tipo, a nota, o veredito, o servidor e as datas — vale só naquele servidor; ficam só os 500 mais recentes de cada servidor e categoria, e tudo sai 30 dias depois de a Judy sair dele. O alerta em si fica no canal do servidor (é do Stoat) |
-| **Amostra diária do dono do bot**: o servidor, a pessoa, o canal e a mensagem, a categoria, a nota do detector, o que o bot fez, um trecho de até 300 caracteres e, se for imagem, o link de origem dela no Stoat e um hash perceptual | só numa **amostra aleatória pequena de todos os servidores**, com decisões punidas, alertadas à staff e não punidas (no máximo 3 por servidor por dia). O resto **não é guardado** | trecho e link: **7 dias** — com 7 dias, a mensagem do caso na DM do dono é editada para tirar o trecho e o link. Caso não julgado: **14 dias**. Amostra não escolhida para o dia: apagada na mesma noite. Caso julgado: depois de 7 dias fica só a impressão/hash, a categoria, a nota e o veredito — sem pessoa nem servidor (nem o código/pseudônimo dele) |
+| **Casos duvidosos com a staff do servidor**: o servidor, a pessoa, o canal e a mensagem (ou a parte do perfil, ex. "bio"), a categoria, a nota do detector, uma impressão/hash (uma assinatura que não permite reconstruir o texto nem a imagem), a impressão de treino (ver abaixo) e o alerta enviado à staff | quando a moderação automática fica em dúvida (certeza média ou baixa, ou dois detectores discordam): ninguém é punido e a staff **daquele servidor** recebe um alerta com ✅/❌ no canal de alertas do sentinela (sem ele, no canal de log; sem nenhum dos dois, nada é enviado nem guardado) | esperando a staff: no máximo **14 dias**. Julgado: a pessoa, o canal, a mensagem e o alerta saem na hora; fica só a impressão/hash, a categoria, o tipo, a nota, o veredito, o servidor e as datas — vale só naquele servidor (a impressão de treino fica até 7 dias depois do alerta, ligada à pessoa só por um pseudônimo, para o `&privacidade apagar` a achar); ficam só os 500 mais recentes de cada servidor e categoria, e tudo sai 30 dias depois de a Judy sair dele. O alerta em si fica no canal do servidor (é do Stoat) |
+| **Amostra diária do dono do bot**: o servidor, a pessoa, o canal e a mensagem, a categoria, a nota do detector, o que o bot fez, um trecho de até 300 caracteres e, se for imagem, o link de origem dela no Stoat e um hash perceptual | só numa **amostra aleatória pequena de todos os servidores**, com decisões punidas, alertadas à staff e não punidas (no máximo 3 por servidor por dia). O resto **não é guardado** | trecho, link e impressão de treino: **7 dias** — com 7 dias, a mensagem do caso na DM do dono é editada para tirar o trecho e o link. Caso não julgado: **14 dias**. Amostra não escolhida para o dia: apagada na mesma noite. Caso julgado: depois de 7 dias fica só a impressão/hash, a categoria, a nota e o veredito — sem pessoa nem servidor (nem o código/pseudônimo dele) |
+| **Segunda análise do dono do bot**: o mesmo que a amostra, e o motivo | à parte da amostra, só os casos que deram problema: a staff desfez uma punição automática da Judy (`&unban`, `&untimeout`, ↩️, liberar), marcou ❌ num alerta, os detectores discordaram ou a punição falhou (quarentena) — no máximo 10 por dia e 3 por servidor. Para saber que uma punição desfeita era automática, a Judy lembra a última punição automática de cada pessoa em cada servidor **só na memória do processo** (só o trecho, nunca o texto inteiro nem a impressão de treino), por até 7 dias ou até ela reiniciar; e, de cada alerta que espera a staff, o trecho de até 300 caracteres e o link de origem da imagem — também só na memória, até 14 dias (para o caso do ❌) | os mesmos prazos da amostra |
+| **Impressão de treino**: os pedaços de palavra do texto (sequências de 3 a 5 letras, palavras e pares de palavras) passados por hash para números; menções, links, IDs e números (telefone, valores) viram marcadores antes | quando um caso de **texto** (mensagem, tema, texto do perfil) entra na amostra, na segunda análise ou num alerta à staff; imagem não tem. **Ela permite reconstruir a mensagem** (testando pedaços candidatos), por isso é tratada como o próprio texto. Os casos julgados pelo dono **treinam** o classificador de texto; os julgados pela staff **só medem** o acerto, nunca treinam. O programa de teste do dono lê os casos julgados num arquivo ao lado do banco, sem servidor nem pessoa, e não guarda as linhas nem as impressões: soma tudo no treino e as descarta. O que fica é o **modelo** (pesos somados de muitos casos), que não guarda os casos um a um — mas **não há garantia formal de anonimato** (numa rodada com um só caso novo, ele pesa sozinho) | o mesmo prazo do trecho: **7 dias** depois do registro, em todo caso (amostra, segunda análise e staff); `&privacidade apagar` a apaga enquanto ela existir |
 | Lista global de bans (ID, nome, motivo, servidor de origem) | quando alguém é banido em **qualquer** servidor que tenha a Judy. Os outros servidores veem só "banido em N servidores" e a data — nunca o motivo nem de qual servidor; ban automático do automod só gera alerta | enquanto for relevante; sai quando o servidor de origem remove a Judy |
 | XP e nível (a contagem de mensagens, não o texto) | só nos servidores que **ligaram** o XP — a Judy avisa ao ligar, e `&privacidade xp sair` deixa você de fora | até você sair, apagar, ou o servidor zerar |
 | Saldo da economia | quando **você** usa a economia | até você apagar (`&privacidade apagar`) ou o servidor zerar |
@@ -49,6 +51,14 @@ subida. As cópias de segurança de antes saem no prazo delas (30 dias).
   dos últimos 15 minutos, até 300 caracteres cada) só na memória do processo; quando a
   nota de uma mensagem passa do limiar, o juiz (o modelo local) lê a mensagem e até 8
   dessas anteriores, com quem escreveu trocado por uma letra (A, B…). Nada vai ao banco.
+- **O classificador de texto** (um modelo pequeno, na máquina do operador, só quando há
+  o arquivo do modelo) dá à mensagem que o automod já analisa uma nota a mais: nada sai
+  da máquina e ele não guarda nada — o resultado só entra na nota, como os outros
+  sinais.
+- **Quanto tempo o automod leva por mensagem**: só os tempos, somados por hora, na
+  memória do processo (as últimas 3 horas; um reinício zera), sem pessoa, servidor,
+  canal nem texto. Só o operador vê (relatório por hora e painel dos servidores, por
+  mensagem privada).
 - **Imagens**, quando um servidor liga o filtro de imagens: um modelo de visão (na
   máquina do operador) descreve a imagem; nada é guardado.
 - **O perfil de quem entra ou troca o perfil**, nos servidores com o filtro de perfil
@@ -58,11 +68,12 @@ subida. As cópias de segurança de antes saem no prazo delas (30 dias).
   e o banner, pelo modelo de visão e por uma impressão da imagem (um número de 64 bits
   que não permite reconstruí-la). Nome, status e fotos vêm do que o Stoat já manda à
   Judy; a bio e o banner, do aviso de troca do Stoat e, quando alguém entra, de **uma**
-  consulta ao perfil. Nada disso vai para o banco, exceto os casos duvidosos com a staff
-  e a amostra do dono (ver as linhas acima); o resto fica só na memória do processo,
-  para não analisar de novo — a bio e o banner por 6 horas, o resultado de cada imagem
-  por 6 horas, a impressão da imagem por 24 horas. A Judy nunca republica a imagem nem o
-  texto do perfil: a staff recebe só o que apitou e a descrição do modelo.
+  consulta ao perfil. Nada disso vai para o banco, exceto os casos duvidosos com a
+  staff, a amostra do dono e a segunda análise (ver as linhas acima); o resto fica só na
+  memória do processo, para não analisar de novo — a bio e o banner por 6 horas, o
+  resultado de cada imagem por 6 horas, a impressão da imagem por 24 horas. A Judy nunca
+  republica a imagem nem o texto do perfil: a staff recebe só o que apitou e a descrição
+  do modelo.
 - **Voz nas calls**: o texto lido em voz alta (TTS) não é guardado.
 
 ### Para onde os dados vão
@@ -87,21 +98,27 @@ subida. As cópias de segurança de antes saem no prazo delas (30 dias).
   nem o texto do perfil (vale a menção à pessoa, o canal, o ID da mensagem e a descrição
   do modelo). Só conta a reação de quem modera ali: ✅ aplica a ação do módulo, e o log
   do servidor diz quem decidiu; ❌ não pune ninguém. O que a staff decide ensina a Judy
-  só naquele servidor (casos parecidos e o limiar dali) e nunca vai ao dono do bot; um
-  ban aplicado pelo ✅ entra na lista global de bans, como qualquer ban. As punições
-  manuais da staff não vão para o dono do bot.
+  só naquele servidor (casos parecidos e o limiar dali); no modelo global, só mede o
+  acerto (pela impressão de treino, sem servidor) e nunca treina; um ban aplicado pelo ✅
+  entra na lista global de bans, como qualquer ban. As punições manuais da staff não vão
+  para o dono do bot. Quando a staff marca ❌ num alerta ou desfaz uma punição automática
+  da Judy, o caso vai também à segunda análise do dono, que nunca muda o que ela
+  decidiu.
 - A **amostra diária** chega só ao dono do bot, por mensagem privada com a Judy — nunca
   num canal. O servidor aparece como um código (pseudônimo); a imagem nunca é copiada
   nem reenviada: ele a abre pelo link de origem no Stoat. Até 10 casos por dia. O
-  veredito dele só mede o acerto e calibra o padrão global da moderação, sem modelo novo
-  — nunca age sobre ninguém nem muda o que a staff de um servidor decidiu. O arquivo que
-  ele pode exportar não tem nome, ID de pessoa nem de servidor (imagem só como hash). Os
-  comandos do dono do bot (`&caso`, `&servidores`, `&bateria`, os dele no `&banglobal` e
-  na lista de bloqueio) só funcionam na DM com a Judy. O caso fica pelo prazo acima; com
-  `&privacidade apagar`, sai dele a sua conta, o canal, a mensagem, o trecho, o link e o
-  código do servidor, e a mensagem do caso na DM do dono é editada para tirar o trecho e
-  o link. Num desenho feito de caracteres no perfil, o trecho é só um resumo em números
-  e o idioma do texto ao lado, **nunca o desenho** nem o texto.
+  veredito dele mede o acerto, calibra o padrão global da moderação e treina o
+  classificador de texto (só com a impressão de treino) — nunca age sobre ninguém nem
+  muda o que a staff de um servidor decidiu. À parte, a **segunda análise** (🔁) chega do
+  mesmo jeito, com as mesmas regras, até 10 por dia; esse veredito só treina (não entra
+  no acerto nem no limiar) e não desfaz nada. O arquivo que ele pode exportar não tem
+  nome, ID de pessoa nem de servidor (imagem só como hash). Os comandos do dono do bot
+  (`&caso`, `&servidores`, `&bateria`, os dele no `&banglobal` e na lista de bloqueio)
+  só funcionam na DM com a Judy. O caso fica pelo prazo acima; com `&privacidade
+  apagar`, sai dele a sua conta, o canal, a mensagem, o trecho, o link, a impressão de
+  treino e o código do servidor, e a mensagem do caso na DM do dono é editada para tirar
+  o trecho e o link. Num desenho feito de caracteres no perfil, o trecho é só um resumo
+  em números e o idioma do texto ao lado, **nunca o desenho** nem o texto.
 - Nada é vendido nem usado para anúncios.
 
 ### Seus direitos
@@ -110,9 +127,10 @@ subida. As cópias de segurança de antes saem no prazo delas (30 dias).
 - `&privacidade xp sair` — o seu XP neste servidor é apagado e para de contar
   (`&privacidade xp voltar` volta a contar, do zero).
 - `&privacidade apagar` — apaga **tudo** o que é seu (XP e saldo), em todos os
-  servidores, tira você dos casos da amostra do dono do bot e apaga os casos duvidosos
-  seus que ainda esperam a staff de um servidor. Ficam só os registros de moderação dos
-  servidores; para esses, fale com a staff do servidor ou com o operador.
+  servidores, tira você dos casos da amostra e da segunda análise do dono do bot (com a
+  impressão de treino deles) e apaga os casos duvidosos seus que ainda esperam a staff
+  de um servidor. Ficam só os registros de moderação dos servidores; para esses, fale
+  com a staff do servidor ou com o operador.
 
 ---
 
@@ -130,8 +148,10 @@ their own Judy is responsible for that instance and should publish their own pol
 |---|---|---|
 | Warnings and punishments | when a server's moderation acts | while relevant (warnings reset after 30 days without a new one) |
 | Timeout because of the profile: the server, the account, **which parts** of the profile were flagged (e.g. "bio") and the reason — never the content | when the profile filter silences someone | until the person changes what was flagged (28 days at most) |
-| **Doubtful cases with the server's staff**: the server, the person, the channel and the message (or the part of the profile, e.g. "bio"), the category, the detector's score, a fingerprint/hash (a signature that can't rebuild the text or the image) and the alert sent to the staff | when automatic moderation is unsure (medium or low certainty, or two detectors disagree): nobody is punished and the staff **of that server** gets an alert with ✅/❌ in the sentinel's alert channel (without one, in the log channel; without either, nothing is sent or kept) | waiting for the staff: **14 days** at most. Judged: the person, the channel, the message and the alert are removed right away; only the fingerprint/hash, the category, the type, the score, the verdict, the server and the dates remain — it only counts on that server; only the 500 most recent per server and category are kept, and everything goes 30 days after Judy leaves it. The alert itself stays in the server's channel (it's Stoat's) |
-| **Bot owner's daily sample**: the server, the person, the channel and the message, the category, the detector's score, what the bot did, an excerpt of up to 300 characters and, for images, the image's original Stoat link and a perceptual hash | only in a **small random sample from every server**, with punished, staff-alerted and unpunished decisions (at most 3 per server per day). The rest **isn't kept** | excerpt and link: **7 days** — at 7 days, the case's message in the owner's DM is edited to remove the excerpt and the link. Unjudged case: **14 days**. Sample not picked for the day: deleted that same night. Judged case: after 7 days only the fingerprint/hash, the category, the score and the verdict remain — no person, no server (not even its code/pseudonym) |
+| **Doubtful cases with the server's staff**: the server, the person, the channel and the message (or the part of the profile, e.g. "bio"), the category, the detector's score, a fingerprint/hash (a signature that can't rebuild the text or the image), the training fingerprint (see below) and the alert sent to the staff | when automatic moderation is unsure (medium or low certainty, or two detectors disagree): nobody is punished and the staff **of that server** gets an alert with ✅/❌ in the sentinel's alert channel (without one, in the log channel; without either, nothing is sent or kept) | waiting for the staff: **14 days** at most. Judged: the person, the channel, the message and the alert are removed right away; only the fingerprint/hash, the category, the type, the score, the verdict, the server and the dates remain — it only counts on that server (the training fingerprint stays up to 7 days after the alert, linked to the person only by a pseudonym, so `&privacy delete` can find it); only the 500 most recent per server and category are kept, and everything goes 30 days after Judy leaves it. The alert itself stays in the server's channel (it's Stoat's) |
+| **Bot owner's daily sample**: the server, the person, the channel and the message, the category, the detector's score, what the bot did, an excerpt of up to 300 characters and, for images, the image's original Stoat link and a perceptual hash | only in a **small random sample from every server**, with punished, staff-alerted and unpunished decisions (at most 3 per server per day). The rest **isn't kept** | excerpt, link and training fingerprint: **7 days** — at 7 days, the case's message in the owner's DM is edited to remove the excerpt and the link. Unjudged case: **14 days**. Sample not picked for the day: deleted that same night. Judged case: after 7 days only the fingerprint/hash, the category, the score and the verdict remain — no person, no server (not even its code/pseudonym) |
+| **Bot owner's second review**: the same as the sample, and the reason | apart from the sample, only the cases that went wrong: the staff undid an automatic punishment by Judy (`&unban`, `&untimeout`, ↩️, release), marked ❌ on an alert, the detectors disagreed or the punishment failed (quarantine) — at most 10 a day and 3 per server. To know that an undone punishment was automatic, Judy remembers each person's last automatic punishment on each server **only in the process memory** (only the excerpt, never the whole text or the training fingerprint), for up to 7 days or until she restarts; and, for each alert waiting for the staff, the excerpt of up to 300 characters and the image's original link — also only in memory, up to 14 days (for the ❌ case) | the same periods as the sample |
+| **Training fingerprint**: the text's word pieces (runs of 3 to 5 letters, words and word pairs) hashed into numbers; mentions, links, IDs and numbers (phone numbers, amounts) become placeholders first | when a **text** case (message, topic, profile text) enters the sample, the second review or a staff alert; images have none. **It can be used to rebuild the message** (by trying candidate pieces), so it's treated as the text itself. Cases judged by the owner **train** the text classifier; those judged by the staff **only measure** accuracy, never train. The owner's test program reads the judged cases from a file next to the database, with no server or person, and doesn't keep the lines or the fingerprints: it adds everything into the training and discards them. What remains is the **model** (weights summed over many cases), which doesn't keep cases one by one — but **there's no formal guarantee of anonymity** (in a run with a single new case, that case weighs alone) | the same period as the excerpt: **7 days** after it's recorded, in every case (sample, second review and staff); `&privacy delete` deletes it while it exists |
 | Global ban list (ID, name, reason, origin server) | when someone is banned on **any** server that has Judy. Other servers only see "banned on N servers" and the date — never the reason or which server; an automod automatic ban only raises an alert | while relevant; removed when the origin server removes Judy |
 | XP and level (the message count, not the text) | only on servers that **turned XP on** — Judy announces it, and `&privacy xp leave` keeps you out | until you leave, delete it, or the server resets it |
 | Economy balance | when **you** use the economy | until you delete it (`&privacy delete`) or the server resets it |
@@ -159,6 +179,14 @@ before go after their usual period (30 days).
   score passes the threshold, the judge (the local model) reads the message and up to 8
   of those before it, with whoever wrote each one replaced by a letter (A, B…). Nothing
   goes to the database.
+- **The text classifier** (a small model, on the operator's machine, only when the model
+  file is there) gives the message the automod already analyzes one more score: nothing
+  leaves the machine and it keeps nothing — the result only goes into the score, like
+  the other signals.
+- **How long the automod takes per message**: only the times, added up per hour, in the
+  process memory (the last 3 hours; a restart clears them), with no person, server,
+  channel or text. Only the operator sees them (hourly report and servers panel, by
+  direct message).
 - **Images**, when a server enables the image filter: a vision model (on the operator's
   machine) describes the image; nothing is kept.
 - **The profile of whoever joins or changes their profile**, on servers with the profile
@@ -169,11 +197,11 @@ before go after their usual period (30 days).
   (a 64-bit number that can't rebuild the image). Name, status and pictures come from
   what Stoat already sends Judy; the bio and the banner from Stoat's change notice and,
   when someone joins, from **one** profile lookup. None of it goes to the database,
-  except the doubtful cases with the staff and the owner's sample (see the rows above);
-  the rest stays only in the process memory, so it isn't analysed twice — the bio and
-  banner for 6 hours, each image's result for 6 hours, the image fingerprint for 24
-  hours. Judy never reposts the image or the profile text: the staff only gets what was
-  flagged and the model's description.
+  except the doubtful cases with the staff, the owner's sample and the second review
+  (see the rows above); the rest stays only in the process memory, so it isn't analysed
+  twice — the bio and banner for 6 hours, each image's result for 6 hours, the image
+  fingerprint for 24 hours. Judy never reposts the image or the profile text: the staff
+  only gets what was flagged and the model's description.
 - **Voice in calls**: text read aloud (TTS) isn't kept.
 
 ### Where data goes
@@ -198,22 +226,28 @@ before go after their usual period (30 days).
   message ID and the model's description). Only a reaction from someone who moderates
   there counts: ✅ applies the module's action, and the server's log says who decided; ❌
   punishes no one. What the staff decides only teaches Judy on that server (similar
-  cases and its threshold) and never goes to the bot owner; a ban applied by the ✅
-  enters the global ban list, like any ban. The staff's manual punishments don't go to
-  the bot owner.
+  cases and its threshold); in the global model it only measures accuracy (through the
+  training fingerprint, with no server) and never trains; a ban applied by the ✅ enters
+  the global ban list, like any ban. The staff's manual punishments don't go to the bot
+  owner. When the staff marks ❌ on an alert or undoes an automatic punishment by Judy,
+  the case also goes to the owner's second review, which never changes what the staff
+  decided.
 - The **daily sample** only reaches the bot owner, by direct message with Judy — never
   in a channel. The server shows up as a code (pseudonym); images are never copied or
   re-sent: the owner opens them through their original Stoat link. Up to 10 cases a day.
-  The owner's verdict only measures accuracy and calibrates moderation's global default,
-  with no new model — it never acts on anyone or changes what a server's staff decided.
-  The file the owner can export has no names, no user IDs and no server IDs (images only
-  as a hash). The bot owner's commands (`&caso`, `&servidores`, `&bateria`, their
+  The owner's verdict measures accuracy, calibrates moderation's global default and
+  trains the text classifier (only with the training fingerprint) — it never acts on
+  anyone or changes what a server's staff decided. Apart from it, the **second review**
+  (🔁) arrives the same way, with the same rules, up to 10 a day; that verdict only
+  trains (it doesn't count toward accuracy or the threshold) and undoes nothing. The
+  file the owner can export has no names, no user IDs and no server IDs (images only as
+  a hash). The bot owner's commands (`&caso`, `&servidores`, `&bateria`, their
   `&banglobal` and blocklist ones) only work in the DM with Judy. A case stays for the
   period above; with `&privacy delete`, your account, the channel, the message, the
-  excerpt, the link and the server's code are removed from it, and the case's message in
-  the owner's DM is edited to remove the excerpt and the link. For a drawing made of
-  characters in a profile, the excerpt is only a summary in numbers and the language of
-  the text next to it, **never the drawing** or the text.
+  excerpt, the link, the training fingerprint and the server's code are removed from it,
+  and the case's message in the owner's DM is edited to remove the excerpt and the link.
+  For a drawing made of characters in a profile, the excerpt is only a summary in
+  numbers and the language of the text next to it, **never the drawing** or the text.
 - Nothing is sold or used for ads.
 
 ### Your rights
@@ -222,9 +256,10 @@ before go after their usual period (30 days).
 - `&privacy xp leave` — your XP on this server is erased and stops counting
   (`&privacy xp back` starts counting again, from zero).
 - `&privacy delete` — erases **everything** that's yours (XP and balance) on every
-  server, removes you from the cases in the bot owner's sample and deletes your doubtful
-  cases still waiting for a server's staff. Only the servers' moderation records stay;
-  for those, talk to the server's staff or to the operator.
+  server, removes you from the cases in the bot owner's sample and second review (with
+  their training fingerprint) and deletes your doubtful cases still waiting for a
+  server's staff. Only the servers' moderation records stay; for those, talk to the
+  server's staff or to the operator.
 
 ---
 
@@ -243,8 +278,10 @@ su propia política.
 |---|---|---|
 | Advertencias y sanciones | cuando la moderación de un servidor actúa | mientras sean relevantes (las advertencias se reinician tras 30 días sin una nueva) |
 | Silencio por el perfil: el servidor, la cuenta, **qué partes** del perfil se detectaron (p. ej. "bio") y el motivo — nunca el contenido | cuando el filtro de perfil silencia a alguien | hasta que la persona cambie lo detectado (28 días como máximo) |
-| **Casos dudosos con el staff del servidor**: el servidor, la persona, el canal y el mensaje (o la parte del perfil, p. ej. "bio"), la categoría, la nota del detector, una huella/hash (una firma que no permite reconstruir el texto ni la imagen) y la alerta enviada al staff | cuando la moderación automática duda (certeza media o baja, o dos detectores no coinciden): nadie es castigado y el staff **de ese servidor** recibe una alerta con ✅/❌ en el canal de alertas del centinela (sin él, en el canal de log; sin ninguno de los dos, no se envía ni se guarda nada) | esperando al staff: **14 días** como máximo. Juzgado: la persona, el canal, el mensaje y la alerta salen al momento; solo quedan la huella/hash, la categoría, el tipo, la nota, el veredicto, el servidor y las fechas — vale solo en ese servidor; se guardan solo los 500 más recientes de cada servidor y categoría, y todo sale 30 días después de que Judy salga de él. La alerta en sí se queda en el canal del servidor (es de Stoat) |
-| **Muestra diaria del dueño del bot**: el servidor, la persona, el canal y el mensaje, la categoría, la nota del detector, lo que hizo el bot, un fragmento de hasta 300 caracteres y, si es una imagen, su enlace de origen en Stoat y un hash perceptual | solo en una **muestra aleatoria pequeña de todos los servidores**, con decisiones castigadas, alertadas al staff y no castigadas (como máximo 3 por servidor al día). El resto **no se guarda** | fragmento y enlace: **7 días** — a los 7 días, el mensaje del caso en el DM del dueño se edita para quitar el fragmento y el enlace. Caso sin juzgar: **14 días**. Muestra no elegida para el día: se borra esa misma noche. Caso juzgado: después de 7 días solo quedan la huella/hash, la categoría, la nota y el veredicto — sin persona ni servidor (ni su código/seudónimo) |
+| **Casos dudosos con el staff del servidor**: el servidor, la persona, el canal y el mensaje (o la parte del perfil, p. ej. "bio"), la categoría, la nota del detector, una huella/hash (una firma que no permite reconstruir el texto ni la imagen), la huella de entrenamiento (ver abajo) y la alerta enviada al staff | cuando la moderación automática duda (certeza media o baja, o dos detectores no coinciden): nadie es castigado y el staff **de ese servidor** recibe una alerta con ✅/❌ en el canal de alertas del centinela (sin él, en el canal de log; sin ninguno de los dos, no se envía ni se guarda nada) | esperando al staff: **14 días** como máximo. Juzgado: la persona, el canal, el mensaje y la alerta salen al momento; solo quedan la huella/hash, la categoría, el tipo, la nota, el veredicto, el servidor y las fechas — vale solo en ese servidor (la huella de entrenamiento queda hasta 7 días después de la alerta, ligada a la persona solo por un seudónimo, para que `&privacidad borrar` la encuentre); se guardan solo los 500 más recientes de cada servidor y categoría, y todo sale 30 días después de que Judy salga de él. La alerta en sí se queda en el canal del servidor (es de Stoat) |
+| **Muestra diaria del dueño del bot**: el servidor, la persona, el canal y el mensaje, la categoría, la nota del detector, lo que hizo el bot, un fragmento de hasta 300 caracteres y, si es una imagen, su enlace de origen en Stoat y un hash perceptual | solo en una **muestra aleatoria pequeña de todos los servidores**, con decisiones castigadas, alertadas al staff y no castigadas (como máximo 3 por servidor al día). El resto **no se guarda** | fragmento, enlace y huella de entrenamiento: **7 días** — a los 7 días, el mensaje del caso en el DM del dueño se edita para quitar el fragmento y el enlace. Caso sin juzgar: **14 días**. Muestra no elegida para el día: se borra esa misma noche. Caso juzgado: después de 7 días solo quedan la huella/hash, la categoría, la nota y el veredicto — sin persona ni servidor (ni su código/seudónimo) |
+| **Segundo análisis del dueño del bot**: lo mismo que la muestra, y el motivo | aparte de la muestra, solo los casos que salieron mal: el staff deshizo un castigo automático de Judy (`&unban`, `&untimeout`, ↩️, liberar), marcó ❌ en una alerta, los detectores discreparon o el castigo falló (cuarentena) — como máximo 10 al día y 3 por servidor. Para saber que un castigo deshecho era automático, Judy recuerda el último castigo automático de cada persona en cada servidor **solo en la memoria del proceso** (solo el fragmento, nunca el texto entero ni la huella de entrenamiento), hasta 7 días o hasta que se reinicie; y, de cada alerta que espera al staff, el fragmento de hasta 300 caracteres y el enlace de origen de la imagen — también solo en la memoria, hasta 14 días (para el caso del ❌) | los mismos plazos que la muestra |
+| **Huella de entrenamiento**: los trozos de palabra del texto (secuencias de 3 a 5 letras, palabras y pares de palabras) pasados por hash a números; menciones, enlaces, IDs y números (teléfono, importes) se vuelven marcadores antes | cuando un caso de **texto** (mensaje, tema, texto del perfil) entra en la muestra, en el segundo análisis o en una alerta al staff; las imágenes no tienen. **Permite reconstruir el mensaje** (probando trozos candidatos), por eso se trata como el propio texto. Los casos juzgados por el dueño **entrenan** el clasificador de texto; los juzgados por el staff **solo miden** el acierto, nunca entrenan. El programa de prueba del dueño lee los casos juzgados en un archivo junto a la base de datos, sin servidor ni persona, y no guarda las líneas ni las huellas: lo suma todo en el entrenamiento y las descarta. Lo que queda es el **modelo** (pesos sumados de muchos casos), que no guarda los casos uno a uno — pero **no hay garantía formal de anonimato** (en una ronda con un solo caso nuevo, ese caso pesa solo) | el mismo plazo que el fragmento: **7 días** después del registro, en todo caso (muestra, segundo análisis y staff); `&privacidad borrar` la borra mientras exista |
 | Lista global de bans (ID, nombre, motivo, servidor de origen) | cuando alguien es baneado en **cualquier** servidor que tenga a Judy. Los demás servidores solo ven "baneado en N servidores" y la fecha — nunca el motivo ni de qué servidor; el ban automático del automod solo genera una alerta | mientras sea relevante; sale cuando el servidor de origen quita a Judy |
 | XP y nivel (el conteo de mensajes, no el texto) | solo en los servidores que **activaron** el XP — Judy lo anuncia, y `&privacidad xp salir` te deja fuera | hasta que salgas, lo borres, o el servidor lo reinicie |
 | Saldo de la economía | cuando **tú** usas la economía | hasta que lo borres (`&privacidad borrar`) o el servidor lo reinicie |
@@ -273,6 +310,14 @@ copias de seguridad de antes salen en su plazo (30 días).
   en la memoria del proceso; cuando la nota de un mensaje pasa del umbral, el juez (el
   modelo local) lee el mensaje y hasta 8 de esos anteriores, con quien escribió
   cambiado por una letra (A, B…). Nada va a la base de datos.
+- **El clasificador de texto** (un modelo pequeño, en la máquina del operador, solo
+  cuando está el archivo del modelo) le da al mensaje que el automod ya analiza una nota
+  más: nada sale de la máquina y no guarda nada — el resultado solo entra en la nota,
+  como las otras señales.
+- **Cuánto tarda el automod por mensaje**: solo los tiempos, sumados por hora, en la
+  memoria del proceso (las últimas 3 horas; un reinicio los borra), sin persona,
+  servidor, canal ni texto. Solo el operador los ve (informe por hora y panel de
+  servidores, por mensaje privado).
 - **Imágenes**, cuando un servidor activa el filtro de imágenes: un modelo de visión (en
   la máquina del operador) describe la imagen; no se guarda nada.
 - **El perfil de quien entra o cambia su perfil**, en los servidores con el filtro de
@@ -283,12 +328,12 @@ copias de seguridad de antes salen en su plazo (30 días).
   huella de la imagen (un número de 64 bits que no permite reconstruirla). El nombre, el
   estado y las fotos vienen de lo que Stoat ya le envía a Judy; la bio y el banner, del
   aviso de cambio de Stoat y, cuando alguien entra, de **una** consulta al perfil. Nada
-  de esto va a la base de datos, salvo los casos dudosos con el staff y la muestra del
-  dueño (ver las filas de arriba); el resto queda solo en la memoria del proceso, para
-  no analizarlo otra vez — la bio y el banner durante 6 horas, el resultado de cada
-  imagen durante 6 horas, la huella de la imagen durante 24 horas. Judy nunca vuelve a
-  publicar la imagen ni el texto del perfil: el staff recibe solo lo que se detectó y la
-  descripción del modelo.
+  de esto va a la base de datos, salvo los casos dudosos con el staff, la muestra del
+  dueño y el segundo análisis (ver las filas de arriba); el resto queda solo en la
+  memoria del proceso, para no analizarlo otra vez — la bio y el banner durante 6 horas,
+  el resultado de cada imagen durante 6 horas, la huella de la imagen durante 24 horas.
+  Judy nunca vuelve a publicar la imagen ni el texto del perfil: el staff recibe solo lo
+  que se detectó y la descripción del modelo.
 - **Voz en las llamadas**: el texto leído en voz alta (TTS) no se guarda.
 
 ### A dónde van los datos
@@ -314,23 +359,29 @@ copias de seguridad de antes salen en su plazo (30 días).
   ID del mensaje y la descripción del modelo). Solo cuenta la reacción de quien modera
   allí: ✅ aplica la acción del módulo, y el log del servidor dice quién decidió; ❌ no
   castiga a nadie. Lo que decide el staff le enseña a Judy solo en ese servidor (casos
-  parecidos y su umbral) y nunca va al dueño del bot; un ban aplicado por el ✅ entra en
-  la lista global de bans, como cualquier ban. Los castigos manuales del staff no van al
-  dueño del bot.
+  parecidos y su umbral); en el modelo global, solo mide el acierto (por la huella de
+  entrenamiento, sin servidor) y nunca entrena; un ban aplicado por el ✅ entra en la
+  lista global de bans, como cualquier ban. Los castigos manuales del staff no van al
+  dueño del bot. Cuando el staff marca ❌ en una alerta o deshace un castigo automático
+  de Judy, el caso va también al segundo análisis del dueño, que nunca cambia lo que
+  decidió el staff.
 - La **muestra diaria** solo le llega al dueño del bot, por mensaje privado con Judy —
   nunca en un canal. El servidor aparece como un código (seudónimo); la imagen nunca se
   copia ni se reenvía: él la abre por su enlace de origen en Stoat. Hasta 10 casos al
-  día. Su veredicto solo mide el acierto y calibra el valor global de la moderación, sin
-  modelo nuevo — nunca actúa sobre nadie ni cambia lo que decidió el staff de un
-  servidor. El archivo que puede exportar no tiene nombres, ni IDs de personas ni de
-  servidores (imágenes solo como hash). Los comandos del dueño del bot (`&caso`,
-  `&servidores`, `&bateria`, los suyos del `&banglobal` y de la lista de bloqueo) solo
-  funcionan por DM con Judy. El caso se queda por el plazo de arriba; con `&privacidad
-  borrar`, salen de él tu cuenta, el canal, el mensaje, el fragmento, el enlace y el
-  código del servidor, y el mensaje del caso en el DM del dueño se edita para quitar el
-  fragmento y el enlace. En un dibujo hecho con caracteres en el perfil, el fragmento es
-  solo un resumen en números y el idioma del texto de al lado, **nunca el dibujo** ni el
-  texto.
+  día. Su veredicto mide el acierto, calibra el valor global de la moderación y entrena
+  el clasificador de texto (solo con la huella de entrenamiento) — nunca actúa sobre
+  nadie ni cambia lo que decidió el staff de un servidor. Aparte, el **segundo
+  análisis** (🔁) llega del mismo modo, con las mismas reglas, hasta 10 al día; ese
+  veredicto solo entrena (no cuenta para el acierto ni el umbral) y no deshace nada. El
+  archivo que puede exportar no tiene nombres, ni IDs de personas ni de servidores
+  (imágenes solo como hash). Los comandos del dueño del bot (`&caso`, `&servidores`,
+  `&bateria`, los suyos del `&banglobal` y de la lista de bloqueo) solo funcionan por DM
+  con Judy. El caso se queda por el plazo de arriba; con `&privacidad borrar`, salen de
+  él tu cuenta, el canal, el mensaje, el fragmento, el enlace, la huella de
+  entrenamiento y el código del servidor, y el mensaje del caso en el DM del dueño se
+  edita para quitar el fragmento y el enlace. En un dibujo hecho con caracteres en el
+  perfil, el fragmento es solo un resumen en números y el idioma del texto de al lado,
+  **nunca el dibujo** ni el texto.
 - Nada se vende ni se usa para anuncios.
 
 ### Tus derechos
@@ -339,6 +390,7 @@ copias de seguridad de antes salen en su plazo (30 días).
 - `&privacidad xp salir` — tu XP en este servidor se borra y deja de contar
   (`&privacidad xp volver` vuelve a contarlo, desde cero).
 - `&privacidad borrar` — borra **todo** lo tuyo (XP y saldo) en todos los servidores, te
-  saca de los casos de la muestra del dueño del bot y borra tus casos dudosos que aún
-  esperan al staff de un servidor. Solo quedan los registros de moderación de los
-  servidores; para esos, habla con el staff del servidor o con el operador.
+  saca de los casos de la muestra y del segundo análisis del dueño del bot (con su
+  huella de entrenamiento) y borra tus casos dudosos que aún esperan al staff de un
+  servidor. Solo quedan los registros de moderación de los servidores; para esos, habla
+  con el staff del servidor o con el operador.

@@ -21,7 +21,8 @@
 import * as db from "../core/db.js";
 import { pseudonimo } from "../core/pseudonimo.js";
 import { registrarErro } from "../core/erros.js";
-import { donos, dmDoDono } from "../core/dono.js";
+import { donos, dmDoDono, idiomaDoDono } from "../core/dono.js";
+import * as tempoAutomod from "../core/tempo-automod.js";   // (P5) o tempo do automod na hora (só números)
 
 // "completo" | "anonimo" | null — o main.js liga a regra de verdade no boot
 // (precisa do dono de cada servidor e da config). Sem ela, ninguém entra.
@@ -212,11 +213,21 @@ export async function gerar({ client, cfg, ate = Date.now(), esvaziar = true }) 
   }
   const numeros = montarNumeros({ grupos, atividade: ativ, nomes, desde, ate });
   podar(ate);
+  // (P5, R11) quanto o automod levou por mensagem nesta hora — de todos os servidores somados, sem
+  // nenhum dado de servidor ou pessoa; não conta como "algo aconteceu" (a hora vazia continua vazia)
+  const tempo = linhaDoTempo(desde);
   return {
     title: `📊 Relatório ${hhmm(desde)}–${hhmm(ate)} UTC`,
-    description: numeros.texto,
+    description: tempo ? `${numeros.texto}\n\n${tempo}` : numeros.texto,
     vazio: !numeros.algo,
   };
+}
+
+// (P5) A linha do tempo do automod da hora que começa em `desde` (null = nada medido), no idioma do
+// dono (revisão do P5: antes, sempre em português).
+export function linhaDoTempo(desde, idioma = idiomaDoDono()) {
+  const d = tempoAutomod.descrever(tempoAutomod.resumo(tempoAutomod.horaDe(desde)), idioma);
+  return d ? `⏱️ **Automod:** ${d}` : null;
 }
 
 // Os donos do bot (SUPER_ADMINS): os servidores deles entram completos.

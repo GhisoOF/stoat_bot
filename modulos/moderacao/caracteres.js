@@ -1,4 +1,8 @@
 
+// (P5, 3 nov 2026) os motivos vêm do motivos.js, pela chave: o `motivo` aqui é o português (o
+// que sempre foi); quem pune usa a `chave` para dar o motivo no idioma do servidor.
+import { textoDoMotivo } from "./motivos.js";
+
 // Marcas combinantes (Unicode) — é o que empilha para formar "zalgo".
 const COMBINANTES = /[\u0300-\u036F\u0483-\u0489\u1AB0-\u1AFF\u1DC0-\u1DFF\u20D0-\u20FF\uFE20-\uFE2F]/g;
 
@@ -23,13 +27,13 @@ export function analisarCaracteres(texto, opcoes = {}) {
   // 1) Invisíveis GRAVES (direção bidirecional) — bloqueio direto, sempre.
   const graves = (texto.match(INVISIVEIS_GRAVES) || []).length;
   if (graves > 0) {
-    return { motivo: "uso de caracteres invisíveis ou de controle de texto", tipo: "invisiveis", qtd: graves };
+    return { motivo: textoDoMotivo("invisiveis"), chave: "invisiveis", tipo: "invisiveis", qtd: graves };
   }
 
   const marcas = (texto.match(COMBINANTES) || []).length;
   const base = texto.replace(COMBINANTES, "").length || 1;
   if (marcas >= 8 && marcas / base >= limiteZalgo) {
-    return { motivo: "texto com caracteres 'zalgo' (acentos empilhados) que quebram o chat", tipo: "zalgo", razao: +(marcas / base).toFixed(2) };
+    return { motivo: textoDoMotivo("zalgo"), chave: "zalgo", tipo: "zalgo", razao: +(marcas / base).toFixed(2) };
   }
 
   const emoticon = pareceEmoticon(texto);
@@ -41,7 +45,7 @@ export function analisarCaracteres(texto, opcoes = {}) {
     const semJuntaEmoji = texto.replace(/(?<=[\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}\uFE0F])\u200D(?=\p{Extended_Pictographic})/gu, "");
     const leves = (semJuntaEmoji.match(INVISIVEIS_LEVES) || []).length;
     if (leves > 2) {
-      return { motivo: "uso de caracteres invisíveis ou de controle de texto", tipo: "invisiveis", qtd: leves };
+      return { motivo: textoDoMotivo("invisiveis"), chave: "invisiveis", tipo: "invisiveis", qtd: leves };
     }
   }
 
@@ -63,7 +67,7 @@ export function analisarRepeticao(texto, opcoes = {}) {
   const classe = letras ? `[^${letras}]` : ".";
   const re = new RegExp(`(${classe})\\1{${n},}`, "iu");
   if (re.test(texto)) {
-    return { motivo: "repetição excessiva do mesmo caractere", tipo: "repeticao" };
+    return { motivo: textoDoMotivo("repeticao"), chave: "repeticao", tipo: "repeticao" };
   }
   return null;
 }
@@ -107,7 +111,8 @@ export function analisarDuplicata(conteudo, anteriores = [], opcoes = {}) {
   const iguais = anteriores.filter((x) => x === d).length + 1;   // +1 = esta
   if (iguais < limite) return null;
   return {
-    motivo: `você repetiu a mesma mensagem ${iguais} vezes`,
+    motivo: textoDoMotivo("duplicata", { n: iguais }),
+    chave: "duplicata",
     tipo: "duplicata",
     vezes: iguais,
   };

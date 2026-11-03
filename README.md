@@ -148,10 +148,13 @@ Generated from `.env.example` (where each one is explained in full).
 | `MUSICA_MAX_SIMULTANEAS` | `3` | Músicas tocando ao mesmo tempo (cada uma é um yt-dlp + ffmpeg). |
 | `SLOWMODE_ESPERA_MAX_S` | `30` | Canal com modo lento: a Judy espera a vez (o Stoat aplica o modo lento ao bot sem a permissão "Ignorar modo lento"). |
 | `AUTOMOD_CONFIRMAR_HORAS` | `24` | O silêncio é o timeout nativo do Stoat (o bot precisa de TimeoutMembers). |
+| `CLASSIFICADOR_TEXTO` | `1` | Classificador de texto pequeno (P5): um sinal a mais na nota do sentinela, lido do arquivo classificador-texto.json que a bateria do dono gera. |
+| `CLASSIFICADOR_TEXTO_ARQUIVO` | `/data/classificador-texto.json` | Onde está o arquivo do modelo (caminho absoluto). |
 | `PAGINAS_DIAS` | `7` | Botões ◀ ▶ das mensagens paginadas continuam valendo por estes dias, mesmo depois de o bot reiniciar. |
 | `REVISAO_POR_DIA` | `10` | Casos da amostra que chegam por DM ao dono do bot (o primeiro dos SUPER_ADMINS) por dia. |
 | `REVISAO_HORA` | `21` | A hora (UTC, 0–23) da rodada diária: resumo, limiares recalculados e os casos do dia. |
 | `REVISAO_AMOSTRA` | `0.02` | A fração das decisões dos detectores (e do que não puniram) que vira amostra (0–0.1). |
+| `REVISAO_PROBLEMAS_POR_DIA` | `10` | Casos da segunda análise que chegam por DM ao dono do bot por dia (1–100), à parte da amostra. |
 | `RELATORIO_SERVIDOR` | — | O servidor do dono do bot. |
 | `BATERIA_AVISO_PORTA` | `8097` | Porta interna por onde a bateria de teste do dono avisa o bot, que repassa à DM dele. |
 | `WEBHOOK_BIND` | `127.0.0.1` | Em que endereço da máquina o receptor de webhooks fica: 127.0.0.1 (padrão, só a máquina; o Tailscale Funnel segue funcionando) · 172.17.0.1 (só os containers, e |

@@ -24,6 +24,7 @@ import { MAX_TIMEOUT_MS, aplicarTimeout, tirarTimeout } from "./timeout.js";
 import { liberarQuarentena } from "./confianca.js";
 import { escadaDePunicao, validadeDosAvisos } from "./automod-engine.js";
 import * as banGlobal from "./ban-global.js";
+import * as segunda from "./segunda-analise.js";
 
 // ── Textos curtos, nos três idiomas ──────────────────────────────────────────
 const X3 = (l, pt, en, es) => (l === "es" ? es : l === "en" ? en : pt);
@@ -151,6 +152,8 @@ async function punir(tipo, message, args, ctx) {
   // (31 out 2026, P3a, staff — R13) antes: a punição manual virava um SINAL na fila do dono do
   // bot. Agora não: o que a staff decide é dela e não vai ao dono.
   const ctxAcao = { ctx, server, message, alvoId, motivo, motivoLog, sufixo, membro };
+  // (P5) a última punição desta pessoa aqui passa a ser da staff: um desfazer depois não vai à segunda análise
+  segunda.esquecerPunicao(ctx.serverId ?? server.id, alvoId);
 
   if (tipo === "warn") return avisar(ctxAcao);
   if (tipo === "timeout") return silenciar(ctxAcao, ms);
@@ -333,6 +336,7 @@ export async function desfazerBan(ctx, server, alvoId, porId) {
   await registrarNoLog(ctx, ["✅ Ban retirado", "✅ Unbanned", "✅ Ban retirado"], [
     `<@${alvoId}> por <@${porId}>${junta(0)}`, `<@${alvoId}> by <@${porId}>${junta(1)}`, `<@${alvoId}> por <@${porId}>${junta(2)}`]);
   console.log(`[UNBAN] ${porId} -> ${alvoId}${saiuDaLista ? " (saiu da lista global)" : ""}`);
+  segunda.aoDesfazer(serverId, alvoId);   // (P5) era punição automática da Judy? segunda análise do dono (não muda nada aqui)
   return { ok: true, saiuDaLista, isentado };
 }
 
@@ -348,6 +352,7 @@ export async function desfazerTimeout(ctx, server, alvoId, porId) {
   await registrarNoLog(ctx, ["🔊 Silêncio retirado", "🔊 Timeout lifted", "🔊 Silencio retirado"], [
     `<@${alvoId}> por <@${porId}>`, `<@${alvoId}> by <@${porId}>`, `<@${alvoId}> por <@${porId}>`]);
   console.log(`[UNTIMEOUT] ${porId} -> ${alvoId}`);
+  segunda.aoDesfazer(serverId, alvoId);   // (P5) era punição automática da Judy? segunda análise do dono (não muda nada aqui)
   return { ok: true, jaVencido: !!r.jaVencido };
 }
 

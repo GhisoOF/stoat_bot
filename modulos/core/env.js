@@ -71,6 +71,26 @@ export function numero(nome, padrao, { min = -Infinity, max = Infinity, inteiro 
   return n;
 }
 
+// (3 nov 2026, P5) O classificador de texto (moderacao/classificador-texto.js): um sinal na nota do
+// sentinela, lido do arquivo que a bateria gera. Vazio = ligado (sem o arquivo, não faz nada);
+// CLASSIFICADOR_TEXTO=0 desliga um modelo ruim sem mexer no arquivo.
+export const classificadorTextoLigado = () => ligado("CLASSIFICADOR_TEXTO", true);
+// (3 nov 2026, P5, integração) Onde está o arquivo do modelo, se o dono quiser apontar: um caminho
+// ABSOLUTO qualquer (conferido no boot, problemasDoArquivoDoClassificador; a bateria usa
+// /judy-dados/classificador-texto.json). Vazio ou só espaços = não definido: procura na pasta do
+// DB_PATH (/data) e depois no código (classificador-texto.js, caminhosDoModelo). O arquivo não
+// precisa existir no boot: ausente, o bot segue sem o sinal, com uma linha no log.
+export const arquivoDoClassificador = (env = e) => String(env.CLASSIFICADOR_TEXTO_ARQUIVO ?? "").trim() || null;
+function problemasDoArquivoDoClassificador() {
+  const v = arquivoDoClassificador();
+  if (v === null) return [];
+  // (sem ecoar o valor: é um caminho da máquina — R10)
+  if (v.length > 1024 || /[\u0000-\u001f\u007f]/.test(v) || !v.startsWith("/")) {
+    return ["CLASSIFICADOR_TEXTO_ARQUIVO é inválido (use um caminho absoluto, ex.: /data/classificador-texto.json)"];
+  }
+  return [];
+}
+
 // (2 nov 2026, P4.4) A porta INTERNA dos avisos da bateria (moderacao/bateria-avisos.js): só
 // 127.0.0.1, dentro do container, nunca publicada. Vazio = 8097; 0 desliga. A conferência
 // (porta de sistema, colisão com as outras portas do bot) fica no problemasDoEnv.
@@ -89,7 +109,7 @@ function problemasDaPortaDosAvisos() {
 
 // Conferência do .env no boot (main.js e iniciar.js). Devolve a lista de
 // problemas; quem chama para o boot se ela não estiver vazia.
-const BOOLEANOS = ["IA", "VOZ_ATIVA"];
+const BOOLEANOS = ["IA", "VOZ_ATIVA", "CLASSIFICADOR_TEXTO"];
 const VALIDOS = new Set([...DESLIGADO, "1", "true", "sim", "on", "yes", "si", "sí"]);
 export function problemasDoEnv() {
   const p = [];
@@ -101,6 +121,7 @@ export function problemasDoEnv() {
     if (v && !VALIDOS.has(v)) p.push(`${b}=${JSON.stringify(e[b])} é inválido (use 0 ou 1)`);
   }
   p.push(...problemasDaPortaDosAvisos());
+  p.push(...problemasDoArquivoDoClassificador());
   return p;
 }
 

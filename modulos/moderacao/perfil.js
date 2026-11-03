@@ -32,7 +32,8 @@ import * as cz from "./certeza.js";
 import { detectarArte, conhecido as arteConhecida, idiomaDoTexto } from "./arte-texto.js";
 import { parecido, hashUtil, sha256 } from "./hash.js";
 import { CONHECIDOS } from "./conhecidos.js";
-import { maisParecido } from "./revisao.js";
+import { maisParecido, trechoSeguro } from "./revisao.js";
+import * as segunda from "./segunda-analise.js";
 import * as db from "../core/db.js";
 import * as log from "../core/log.js";
 import { tirarTimeout } from "./timeout.js";
@@ -282,7 +283,7 @@ async function alertarDuvida({ ctx, server, userId, origem, d, L }, agora = Date
   const feito = L === "es" ? "nada todavía — decide el staff" : L === "en" ? "nothing yet — the staff decides" : "nada ainda — a staff decide";
   const embed = av.embedDoAlerta(ctx, { server, userId, origem, achados: [d], feito, acao, L, conferir: true });
   return cz.alertarStaff({ ctx, server, embed, oQueFaz: O_QUE_FAZ[acao],
-    caso: { tipo: d.tipo, categoria: d.categoria, userId, nota: typeof d.nota === "number" ? d.nota : null, parte: d.campo, evidencia: d.evidenciaStaff ?? d.evidencia } });
+    caso: { tipo: d.tipo, categoria: d.categoria, userId, nota: typeof d.nota === "number" ? d.nota : null, parte: d.campo, certeza: d.certeza ?? null, evidencia: d.evidenciaStaff ?? d.evidencia } });
 }
 
 // ── Num servidor ────────────────────────────────────────────────────────────
@@ -325,6 +326,13 @@ export async function aplicarNoServidor({ ctx, server, userId, aval: avalBruta, 
     const motivo = av.motivoDaPunicao(punir, L);
     ({ feito, ok, ate = null } = await av.aplicarAcao({ ctx, server, userId, acao, motivo, L }));
     if (ok && acao === "silenciar") db.perfilSilencioGravar(server.id, userId, [...restantes, ...punir.map((p) => p.campo)], motivo, Date.now(), ate);
+    // (P5) a punição automática do perfil: se a staff a desfizer, o caso vai à segunda análise do dono
+    if (ok && acao !== "alertar") {
+      const d = punir.find((p) => p.tipo === "perfil-texto") ?? punir[0];
+      segunda.lembrarPunicao({ tipo: d.tipo, categoria: d.categoria, serverId: server.id, userId, certeza: d.certeza ?? null,
+        nota: typeof d.nota === "number" ? d.nota : null, detector: `perfil:${d.campo}`,
+        evidencia: { ...(d.evidencia ?? {}), trecho: trechoSeguro(d.evidencia?.trecho) } });
+    }
     const alertouEm = await av.alertar(ctx, { server, userId, origem, achados: punir, feito, acao, L });
     await av.registrarNoLog(ctx, { userId, origem, motivo, feito, alertouEm, L });
   } else if (antes && restantes.length < antes.campos.length) {

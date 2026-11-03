@@ -14669,6 +14669,47 @@ await t("★ banco e dados locais fora do Git e da imagem", () => {
     for (const p of ["*.db", "*.db-wal", "*.db-shm", "/dados/"]) assert.ok(linhas.includes(p), `${a} sem ${p}`);
   }
 });
+// (3 nov 2026, P5) O log-segredo.key (-rw------- root, a chave dos pseudônimos do log) apareceu na raiz do
+// repositório durante uma rodada: o pseudonimo.js grava a chave AO LADO DO BANCO e, sem DB_PATH, o banco é
+// ./stoat.db. Os arquivos que o bot grava ao lado do banco ficam fora do Git e da imagem se caírem na raiz
+// (ancorados com `/`: o modelo DENTRO do código continua versionável), e a rodada não deixa nenhum deles lá.
+const NA_RAIZ_P5 = ["log-segredo.key", "bateria-imagens.jsonl", "bateria-treino.jsonl", "bateria-aviso.chave", "classificador-texto.json"];
+await t("★ P5: a chave do log, os .jsonl da bateria, a chave dos avisos e o modelo, se caírem na raiz, ficam fora do Git e da imagem — o modelo do código não", () => {
+  for (const a of [".gitignore", ".dockerignore"]) {
+    const linhas = ler(a).split("\n").map((l) => l.trim());
+    for (const f of NA_RAIZ_P5) assert.ok(linhas.includes(`/${f}`), `${a} sem /${f} (ancorado na raiz)`);
+    for (const f of NA_RAIZ_P5) assert.ok(!linhas.some((l) => l !== `/${f}` && !l.startsWith("#") && l.endsWith(f)), `${a}: ${f} sem âncora pegaria a cópia de dentro do código`);
+  }
+  // de verdade, pelo próprio git (vale para arquivo que nem existe)
+  const todos = [...NA_RAIZ_P5, "stoat.db", "stoat.db-wal", "stoat.db-shm"];
+  const ign = spawnSync("git", ["check-ignore", "--no-index", ...todos], { encoding: "utf8" });
+  assert.deepEqual(ign.stdout.split("\n").filter(Boolean).sort(), [...todos].sort(), ign.stderr);
+  const cod = spawnSync("git", ["check-ignore", "--no-index", "modulos/moderacao/dados/classificador-texto.json", "modulos/moderacao/dados/bateria-treino.jsonl"], { encoding: "utf8" });
+  assert.equal(cod.status, 1, `o git ignoraria um arquivo do código: ${cod.stdout}`);
+  // e a raiz do repositório está limpa (nenhum deles sobrou de uma rodada)
+  for (const f of NA_RAIZ_P5) assert.ok(!fs.existsSync(path.join(process.cwd(), f)), `${f} na raiz do repositório`);
+});
+await t("★ P5: suíte sem DB_PATH próprio recebe do runner uma pasta temporária só dela — a chave do log cai lá, nunca na raiz (de verdade)", () => {
+  const raiz = process.cwd() + path.sep;
+  for (const v of ["DB_PATH", "CONFIG_PATH"]) {
+    assert.ok(process.env[v], `o runner define ${v}`);
+    assert.ok(!path.resolve(process.env[v]).startsWith(raiz), `${v} dentro do repositório`);
+    assert.match(process.env[v], /judy-testes-[^/]+\/p1-infra\//, `${v} fora da pasta da suíte`);
+  }
+  const chave = path.join(path.dirname(process.env.DB_PATH), "log-segredo.key");
+  fs.rmSync(chave, { force: true });
+  // um processo com o ambiente desta suíte, na raiz do repositório, como o bot calcula um pseudônimo
+  const r = spawnSync(process.execPath, ["--no-warnings", "--input-type=module", "-e", "const p = await import('./modulos/core/pseudonimo.js'); console.log(p.pseudonimo('01ABCDEFGHJKMNPQRSTVWXYZ01'));"],
+    { cwd: process.cwd(), encoding: "utf8", env: { ...process.env, LOG_SEGREDO: "" } });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^~[0-9a-f]{10}\n$/);
+  assert.ok(fs.existsSync(chave), "a chave fica ao lado do banco da suíte");
+  assert.ok(!fs.existsSync(path.join(process.cwd(), "log-segredo.key")), "e não na raiz");
+  // o runner: a pasta por suíte no ambiente do filho, e a raiz conferida depois da rodada
+  const runner = ler("testes.mjs");
+  assert.match(runner, /DB_PATH: path\.join\(pastaDaSuite, "stoat\.db"\), CONFIG_PATH: path\.join\(pastaDaSuite, "automod-config\.json"\)/);
+  assert.match(runner, /const sobrouNaRaiz = fsR\.readdirSync\(RAIZ\)\.filter\(\(f\) => !RAIZ_ANTES\.has\(f\)\)/);
+});
 await t("★ deploy-stoat.sh: cópias do .env com 600 e nenhum host do tailnet no código", () => {
   const d = ler("scripts/deploy-stoat.sh");
   assert.doesNotMatch(d, /\.ts\.net/);
@@ -19183,9 +19224,19 @@ await t("★ índices para a rodada (origem, enviadoEm, limpoEm) e os da staff; 
   db.filaDefinirEstado("ultimaRodada", Date.now() - 1000);
   const idCaso = db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:politica", nota: 0.5, userId: ANA, alertaMsgId: "ALX", criadoEm: Date.now() });
   assert.equal(rev.timerLigado(), false);
+  // (3 nov 2026, P5) antes: o ❌ da staff também não ligava o timer. agora: o ✅ não liga (o limiar do servidor é do ciclo de
+  // 6 h); o ❌ vira um caso de segunda análise do dono (decisão do dono) — e só por isso o timer liga
+  const idCerto = db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:politica", nota: 0.5, userId: ANA, alertaMsgId: "ALY", criadoEm: Date.now() });
+  await quieto(() => st.julgar(db.staffCaso(idCerto), "certo", { ctx: { config: {}, serverId: SID }, server: { id: SID }, quem: MOD, mod: { decisaoDaStaff: async () => null } }));
+  assert.equal(db.staffCaso(idCerto).veredito, "certo");
+  assert.equal(rev.timerLigado(), false, "o ✅ da staff não liga o timer do dono");
+  assert.equal(db.filaPorEstado(["problema"]).length, 0, "o ✅ não vai à segunda análise");
   await quieto(() => st.julgar(db.staffCaso(idCaso), "errou", { ctx: { config: {}, serverId: SID }, server: { id: SID }, quem: MOD, mod: { decisaoDaStaff: async () => null } }));
   assert.equal(db.staffCaso(idCaso).veredito, "errou");
-  assert.equal(rev.timerLigado(), false, "o timer do dono continua desligado");
+  const seg = db.filaPorEstado(["problema"]);
+  assert.deepEqual(seg.map((c) => [c.origem, c.evento, c.categoria]), [["problema", "staff-errou", "assunto:politica"]], "o ❌ vira um caso de segunda análise");
+  assert.equal(rev.timerLigado(), true, "o timer liga pela segunda análise (e só por ela)");
+  rev.desligar();
   assert.doesNotMatch(fs.readFileSync("modulos/moderacao/revisao.js", "utf8"), /^import .*casos-staff|casosStaff\.|recalcularLimiares\(agora\);\s*\n.*limiar-servidor/m, "a rodada do dono não mexe nos servidores (nem importa o casos-staff)");
   assert.match(fs.readFileSync("main.js", "utf8"), /casosStaff\.recalcularLimiares\(Date\.now\(\)\)/, "o ciclo de 6 h recalcula");
   rev.desligar();
@@ -20663,7 +20714,8 @@ await t("PRIVACIDADE.md: a fila, o perfil inteiro e o silêncio do perfil nos 3 
     /Amostra diária do dono do bot/, /Bot owner's daily sample/, /Muestra diaria del dueño del bot/,
     /O perfil de quem entra/, /The profile of whoever joins/, /El perfil de quien entra/,
     /Silêncio por causa do perfil/, /Timeout because of the profile/, /Silencio por el perfil/,
-    /tira você dos\s+casos da\s+amostra do dono do bot e apaga os casos duvidosos seus/, /removes you from the\s+cases in the bot owner's sample and deletes your doubtful cases/, /te saca de\s+los casos de la muestra del dueño del bot y borra tus casos dudosos/]) assert.match(p.replace(/\n  /g, " "), re);
+    // (3 nov 2026, P5) antes: "tira você dos casos da amostra do dono do bot e apaga…". agora: também da segunda análise, com a impressão de treino
+    /tira você dos\s+casos da\s+amostra e da\s+segunda análise do dono do bot \(com a\s+impressão de treino deles\) e apaga os casos duvidosos seus/, /removes you from the\s+cases in the bot owner's sample and second review \(with their training fingerprint\) and deletes your doubtful cases/, /te saca de\s+los casos de la muestra y del segundo análisis del dueño del bot \(con su huella de entrenamiento\) y borra tus casos dudosos/]) assert.match(p.replace(/\n  /g, " "), re);
   assert.doesNotMatch(p, /mesmo com `&privacidade apagar`|even with `&privacidade apagar`|incluso con `&privacidade apagar`/);
 });
 
@@ -20681,36 +20733,56 @@ await t("★ PRIVACIDADE.md (staff): casos duvidosos com a staff (14 dias; julga
   for (const [l, res] of Object.entries({
     // (revisão staff) antes: "fica só a impressão/hash, a categoria, a nota, o veredito e o servidor". agora: também o tipo e
     // as datas, e só os 500 mais recentes por servidor e categoria
-    pt: [/ninguém é punido e a staff \*\*daquele servidor\*\* recebe um alerta com ✅\/❌/, /sem nenhum dos dois, nada é enviado nem guardado/, /esperando a staff: no máximo \*\*14 dias\*\*/, /fica só a impressão\/hash, a categoria, o tipo, a nota, o veredito, o servidor e as datas — vale só naquele servidor; ficam só os 500 mais recentes de cada servidor e categoria/],
-    en: [/nobody is punished and the staff \*\*of that server\*\* gets an alert with ✅\/❌/, /without either, nothing is sent or kept/, /waiting for the staff: \*\*14 days\*\* at most/, /only the fingerprint\/hash, the category, the type, the score, the verdict, the server and the dates remain — it only counts on that server; only the 500 most recent per server and category are kept/],
-    es: [/nadie es castigado y el staff \*\*de ese servidor\*\* recibe una alerta con ✅\/❌/, /sin ninguno de los dos, no se envía ni se guarda nada/, /esperando al staff: \*\*14 días\*\* como máximo/, /solo quedan la huella\/hash, la categoría, el tipo, la nota, el veredicto, el servidor y las fechas — vale solo en ese servidor; se guardan solo los 500 más recientes de cada servidor y categoría/],
+    pt: [/ninguém é punido e a staff \*\*daquele servidor\*\* recebe um alerta com ✅\/❌/, /sem nenhum dos dois, nada é enviado nem guardado/, /esperando a staff: no máximo \*\*14 dias\*\*/, // (3 nov 2026, P5 revisão) antes: "fica só a impressão/hash, a impressão de treino, a categoria…". agora: a impressão de
+      // treino só até 7 dias depois do alerta (ela permite reconstruir o texto), ligada à pessoa só por um pseudônimo
+      /fica só a impressão\/hash, a categoria, o tipo, a nota, o veredito, o servidor e as datas — vale só naquele servidor \(a impressão de treino fica até 7 dias depois do alerta, ligada à pessoa só por um pseudônimo, para o `&privacidade apagar` a achar\); ficam só os 500 mais recentes de cada servidor e categoria/,
+      // (3 nov 2026, P5) e a impressão de treino (sem texto) no que fica guardado — o trecho do alerta NÃO vai ao banco
+      /a impressão de treino \(ver abaixo\) e o alerta enviado à staff \|/, /Julgado: a pessoa, o canal, a mensagem e o alerta saem na hora/],
+    en: [/nobody is punished and the staff \*\*of that server\*\* gets an alert with ✅\/❌/, /without either, nothing is sent or kept/, /waiting for the staff: \*\*14 days\*\* at most/, /only the fingerprint\/hash, the category, the type, the score, the verdict, the server and the dates remain — it only counts on that server \(the training fingerprint stays up to 7 days after the alert, linked to the person only by a pseudonym, so `&privacy delete` can find it\); only the 500 most recent per server and category are kept/,
+      /the training fingerprint \(see below\) and the alert sent to the staff \|/, /Judged: the person, the channel, the message and the alert are removed right away/],
+    es: [/nadie es castigado y el staff \*\*de ese servidor\*\* recibe una alerta con ✅\/❌/, /sin ninguno de los dos, no se envía ni se guarda nada/, /esperando al staff: \*\*14 días\*\* como máximo/, /solo quedan la huella\/hash, la categoría, el tipo, la nota, el veredicto, el servidor y las fechas — vale solo en ese servidor \(la huella de entrenamiento queda hasta 7 días después de la alerta, ligada a la persona solo por un seudónimo, para que `&privacidad borrar` la encuentre\); se guardan solo los 500 más recientes de cada servidor y categoría/,
+      /la huella de entrenamiento \(ver abajo\) y la alerta enviada al staff \|/, /Juzgado: la persona, el canal, el mensaje y la alerta salen al momento/],
   })) for (const re of res) assert.match(staff[l], re, `${l}: ${re}`);
   for (const [l, res] of Object.entries({
     pt: [/decisões punidas, alertadas à staff e não punidas/, /O resto \*\*não é guardado\*\*/, /sem pessoa nem servidor \(nem o código\/pseudônimo dele\)/, /DM do dono é editada para tirar o trecho e o link/],
     en: [/punished, staff-alerted and unpunished decisions/, /The rest \*\*isn't kept\*\*/, /no person, no server \(not even its code\/pseudonym\)/, /owner's DM is edited to remove the excerpt and the link/],
     es: [/decisiones castigadas, alertadas al staff y no castigadas/, /El resto \*\*no se guarda\*\*/, /sin persona ni servidor \(ni su código\/seudónimo\)/, /DM del dueño se edita para quitar el fragmento y el enlace/],
   })) for (const re of res) assert.match(dono[l], re, `${l}: ${re}`);
-  for (const re of [/Nada disso vai para o banco, exceto os casos duvidosos com a staff e a amostra do dono/, /None of it goes to the database, except the doubtful cases with the staff and the owner's sample/, /Nada de esto va a la base de datos, salvo los casos dudosos con el staff y la muestra del dueño/,
+  // (3 nov 2026, P5) antes: "exceto os casos duvidosos com a staff e a amostra do dono". agora: e a segunda análise
+  for (const re of [/Nada disso vai para o banco, exceto os casos duvidosos com a staff, a amostra do dono e a segunda análise/, /None of it goes to the database, except the doubtful cases with the staff, the owner's sample and the second review/, /Nada de esto va a la base de datos, salvo los casos dudosos con el staff, la muestra del dueño y el segundo análisis/,
     // (2 nov 2026, P4) antes: "o `&caso` (o comando do dono) só funciona na DM". agora: todos os comandos só do dono do bot
     // (`&caso`, `&servidores`, os dele no `&banglobal` e na lista de bloqueio) só funcionam na DM
     // (2 nov 2026, P4.3) antes: sem o `&bateria`; agora: a lista cita também o `&bateria`
     /Os comandos do dono do bot \(`&caso`, `&servidores`, `&bateria`, os dele no `&banglobal` e na lista de bloqueio\) só funcionam na DM com a Judy/,
     /The bot owner's commands \(`&caso`, `&servidores`, `&bateria`, their `&banglobal` and blocklist ones\) only work in the DM with Judy/,
     /Los comandos del dueño del bot \(`&caso`, `&servidores`, `&bateria`, los suyos del `&banglobal` y de la lista de bloqueo\) solo funcionan por DM con Judy/,
-    /o link e o código do servidor, e a mensagem do caso na DM do dono é editada/, /the link and the server's code are removed from it, and the case's message in the owner's DM is edited/, /el enlace y el código del servidor, y el mensaje del caso en el DM del dueño se edita/,
+    // (3 nov 2026, P5) e a impressão de treino sai junto
+    /o link, a impressão de treino e o código do servidor, e a mensagem do caso na DM do dono é editada/, /the link, the training fingerprint and the server's code are removed from it, and the case's message in the owner's DM is edited/, /el enlace, la huella de entrenamiento y el código del servidor, y el mensaje del caso en el DM del dueño se edita/,
     /resumo em números e o idioma do texto ao lado, \*\*nunca o desenho\*\* nem o texto/, /summary in numbers and the language of the text next to it, \*\*never the drawing\*\* or the text/, /resumen en números y el idioma del texto de al lado, \*\*nunca el dibujo\*\* ni el texto/,
-    /O veredito dele só mede o acerto e calibra o padrão global da moderação, sem modelo novo — nunca age sobre ninguém nem muda o que a staff de um servidor decidiu/,
-    /The owner's verdict only measures accuracy and calibrates moderation's global default, with no new model — it never acts on anyone or changes what a server's staff decided/,
-    /Su veredicto solo mide el acierto y calibra el valor global de la moderación, sin modelo nuevo — nunca actúa sobre nadie ni cambia lo que decidió el staff de un servidor/,
+    // (3 nov 2026, P5 — decisão do dono) antes: "só mede o acerto e calibra o padrão global, sem modelo novo". agora: o veredito
+    // do dono também treina o classificador de texto (só com a impressão de treino); a segunda análise, à parte, só treina
+    /O veredito dele mede o acerto, calibra o padrão global da moderação e treina o classificador de texto \(só com a impressão de treino\) — nunca age sobre ninguém nem muda o que a staff de um servidor decidiu/,
+    /The owner's verdict measures accuracy, calibrates moderation's global default and trains the text classifier \(only with the training fingerprint\) — it never acts on anyone or changes what a server's staff decided/,
+    /Su veredicto mide el acierto, calibra el valor global de la moderación y entrena el clasificador de texto \(solo con la huella de entrenamiento\) — nunca actúa sobre nadie ni cambia lo que decidió el staff de un servidor/,
+    /À parte, a \*\*segunda análise\*\* \(🔁\) chega do mesmo jeito, com as mesmas regras, até 10 por dia; esse veredito só treina \(não entra no acerto nem no limiar\) e não desfaz nada/,
+    /Apart from it, the \*\*second review\*\* \(🔁\) arrives the same way, with the same rules, up to 10 a day; that verdict only trains \(it doesn't count toward accuracy or the threshold\) and undoes nothing/,
+    /Aparte, el \*\*segundo análisis\*\* \(🔁\) llega del mismo modo, con las mismas reglas, hasta 10 al día; ese veredicto solo entrena \(no cuenta para el acierto ni el umbral\) y no deshace nada/,
     // (revisão staff) antes: "o que a staff decide vale só naquele servidor e nunca vai a outro servidor" — mas um ban pelo ✅
     // entra na lista global, como qualquer ban. agora: a herança e o limiar ficam no servidor; o ban entra na lista global
-    /O que a staff decide ensina a Judy só naquele servidor \(casos parecidos e o limiar dali\) e nunca vai ao dono do bot; um ban aplicado pelo ✅ entra na lista global de bans, como qualquer ban/,
-    /What the staff decides only teaches Judy on that server \(similar cases and its threshold\) and never goes to the bot owner; a ban applied by the ✅ enters the global ban list, like any ban/,
-    /Lo que decide el staff le enseña a Judy solo en ese servidor \(casos parecidos y su umbral\) y nunca va al dueño del bot; un ban aplicado por el ✅ entra en la lista global de bans, como cualquier ban/,
+    // (3 nov 2026, P5) antes: "…e o limiar dali) e nunca vai ao dono do bot; um ban…". agora: no modelo global só mede; o ❌ e o
+    // desfazer de uma punição automática vão à segunda análise do dono, que nunca muda o que a staff decidiu
+    /O que a staff decide ensina a Judy só naquele servidor \(casos parecidos e o limiar dali\); no modelo global, só mede o acerto \(pela impressão de treino, sem servidor\) e nunca treina; um ban aplicado pelo ✅ entra na lista global de bans, como qualquer ban/,
+    /Quando a staff marca ❌ num alerta ou desfaz uma punição automática da Judy, o caso vai também à segunda análise do dono, que nunca muda o que ela decidiu/,
+    /When the staff marks ❌ on an alert or undoes an automatic punishment by Judy, the case also goes to the owner's second review, which never changes what the staff decided/,
+    /Cuando el staff marca ❌ en una alerta o deshace un castigo automático de Judy, el caso va también al segundo análisis del dueño, que nunca cambia lo que decidió el staff/,
+    /What the staff decides only teaches Judy on that server \(similar cases and its threshold\); in the global model it only measures accuracy \(through the training fingerprint, with no server\) and never trains; a ban applied by the ✅ enters the global ban list, like any ban/,
+    /Lo que decide el staff le enseña a Judy solo en ese servidor \(casos parecidos y su umbral\); en el modelo global, solo mide el acierto \(por la huella de entrenamiento, sin servidor\) y nunca entrena; un ban aplicado por el ✅ entra en la lista global de bans, como cualquier ban/,
     /As punições manuais da staff não vão para o dono do bot/, /The staff's manual punishments don't go to the bot owner/, /Los castigos manuales del staff no van al dueño del bot/]) assert.match(uma, re);
   assert.doesNotMatch(uma, /Nada disso vai para o banco:|None of it goes to the database:|Nada de esto va a la base de datos:/);
   assert.doesNotMatch(uma, /só como sinal|only as a signal|solo como señal|herdado de um julgado|inherited from a similar|heredado de uno juzgado|Fila de revisão do dono|review queue|Cola de revisión/);
   assert.doesNotMatch(uma, /nunca vai a outro servidor nem ao dono|never goes to another server or to the bot owner|nunca va a otro servidor ni al dueño/);
+  // (3 nov 2026, P5) o que deixou de ser verdade não volta: o veredito do dono agora treina; a staff vai à segunda análise no ❌
+  assert.doesNotMatch(uma, /sem modelo novo|with no new model|sin modelo nuevo|e nunca vai ao dono do bot|and never goes to the bot owner|y nunca va al dueño del bot/);
   // os itens quebrados em ~88 colunas
   for (const l of p.split("\n")) if (/^(- |  )/.test(l) && /casos duvidosos|doubtful cases|casos dudosos|amostra diária|daily sample|muestra diaria|amostra do dono|owner's sample|muestra del dueño|perfil de quien|profile of whoever|perfil de quem/i.test(l)) assert.ok([...l].length <= 90, l);
 });
@@ -22450,15 +22522,20 @@ const SEC = { pt: secao("Português"), en: secao("English"), es: secao("Español
 
 console.log("── NOVIDADES ──");
 const nov = await import("./modulos/ferramentas/novidades.js");
-await t("★ o topo é a entrada do P4 (id, pacote e data = docs/pacote.json) e a trava do build passa", () => {
+await t("★ a entrada do P4 (id, pacote e data) logo abaixo da do P5, que é o topo (= docs/pacote.json), e a trava do build passa", () => {
   const pac = JSON.parse(ler("docs/pacote.json"));
-  assert.deepEqual([pac.pacote, pac.data], ["P4", "2026-11-02"]);
-  assert.deepEqual([nov.NOVIDADES[0].id, nov.NOVIDADES[0].pacote, nov.NOVIDADES[0].data], ["2026-11-02-p4", "P4", "2026-11-02"]);
+  // (3 nov 2026, P5) antes: docs/pacote.json = P4/2026-11-02 e NOVIDADES[0] = a entrada do P4; agora: o pacote é o
+  // P5/2026-11-03 (o topo, conferido na p5-integracao) e a do P4 é a NOVIDADES[1], com os mesmos id, pacote e data
+  assert.deepEqual([pac.pacote, pac.data], ["P5", "2026-11-03"]);
+  assert.deepEqual([nov.NOVIDADES[0].id, nov.NOVIDADES[0].pacote, nov.NOVIDADES[0].data], ["2026-11-03-p5", "P5", "2026-11-03"]);
+  assert.deepEqual([nov.NOVIDADES[1].id, nov.NOVIDADES[1].pacote, nov.NOVIDADES[1].data], ["2026-11-02-p4", "P4", "2026-11-02"]);
   assert.equal(nov.problemaDaTrava(nov.NOVIDADES, pac), null);
   assert.equal(new Set(nov.NOVIDADES.map((n) => n.id)).size, nov.NOVIDADES.length, "id repetido");
 });
 await t("★ a entrada do P4: o RPG e a conversa saíram com os dados, a IA só na moderação, o que fica no `&privacidade` — nos 3 idiomas, citando os comandos que ficam", () => {
-  const n = nov.NOVIDADES[0];
+  // (3 nov 2026, P5) antes: NOVIDADES[0]; agora: a entrada pelo id (o topo é a do P5) — as mesmas checagens
+  const n = nov.NOVIDADES.find((x) => x.id === "2026-11-02-p4");
+  assert.ok(n, "a entrada do P4 continua na lista");
   const RE = {
     pt: [/O RPG e a conversa com a Judy saíram\*\*, e os dados deles foram apagados/, /A IA ficou só na moderação/, /não responde mais a menções/],
     en: [/The RPG and chatting with Judy are gone\*\*, and their data was erased/, /AI stays only in moderation/, /no longer answers mentions/],
@@ -22487,7 +22564,8 @@ await t("★ nenhuma novidade cita comando que saiu; as antigas perderam o tópi
 
 console.log("── PRIVACIDADE.md ──");
 await t("★ última atualização 2 nov 2026; o que saiu não aparece mais (chat, memória, busca, GitHub, imagem gerada, personalidade, RPG, duelos, era v4)", () => {
-  assert.match(POL, /^_Última atualização \/ Last updated \/ Última actualización: 2 nov 2026\._$/m);
+  // (3 nov 2026, P5) antes: 2 nov 2026; agora: 3 nov (a impressão de treino e a segunda análise)
+  assert.match(POL, /^_Última atualização \/ Last updated \/ Última actualización: 3 nov 2026\._$/m);
   for (const [l, s] of Object.entries(SEC)) {
     assert.doesNotMatch(s.replace(/\n\n(Em|On|El) 2 (nov|Nov) 2026[^\n]*(\n[^\n]+)*/, ""), /SearXNG|GitHub(?! ,| Crafty|, Crafty)|&game|&privac\w+ (memor|chat|esquecer|forget|olvidar|mapear|map)|&config ia|personalidade da Judy|single personality|sola personalidad|era v4|duelo|duel|teto diário de imagens|image cap|tope diario|Pedido de silêncio|Silence request|Petición de silencio|Histórico da conversa|conversation history|Historial de la conversación|Para frear spam|To curb spam|Para frenar el spam|busca na web|web search|búsqueda en la web/, l);
     assert.doesNotMatch(s, /RPG(?! saíram| were removed| salieron|, de todas| character, item|, from every| de todas)/, `${l}: RPG só no parágrafo do que foi apagado`);
@@ -22569,7 +22647,9 @@ await t("★ `&privacidade`: status, `xp sair|voltar` e `apagar` (XP e saldo) �
   assert.deepEqual(reten.dadosDaPessoa("01KP4INT0000000000000000AA").map((g) => g.id).slice(0, 2), ["xp", "economia"]);
   const src = ler("modulos/core/retencao.js");
   assert.deepEqual([...src.slice(src.indexOf("const DA_PESSOA = ["), src.indexOf("];", src.indexOf("const DA_PESSOA = ["))).matchAll(/\{ id: "(\w+)"/g)].map((m) => m[1]), ["xp", "economia"], "só XP e saldo (mais os casos da amostra e da staff)");
-  assert.match(src, /filaEsquecerUsuario\(u\)/); assert.match(src, /db\.staffDaPessoa\(u, \{ apagar \}\)/);
+  // (3 nov 2026, P5 revisão) antes: `db.staffDaPessoa(u, { apagar })`. agora: com o pseudônimo — o vetor dos julgados da staff
+  // (já sem userId) também sai enquanto vive
+  assert.match(src, /filaEsquecerUsuario\(u\)/); assert.match(src, /db\.staffDaPessoa\(u, \{ apagar, pseudo: apagar \? pseudonimo\(u\) : null \}\)/);
   const reg = (await import("./modulos/comandos/privacidade.js")).default;
   assert.deepEqual(reg.aninhados, ["apagar", "xp"]);
   assert.deepEqual(Object.keys(reg.subcomandos).sort(), ["apagar", "confirmar", "sair", "status", "voltar", "xp"]);
@@ -23723,6 +23803,1797 @@ console.log(`\nP4.4 AVISOS: ${ok} ok, ${falhou} falha(s)`);
 process.exit(falhou ? 1 : 0);
 };
 
+// ════════════════════════════════════════════════════════════════════════════
+// p5-dados — P5 (3 nov 2026), área dados: a impressão de treino nos casos (o vetor do
+// contrato 1, guardado no registro e mantido depois da retenção; imagem sem vetor), a
+// segunda análise do dono (os casos que deram problema, à parte da amostra aleatória:
+// staff desfez a punição automática, staff ❌, detectores discordaram, punição falhou),
+// com teto diário próprio, cartão próprio na DM e veredito que não age (R13), e o
+// bateria-treino.jsonl (contrato 3): atômico, só os campos do contrato, nenhum dado
+// pessoal, a staff só como `medir`. E o `&privacidade apagar` continua tirando a pessoa.
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p5-dados"] = async () => {
+const fs = (await import("node:fs")).default;
+const assert = (await import("node:assert")).default;
+const { DatabaseSync } = await import("node:sqlite");
+const DIR = "/tmp/p5-dados";
+fs.rmSync(DIR, { recursive: true, force: true }); fs.mkdirSync(DIR, { recursive: true });
+const DB = `${DIR}/p5.db`, ARQ = `${DIR}/bateria-treino.jsonl`;
+const U = (n) => `01KP5D${String(n).padStart(20, "0")}`;
+const DONO = U(1), MOD = U(3), ANA = U(4), BIA = U(5), CAIO = U(6);
+const SID = U(100), SID2 = U(200), C1 = U(300), ALERTA = U(301), M1 = U(400);
+Object.assign(process.env, { BOT_TOKEN: "tok", DB_PATH: DB, CONFIG_PATH: `${DIR}/p5.json`, SUPER_ADMINS: DONO, LOG_SEGREDO: "segredo-de-teste" });
+for (const v of ["IA_MODO", "IA", "IA_SERVICO_URL", "LLM_URL", "RELATORIO_SERVIDOR", "REVISAO_POR_DIA", "REVISAO_HORA", "REVISAO_AMOSTRA", "REVISAO_PROBLEMAS_POR_DIA"]) delete process.env[v];
+globalThis.fetch = async () => ({ ok: false, status: 503, text: async () => "", json: async () => ({}), headers: new Map() });
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.stack ?? e).split("\n").slice(0, 6).join("\n     ")}`); falhou++; } };
+const quieto = async (fn) => { const o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = () => {}; try { return await fn(); } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const comEnv = async (vars, fn) => { const antes = {}; for (const k of Object.keys(vars)) { antes[k] = process.env[k]; if (vars[k] === undefined) delete process.env[k]; else process.env[k] = vars[k]; }
+  try { return await fn(); } finally { for (const [k, v] of Object.entries(antes)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } } };
+
+const db = await import("./modulos/core/db.js");
+await quieto(() => db.abrirBanco(DB));
+const rev = await import("./modulos/moderacao/revisao.js");
+const treino = await import("./modulos/moderacao/treino.js");
+const segunda = await import("./modulos/moderacao/segunda-analise.js");
+const st = await import("./modulos/moderacao/casos-staff.js");
+const sinaisMod = await import("./modulos/moderacao/texto-sinais.js");
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const punir = await import("./modulos/moderacao/punir.js");
+const retencao = await import("./modulos/core/retencao.js");
+const cru = new DatabaseSync(DB);
+const EXTRATOR = treino._trocarExtrator(sinaisMod);   // o extrator de verdade (o da área sinais)
+const limpar = () => {
+  db.filaPorEstado("amostra"); db.staffContarJulgados("x");
+  for (const tb of ["revisao_casos", "revisao_limiares", "revisao_estado", "staff_casos", "staff_limiares", "punicoes"]) cru.exec(`DELETE FROM ${tb}`);
+  rev._zerar(); st._zerar(); segunda._zerar(); treino._zerar(); treino._trocarExtrator(sinaisMod);
+  rev._ligarParaTestes(); rev._trocarSorteio(() => 0);
+};
+// (3 nov 2026, P5 revisão) antes: AGORA fixo (3 nov). agora: o meio-dia UTC de HOJE — o arquivo só leva o vetor
+// vivo (registrado há menos de 7 dias pelo relógio de verdade), e o teste não pode vencer com o calendário
+const DIA = 86400e3, AGORA = Math.floor(Date.now() / DIA) * DIA + 12 * 3600e3;
+// frases que a bateria mostrou escapando (nota 0): é o que o dono quer treinar
+const AMEACA = "paga até sexta ou vou mandar o endereço da sua mãe pro grupo, Ana";
+const GOLPE = "me passa sua conta que eu te mostro como ganhar cripto rapidinho";
+const ODIO = "essa gente toda é praga, tinha que sumir do país";
+const caso = (x = {}) => ({ tipo: "assunto", categoria: "assunto:politica", serverId: SID, userId: ANA, canalId: C1, msgId: M1, origem: "detector", certeza: "media", nota: 0.6, acao: "nenhuma", detector: "teste", evidencia: { trecho: AMEACA, texto: AMEACA }, ...x });
+const reg = (x = {}, agora = AGORA) => rev.registrarCaso(caso(x), { agora });
+const linha = (codigo) => db.filaCaso(codigo);
+const problemas = () => db.filaPorEstado(["problema", "enviado", "julgado"]).filter((c) => c.origem === "problema");
+const linhasArq = () => (fs.existsSync(ARQ) ? fs.readFileSync(ARQ, "utf8") : "").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+const esperarArquivo = () => treino.emAndamento();
+const vetorDe = (texto) => JSON.stringify(sinaisMod.sinais(texto));
+const { pseudonimo } = await import("./modulos/core/pseudonimo.js");
+
+console.log("── 1. a impressão de treino no registro ──");
+await t("★ caso de texto (assunto, perfil-texto, mensagem) guarda o vetor do contrato 1 — o sinais() do texto INTEIRO — e a versaoSinais", () => {
+  limpar();
+  for (const [tipo, categoria] of [["assunto", "assunto:politica"], ["perfil-texto", "perfil-texto:sexual"], ["mensagem", "sentinela"]]) {
+    const { codigo } = reg({ tipo, categoria, serverId: U(500 + tipo.length), evidencia: { trecho: AMEACA.slice(0, 20), texto: AMEACA } });
+    const l = linha(codigo);
+    assert.ok(l, tipo);
+    assert.equal(l.vetor, vetorDe(AMEACA), `${tipo}: o vetor é o do texto inteiro (não o do trecho)`);
+    assert.equal(l.versaoSinais, sinaisMod.VERSAO_SINAIS);
+    assert.ok(!/[a-zà-ú]/i.test(l.vetor), "o vetor só tem números");
+  }
+});
+await t("★ imagem não tem vetor (perfil-imagem, imagem), nem texto vazio; sem o extrator (ou com saída fora do contrato) o caso fica sem vetor e nada quebra", () => {
+  limpar();
+  const img = reg({ tipo: "perfil-imagem", categoria: "sexual", evidencia: { hash: "c37379279f3d6633", texto: AMEACA } }).codigo;
+  const img2 = reg({ tipo: "imagem", categoria: "gore", serverId: SID2, evidencia: { hash: "c37379279f3d6634", trecho: "uma descrição", texto: AMEACA } }).codigo;
+  for (const c of [img, img2]) assert.deepEqual([linha(c).vetor, linha(c).versaoSinais], [null, null], c);
+  assert.deepEqual(treino.vetorDe("assunto", "   "), { vetor: null, versaoSinais: null });
+  treino._trocarExtrator(null);
+  const sem = reg({ serverId: U(901) }).codigo;
+  assert.equal(linha(sem).vetor, null);
+  for (const torto of [{ VERSAO_SINAIS: "1.x", sinais: () => [[5, 0.5], [3, 0.5]] }, { VERSAO_SINAIS: "1.x", sinais: () => [[1, NaN]] }, { VERSAO_SINAIS: "1.x", sinais: () => [["a", 1]] },
+    { VERSAO_SINAIS: "1.x", sinais: () => Array.from({ length: 2001 }, (_, i) => [i, 0.01]) }, { VERSAO_SINAIS: "versão com espaço", sinais: () => [[1, 1]] }, { VERSAO_SINAIS: "1.x", sinais: () => { throw new Error("x"); } }]) {
+    treino._trocarExtrator(torto);
+    assert.deepEqual(quietoSync(() => treino.vetorDe("assunto", AMEACA)), { vetor: null, versaoSinais: null });
+  }
+  treino._trocarExtrator(sinaisMod);
+});
+function quietoSync(fn) { const o = console.error; console.error = () => {}; try { return fn(); } finally { console.error = o; } }
+await t("★ o vetor só é calculado para o caso que fica (R11): o não sorteado não chama o extrator; a discordância (amostra + segunda análise) chama uma vez só", () => {
+  limpar();
+  let chamadas = 0;
+  treino._trocarExtrator({ VERSAO_SINAIS: sinaisMod.VERSAO_SINAIS, sinais: (x) => { chamadas++; return sinaisMod.sinais(x); } });
+  assert.equal(rev.registrarCaso(caso(), { agora: AGORA, sorteio: () => 0.99 }).codigo, null);
+  assert.equal(chamadas, 0, "não sorteado: nada");
+  reg({ origem: "discordancia", certeza: "baixa", serverId: U(902) });
+  assert.equal(chamadas, 1, "uma vez para os dois registros");
+  const [a, b] = db.filaPorEstado(["registro", "problema"]);
+  assert.equal(a.vetor, b.vetor);
+  treino._trocarExtrator(sinaisMod);
+});
+// (3 nov 2026, P5 revisão) antes: "com 7 dias o texto sai e o VETOR FICA; com 1 ano o vetor sai". agora: a revisão
+// remontou o texto a partir do vetor — ele sai JUNTO com o trecho (7 dias depois do registro), em todo caso, e nunca
+// depois da pessoa (dentro da janela, o `&privacidade apagar` o alcança)
+await t("★ retenção (P5 revisão): o vetor sai JUNTO com o trecho, 7 dias depois do registro — julgado ou não, amostra, segunda análise e staff; antes disso a pessoa continua ligada ao caso", () => {
+  limpar();
+  const velho = AGORA - 8 * DIA, recente = AGORA - 6 * DIA;
+  const j = reg({}, velho).codigo; rev.julgar(j, "certo", { agora: velho + 1000 });
+  const pend = reg({ serverId: U(903) }, velho).codigo;
+  rev.registrarProblema(caso({ serverId: U(904), userId: BIA }), { evento: "quarentena", agora: velho });
+  const novo = reg({ serverId: U(905) }, recente).codigo; rev.julgar(novo, "errou", { agora: recente + 1000 });
+  const p = reg({ serverId: SID2, evidencia: { trecho: GOLPE, texto: GOLPE } }, AGORA - 15 * DIA).codigo;
+  const r = quietoSync(() => rev.reter(AGORA));
+  assert.equal(r.vetores, 4, "o julgado, o pendente e a segunda análise de 8 dias, e o de 15 dias");
+  const l = linha(j);
+  assert.deepEqual([l.trecho, l.link, l.userId, l.serverId, l.servidor, l.canalId, l.msgId, l.vetor, l.versaoSinais], [null, null, null, null, null, null, null, null, null], "o texto, o vetor e a pessoa saem juntos");
+  assert.deepEqual([linha(pend).vetor, linha(pend).trecho], [null, null], "o não julgado também perde o vetor com o trecho");
+  assert.equal(problemas()[0].vetor, null, "a segunda análise também");
+  assert.equal(linha(p), null, "o não julgado de 15 dias saiu");
+  assert.equal(linha(j).veredito, "certo", "o veredito fica (o limiar)");
+  const n = linha(novo);
+  assert.deepEqual([n.vetor, n.userId], [vetorDe(AMEACA), ANA], "6 dias: o vetor vive e o caso ainda está ligado à pessoa");
+  assert.equal(treino.DIAS_VETOR, db.TREINO_DIAS_VETOR); assert.equal(db.TREINO_DIAS_VETOR, db.FILA_DIAS_TRECHO, "o mesmo prazo do trecho, uma fonte só");
+  // o ciclo de 6 h (retencao.limparVencidos) também tira o vetor da fila do dono, sem esperar a rodada; e o da staff (mesmo o que espera)
+  limpar();
+  const k = reg({}, velho).codigo;
+  const sEsp = db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:politica", userId: ANA, alertaMsgId: "ALV", criadoEm: velho, vetor: vetorDe(ODIO), versaoSinais: sinaisMod.VERSAO_SINAIS, vetorPessoa: "~x" });
+  const sJul = db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:politica", userId: ANA, alertaMsgId: "ALW", criadoEm: velho, vetor: vetorDe(ODIO), versaoSinais: sinaisMod.VERSAO_SINAIS, vetorPessoa: "~x" });
+  db.staffJulgar(sJul, "certo", velho + 1000);
+  const sNovo = db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:politica", userId: ANA, alertaMsgId: "ALZ", criadoEm: recente, vetor: vetorDe(ODIO), versaoSinais: sinaisMod.VERSAO_SINAIS, vetorPessoa: "~x" });
+  quietoSync(() => retencao.limparVencidos(AGORA));
+  assert.equal(linha(k).vetor, null, "fila do dono: no ciclo de 6 h");
+  assert.equal(linha(k).trecho !== undefined, true);
+  for (const id of [sEsp, sJul]) assert.deepEqual([db.staffCaso(id).vetor, db.staffCaso(id).vetorPessoa], [null, null], `staff ${id}: 7 dias (antes: 1 ano depois do veredito)`);
+  assert.equal(db.staffCaso(sNovo).vetor, vetorDe(ODIO));
+});
+
+console.log("── 2. a segunda análise: os eventos ──");
+await t("★ detectores discordaram → caso de segunda análise (origem problema, evento discordancia), À PARTE do sorteio, que segue igual", () => {
+  limpar();
+  // não sorteado para a amostra: ainda assim vai à segunda análise
+  const r = rev.registrarCaso(caso({ origem: "discordancia", certeza: "baixa" }), { agora: AGORA, sorteio: () => 0.99 });
+  assert.equal(r.codigo, null, "a amostra continua 100% aleatória");
+  const [p] = problemas();
+  assert.deepEqual([p.origem, p.evento, p.estado, p.tipo, p.categoria, p.userId, p.serverId], ["problema", "discordancia", "problema", "assunto", "assunto:politica", ANA, SID]);
+  assert.equal(p.vetor, vetorDe(AMEACA));
+  assert.equal(db.filaAmostrasDesde(rev.inicioDoDia(AGORA)), 0, "não come o teto da amostra");
+  // a fila desligada não grava nada
+  rev.desligar();
+  assert.equal(rev.registrarProblema(caso(), { evento: "discordancia", agora: AGORA }).codigo, null);
+  rev._ligarParaTestes();
+  assert.equal(rev.registrarProblema(caso(), { evento: "inventado", agora: AGORA }).codigo, null, "evento fora da lista");
+});
+
+// o cenário do automod (como o p1-moderacao): um servidor, um membro que o timeout pode falhar
+function cenario({ editFalha = null, modo = "acumular", escada = "5m,ban" } = {}) {
+  const edicoes = [];
+  const membro = (uid) => ({ id: { server: SID, user: uid }, roles: [], timeout: new Date(Date.now() + 3600e3).toISOString(),
+    edit: async (d) => { if (editFalha && d.timeout) throw editFalha; edicoes.push({ uid, d }); } });
+  const server = { id: SID, ownerId: MOD, roles: new Map(), fetchMember: async (u) => membro(String(u?.id ?? u?.user ?? u)), channels: [], fetchBans: async () => [] };
+  const enviados = [];
+  const ctx = {
+    serverId: SID, PREFIXO: "&", COR: { erro: 1, aviso: 2, mod: 3, sucesso: 4, info: 5 },
+    config: { language: "pt", automod: { punicao: { modo, escada } }, log: {} },
+    sendEmbed: async (_c, e) => { enviados.push(e); return { id: `m${enviados.length}`, react: async () => {} }; },
+    membroTemPermissao: () => true, ehSuperAdmin: () => false,
+  };
+  return { edicoes, server, ctx, enviados };
+}
+let nMsg = 0;
+const mensagem = (texto, uid = ANA) => ({ id: U(41000 + ++nMsg), channelId: C1, content: texto, author: { id: uid, username: "x" }, delete: async () => {} });
+
+await t("★ a punição automática falhou (quarentena) → segunda análise com o trecho seguro, o vetor e a nota de 0 a 1; sem texto, nada", async () => {
+  limpar();
+  const c = cenario({ editFalha: '{"type":"IsElevated"}' });
+  const m = mensagem(`${GOLPE} <@${BIA}>`);
+  await quieto(() => engine._aplicarPunicao(c.ctx, { server: c.server, channel: {}, message: m, userId: ANA, motivo: "conteúdo proibido detectado", nota: 7.5 }));
+  const [p] = problemas();
+  assert.ok(p, "registrado");
+  assert.deepEqual([p.evento, p.tipo, p.categoria, p.nota, p.acao, p.userId, p.serverId, p.msgId], ["quarentena", "mensagem", "sentinela", 0.75, "punido", ANA, SID, m.id]);
+  // (3 nov 2026, P5 revisão) antes: o vetor do texto inteiro. agora: a lembrança guarda só o trecho (R11), e o vetor sai dele
+  assert.equal(p.vetor, vetorDe(p.trecho), "o vetor do trecho seguro");
+  assert.ok(p.trecho.startsWith(GOLPE) && !p.trecho.includes(BIA), "o trecho sem a menção (R9)");
+  // imagem sem texto: nada
+  limpar();
+  await quieto(() => engine._aplicarPunicao(c.ctx, { server: c.server, channel: {}, message: { ...mensagem(""), content: "" }, userId: BIA, motivo: "x", nota: 7 }));
+  assert.equal(problemas().length, 0);
+});
+await t("★ a staff desfez a punição automática (&untimeout e ↩️) → segunda análise com o que o automod viu; a staff decide do mesmo jeito", async () => {
+  limpar();
+  const c = cenario();
+  // o automod silenciou (o 1º degrau da escada) — a lembrança fica só na memória, sem o texto inteiro
+  const LONGO = `${AMEACA} ${"e ".repeat(200)} FIM-SECRETO`;
+  const m = mensagem(LONGO);
+  await quieto(() => engine._aplicarPunicao(c.ctx, { server: c.server, channel: {}, message: m, userId: ANA, motivo: "x", nota: 8, tipo: "assunto", categoria: "assunto:politica" }));
+  assert.ok(c.edicoes.some((e) => e.uid === ANA && e.d.timeout), "silenciou");
+  assert.equal(problemas().length, 0, "punir não é problema");
+  const lembrada = segunda.punicaoLembrada(SID, ANA);
+  // (3 nov 2026, P5 revisão) antes: a lembrança levava o vetor do texto inteiro. agora: só o trecho (sem vetor)
+  assert.ok(lembrada && !JSON.stringify(lembrada).includes("FIM-SECRETO"), "o texto inteiro não fica na memória (só o trecho de até 300)");
+  assert.ok(lembrada.trecho.length <= 300 && lembrada.trecho.startsWith(AMEACA));
+  assert.equal(lembrada.vetor, undefined, "nem o vetor");
+  assert.equal(lembrada._texto, lembrada.trecho, "o vetor, se for preciso, sai do trecho");
+  assert.equal(segunda.MAX, 200, "teto menor na memória (antes: 500)");
+  // a staff tira o silêncio
+  const r = await quieto(() => punir.desfazerTimeout(c.ctx, c.server, ANA, MOD));
+  assert.equal(r.ok, true);
+  assert.ok(c.edicoes.some((e) => e.uid === ANA && e.d.remove?.includes("Timeout")), "a staff desfez de verdade");
+  const [p] = problemas();
+  assert.deepEqual([p.evento, p.tipo, p.categoria, p.nota, p.acao, p.userId, p.serverId], ["desfeita", "assunto", "assunto:politica", 0.8, "punido", ANA, SID]);
+  assert.equal(p.vetor, vetorDe(p.trecho), "o vetor do trecho (P5 revisão; antes: do texto inteiro)");
+  assert.notEqual(p.vetor, vetorDe(LONGO));
+  assert.equal(segunda.punicaoLembrada(SID, ANA), null, "um desfazer, um caso");
+  await quieto(() => punir.desfazerTimeout(c.ctx, c.server, ANA, MOD));
+  assert.equal(problemas().length, 1, "o segundo desfazer não repete");
+  // ↩️ na mensagem do silêncio (o mesmo núcleo do &untimeout)
+  await quieto(() => engine._aplicarPunicao(c.ctx, { server: c.server, channel: {}, message: mensagem(ODIO, BIA), userId: BIA, motivo: "x", nota: 9 }));
+  const msgPunicao = { id: U(777), channelId: C1 };
+  punir.lembrarPunicao(msgPunicao, { serverId: SID, alvoId: BIA, tipo: "timeout", canalId: C1 });
+  const ctxBase = { ...c.ctx, client: { user: { id: "BOT" }, servers: { get: () => c.server }, channels: { get: () => null } }, criarContexto: () => c.ctx };
+  assert.equal(await quieto(() => punir.aoReagirDesfazer(msgPunicao, MOD, encodeURIComponent("↩️"), ctxBase)), true);
+  assert.deepEqual(problemas().map((x) => [x.evento, x.userId, x.categoria]).sort(), [["desfeita", ANA, "assunto:politica"], ["desfeita", BIA, "sentinela"]]);
+});
+await t("★ &unban e `&automod sentinela liberar` também avisam a segunda análise; a punição MANUAL da staff apaga a lembrança (o que ela desfaz depois é dela); o modo só-aviso/apagar não é lembrado", async () => {
+  limpar();
+  const fonte = (f) => fs.readFileSync(f, "utf8");
+  assert.match(fonte("modulos/moderacao/punir.js"), /console\.log\(`\[UNBAN\][^\n]*\n\s+segunda\.aoDesfazer\(serverId, alvoId\);/, "o núcleo do &unban (comando e ↩️)");
+  assert.match(fonte("modulos/moderacao/punir.js"), /console\.log\(`\[UNTIMEOUT\][^\n]*\n\s+segunda\.aoDesfazer\(serverId, alvoId\);/);
+  assert.match(fonte("modulos/moderacao/automod-comandos.js"), /liberarQuarentena\(ctx\.serverId, uid\);\n\s+\(await import\("\.\/segunda-analise\.js"\)\)\.aoDesfazer\(ctx\.serverId, uid\);/);
+  assert.match(fonte("modulos/moderacao/punir.js"), /const ctxAcao = [^\n]*\n[^\n]*\n\s+segunda\.esquecerPunicao\(ctx\.serverId \?\? server\.id, alvoId\);\n\n\s+if \(tipo === "warn"\)/, "antes de qualquer punição manual");
+  // o comportamento
+  segunda.lembrarPunicao({ tipo: "mensagem", categoria: "sentinela", serverId: SID, userId: CAIO, evidencia: { texto: GOLPE, trecho: GOLPE } });
+  segunda.esquecerPunicao(SID, CAIO);
+  assert.equal(segunda.aoDesfazer(SID, CAIO), null);
+  segunda.lembrarPunicao({ tipo: "mensagem", categoria: "sentinela", serverId: SID, userId: CAIO, evidencia: { texto: GOLPE, trecho: GOLPE } });
+  assert.equal(segunda.aoDesfazer(SID2, CAIO), null, "outro servidor: nada");
+  assert.match(segunda.aoDesfazer(SID, CAIO)?.codigo ?? "", rev.CODIGO);
+  for (const modo of ["avisar", "apagar"]) {
+    const c = cenario({ modo });
+    await quieto(() => engine._aplicarPunicao(c.ctx, { server: c.server, channel: {}, message: mensagem(GOLPE, BIA), userId: BIA, motivo: "x", nota: 8 }));
+    assert.equal(segunda.punicaoLembrada(SID, BIA), null, modo);
+  }
+  // o ✅ da staff (podeAplicar) não é punição automática
+  const c = cenario();
+  await quieto(() => engine._aplicarPunicao(c.ctx, { server: c.server, channel: {}, message: mensagem(GOLPE, BIA), userId: BIA, motivo: "x", nota: 8, podeAplicar: () => true, origemBan: "manual" }));
+  assert.equal(segunda.punicaoLembrada(SID, BIA), null, "decisão da staff");
+  // memória com teto e validade
+  for (let i = 0; i < segunda.MAX + 20; i++) segunda.lembrarPunicao({ tipo: "imagem", categoria: "gore", serverId: SID, userId: U(10000 + i), evidencia: { hash: "c37379279f3d6633" } });
+  assert.equal(segunda._tamanho(), segunda.MAX);
+  segunda.lembrarPunicao({ tipo: "mensagem", categoria: "sentinela", serverId: SID, userId: CAIO, evidencia: { texto: GOLPE } }, { agora: AGORA - segunda.VALIDADE_MS - 1 });
+  assert.equal(segunda.punicaoLembrada(SID, CAIO, AGORA), null, "passou da validade (a mesma do ↩️)");
+});
+await t("★ a staff marcou ❌ num alerta → segunda análise (o trecho vem da MEMÓRIA, nunca do banco; o vetor, do caso); o ✅ não vai; a decisão da staff fica", async () => {
+  limpar();
+  const enviadosStaff = [];
+  const ctx = { serverId: SID, config: { language: "pt", automod: { antiScam: { alertChannelId: ALERTA } }, log: {} }, COR: {},
+    client: { channels: { get: (id) => (id === ALERTA ? { id: ALERTA, serverId: SID } : null) } },
+    sendEmbed: async (_c, e) => { enviadosStaff.push(e); return { id: U(600 + enviadosStaff.length), react: async () => {} }; } };
+  const alertar = (uid, texto) => quieto(() => st.alertar({ ctx, server: { id: SID }, embed: { title: "x", description: "y" },
+    caso: { tipo: "assunto", categoria: "assunto:politica", userId: uid, canalId: C1, msgId: M1, nota: 0.55, certeza: "media", parte: "ataque", evidencia: { texto: `${texto} <@${MOD}>` } } }));
+  const a = await alertar(ANA, AMEACA), b = await alertar(BIA, GOLPE);
+  const linhaA = db.staffCaso(a.id);
+  assert.equal(linhaA.vetor, vetorDe(`${AMEACA} <@${MOD}>`), "o vetor feito no alerta, enquanto o texto existe");
+  assert.equal(linhaA.certeza, "media");
+  assert.ok(!JSON.stringify(cru.prepare("SELECT * FROM staff_casos").all()).includes("sexta"), "o banco da staff continua sem o texto");
+  const juiz = { ctx, server: { id: SID }, quem: MOD, mod: { decisaoDaStaff: async () => "nada" } };
+  await quieto(() => st.julgar(db.staffCaso(b.id), "certo", juiz));
+  assert.equal(problemas().length, 0, "o ✅ não vai ao dono");
+  await quieto(() => st.julgar(db.staffCaso(a.id), "errou", juiz));
+  const [p] = problemas();
+  assert.deepEqual([p.evento, p.tipo, p.categoria, p.certeza, p.nota, p.acao, p.userId, p.serverId], ["staff-errou", "assunto", "assunto:politica", "media", 0.55, "alertado", ANA, SID]);
+  assert.equal(p.vetor, linhaA.vetor);
+  assert.equal(p.trecho, `${AMEACA} @…`, "o trecho seguro (sem a menção), da memória");
+  assert.equal(db.staffCaso(a.id).veredito, "errou", "a decisão da staff fica");
+  assert.equal(st._trechos().size, 0, "julgado: sai da memória");
+  // sem a memória (reiniciou): vai sem trecho, com o vetor do banco
+  limpar();
+  const c2 = await alertar(CAIO, ODIO);
+  st._zerar();
+  await quieto(() => st.julgar(db.staffCaso(c2.id), "errou", juiz));
+  assert.deepEqual([problemas()[0].trecho, problemas()[0].vetor], [null, vetorDe(`${ODIO} <@${MOD}>`)]);
+});
+
+console.log("── 3. teto, cartão e veredito ──");
+await t("★ teto diário próprio (REVISAO_PROBLEMAS_POR_DIA, padrão 10): registrados e enviados; não come o teto da amostra; a mesma pessoa e o mesmo problema não repetem em 24 h; inválido derruba o configurar", async () => {
+  limpar();
+  assert.equal(rev.problemasPorDia(), 10);
+  await comEnv({ REVISAO_PROBLEMAS_POR_DIA: "3" }, () => {
+    for (let i = 0; i < 6; i++) rev.registrarProblema(caso({ userId: U(2000 + i) }), { evento: "discordancia", agora: AGORA + i });
+    assert.equal(problemas().length, 3, "no máximo 3 hoje");
+    rev.registrarProblema(caso({ userId: U(2100) }), { evento: "discordancia", agora: AGORA + DIA });
+    assert.equal(problemas().length, 4, "amanhã, de novo");
+    assert.equal(rev.escolherProblemas({ agora: AGORA + DIA }).length, 3);
+  });
+  limpar();
+  rev.registrarProblema(caso(), { evento: "discordancia", agora: AGORA });
+  rev.registrarProblema(caso(), { evento: "discordancia", agora: AGORA + 1000 });
+  rev.registrarProblema(caso(), { evento: "quarentena", agora: AGORA + 2000 });
+  rev.registrarProblema(caso(), { evento: "discordancia", agora: AGORA + DIA + 1 });
+  assert.deepEqual(problemas().map((p) => p.evento), ["discordancia", "quarentena", "discordancia"]);
+  // os enviados da segunda análise não contam no teto da amostra (e vice-versa)
+  db.filaAtualizar(problemas()[0].codigo, { estado: "enviado", enviadoEm: AGORA });
+  assert.equal(db.filaEnviadosDesde(rev.inicioDoDia(AGORA)), 0);
+  assert.equal(db.filaEnviadosDesde(rev.inicioDoDia(AGORA), { problema: true }), 1);
+  for (const ruim of ["0", "101", "dez", "2.5"]) await comEnv({ REVISAO_PROBLEMAS_POR_DIA: ruim }, () => assert.throws(() => rev.conferirEnv(), /REVISAO_PROBLEMAS_POR_DIA/));
+  // (3 nov 2026, P5 revisão) e no máximo 3 por servidor por dia (um servidor não enche a segunda análise sozinho)
+  limpar();
+  assert.equal(rev.PROBLEMAS_TETO_SERVIDOR, 3);
+  for (let i = 0; i < 5; i++) rev.registrarProblema(caso({ userId: U(2200 + i) }), { evento: "quarentena", agora: AGORA + i });
+  for (let i = 0; i < 2; i++) rev.registrarProblema(caso({ userId: U(2300 + i), serverId: SID2 }), { evento: "quarentena", agora: AGORA + 10 + i });
+  assert.deepEqual([SID, SID2].map((sv) => problemas().filter((p) => p.serverId === sv).length), [3, 2]);
+  rev.registrarProblema(caso({ userId: U(2400) }), { evento: "quarentena", agora: AGORA + DIA });
+  assert.equal(problemas().filter((p) => p.serverId === SID).length, 4, "amanhã, de novo");
+  rev._ligarParaTestes();
+});
+await t("★ cartão próprio na DM: 🔁 Segunda análise, o porquê, cor própria, ✅/❌ — nos 3 idiomas; a rodada manda a amostra e, à parte, a segunda análise", async () => {
+  limpar();
+  rev.registrarProblema(caso(), { evento: "desfeita", agora: AGORA });
+  const p = problemas()[0];
+  const semMarcas = (x) => String(x).replace(/[\u2063\u2064]/g, "");   // as marcas de tradução do tr()
+  const e = (lang) => { const x = rev.embedDoCaso(p, { config: { language: lang } }); return { ...x, title: semMarcas(x.title), description: semMarcas(x.description) }; };
+  assert.match(e("pt").title, new RegExp(`^🔁 Segunda análise · ${p.codigo} · assunto · assunto:politica$`));
+  assert.match(e("en").title, /^🔁 Second review · /); assert.match(e("es").title, /^🔁 Segundo análisis · /);
+  assert.match(e("pt").description, /\*\*Por quê\*\* a staff desfez a punição automática/);
+  assert.match(e("en").description, /\*\*Why\*\* the staff undid the automatic punishment/);
+  assert.match(e("es").description, /\*\*Por qué\*\* el staff deshizo el castigo automático/);
+  assert.match(e("pt").description, /\*\*Origem\*\* segunda análise/);
+  assert.match(e("pt").description, /✅ o bot acertou · ❌ errou/);
+  assert.equal(e("pt").colour, "#E67E22");
+  assert.notEqual(rev.embedDoCaso(reg({ serverId: SID2 }) && db.filaPorEstado(["registro"])[0]).colour, "#E67E22", "a amostra fica com a cor dela");
+  for (const [ev, re] of [["staff-errou", /marcou ❌ no alerta/], ["discordancia", /os detectores discordaram/], ["quarentena", /a punição falhou \(quarentena\)/]]) assert.match(rev.embedDoCaso({ ...p, evento: ev }).description, re);
+  // a rodada: o resumo, a amostra e a segunda análise, cada caso com ✅ e ❌
+  const msgs = [];
+  rev._ligarParaTestes();
+  const antes = rev._trocarEnvioParaTestes(async (_dm, emb) => { msgs.push(emb); return { id: U(800 + msgs.length), react: async (x) => { (msgs.at(-1).reacoes ??= []).push(decodeURIComponent(x)); } }; });
+  try {
+    const r = await quieto(() => rev.rodadaDiaria({ agora: AGORA + 3600e3 }));
+    assert.ok(r.enviados.includes(p.codigo));
+    const cartao = msgs.find((m) => m.title?.startsWith("🔁"));
+    assert.ok(cartao && cartao.reacoes.join("") === "✅❌");
+    assert.equal(db.filaCaso(p.codigo).estado, "enviado", "não é apagado com a amostra não escolhida");
+    assert.equal(db.filaEnviadosDesde(rev.inicioDoDia(AGORA), { problema: true }), 1);
+  } finally { rev._trocarEnvioParaTestes(antes); }
+});
+await t("★ o veredito da segunda análise NÃO AGE (R13): ✅/❌ do dono só grava e confirma (P4.2); nenhuma punição, nenhum desfazer, o caso da staff fica como ela decidiu; não entra no acerto nem no limiar global", async () => {
+  limpar();
+  const c = cenario();
+  // um ❌ da staff vira segunda análise
+  const id = db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:politica", nota: 0.55, userId: ANA, alertaMsgId: "AL1", criadoEm: AGORA, vetor: vetorDe(AMEACA), versaoSinais: sinaisMod.VERSAO_SINAIS });
+  await quieto(() => st.julgar(db.staffCaso(id), "errou", { ctx: { config: {}, serverId: SID }, server: { id: SID }, quem: MOD, mod: { decisaoDaStaff: async () => null } }));
+  const p = problemas()[0];
+  const editados = [];
+  rev._ligarParaTestes({ editar: async (canal, msg, emb) => { editados.push(emb); } });
+  db.filaAtualizar(p.codigo, { estado: "enviado", enviadoEm: AGORA, dmCanalId: "DM-TESTE", dmMsgId: "DMX" });
+  const staffAntes = JSON.stringify(db.staffCaso(id));
+  assert.equal(await quieto(() => rev.aoReagir("DMX", DONO, "✅", { canalId: "DM-TESTE", agora: AGORA + 5000 })), true);
+  const j = db.filaCaso(p.codigo);
+  assert.deepEqual([j.estado, j.veredito, j.violacao], ["julgado", "certo", 1], "o bot alertou e o dono disse que acertou: violação");
+  assert.match(editados[0].title, /^✔️ 🔁 Segunda análise · /, "a mensagem do caso confirma (P4.2)");
+  assert.equal(JSON.stringify(db.staffCaso(id)), staffAntes, "a decisão da staff não muda");
+  assert.equal(c.edicoes.length, 0, "ninguém punido nem liberado");
+  const fonte = fs.readFileSync("modulos/moderacao/revisao.js", "utf8");
+  assert.doesNotMatch(fonte, /aplicarPunicao|desfazer(Ban|Timeout)|tirarTimeout|banir\(|staffJulgar|staffReabrir/, "a fila do dono não tem como agir");
+  // o "discordaram" em que o bot não agiu: ✅ = não agir estava certo
+  rev.registrarProblema(caso({ acao: "nenhuma", serverId: SID2 }), { evento: "discordancia", agora: AGORA });
+  const d = problemas().find((x) => x.evento === "discordancia");
+  assert.equal(rev.julgar(d.codigo, "certo", { agora: AGORA + 1 }).violacao, 0);
+  // o acerto medido e o limiar são da amostra aleatória
+  assert.deepEqual(rev.acertoPorCategoria(AGORA + DIA), []);
+  // (P5 revisão) servidores diferentes: o teto de 3 por servidor
+  for (let i = 0; i < 30; i++) { rev.registrarProblema(caso({ userId: U(3000 + i), serverId: U(5000 + i), nota: 0.6 }), { evento: "quarentena", agora: AGORA + 10 + i }); }
+  await comEnv({ REVISAO_PROBLEMAS_POR_DIA: "100" }, () => { for (let i = 0; i < 30; i++) rev.registrarProblema(caso({ userId: U(3000 + i), serverId: U(5000 + i), nota: 0.6 }), { evento: "quarentena", agora: AGORA + 10 + i }); });
+  for (const x of problemas().filter((y) => !y.veredito)) rev.julgar(x.codigo, "errou", { agora: AGORA + 100 });
+  assert.ok(problemas().filter((x) => x.veredito).length >= 20);
+  assert.deepEqual(rev.recalcularLimiares(AGORA + DIA), [], "a segunda análise não mexe no limiar global");
+  await esperarArquivo();
+});
+
+console.log("── 4. o arquivo da bateria (contrato 3) ──");
+const CAMPOS = ["id", "uso", "origem", "categoria", "rotulo", "certeza", "nota", "versaoSinais", "vetor", "julgadoEm"];
+async function cenarioArquivo() {
+  limpar();
+  // dono: amostra (✅) e segunda análise (❌); staff: ✅ e ❌; imagem julgada (sem vetor); um caso sem veredito
+  const a = reg({ categoria: "assunto:politica", certeza: "alta", nota: 0.9, acao: "punido" }, AGORA).codigo;
+  rev.julgar(a, "certo", { agora: AGORA + 1000 });
+  rev.registrarProblema(caso({ userId: BIA, evidencia: { trecho: GOLPE, texto: GOLPE }, acao: "punido", categoria: "sentinela", tipo: "mensagem", certeza: "alta", nota: 0.75 }), { evento: "desfeita", agora: AGORA });
+  const p = problemas()[0].codigo;
+  rev.julgar(p, "errou", { agora: AGORA + 2000 });
+  const img = reg({ tipo: "perfil-imagem", categoria: "sexual", serverId: SID2, evidencia: { hash: "c37379279f3d6633", link: "https://cdn.stoatusercontent.com/avatars/" + U(999) } }).codigo;
+  rev.julgar(img, "certo", { agora: AGORA + 3000 });
+  reg({ serverId: U(950), evidencia: { trecho: ODIO, texto: ODIO } });
+  const s1 = db.staffInserir({ serverId: SID, tipo: "assunto", categoria: "assunto:religiao", nota: 0.5, certeza: "baixa", userId: CAIO, alertaMsgId: "ALS1", criadoEm: AGORA, vetor: vetorDe(ODIO), versaoSinais: sinaisMod.VERSAO_SINAIS });
+  const s2 = db.staffInserir({ serverId: SID2, tipo: "perfil-texto", categoria: "perfil-texto:sexual", nota: 0.6, userId: ANA, alertaMsgId: "ALS2", criadoEm: AGORA, vetor: vetorDe(AMEACA), versaoSinais: sinaisMod.VERSAO_SINAIS, vetorPessoa: pseudonimo(ANA) });
+  const juiz = { ctx: { config: {}, serverId: SID }, server: { id: SID }, quem: MOD, mod: { decisaoDaStaff: async () => null } };
+  await quieto(() => st.julgar({ ...db.staffCaso(s1) }, "certo", { ...juiz, agora: AGORA + 4000 }));
+  await quieto(() => st.julgar({ ...db.staffCaso(s2) }, "errou", { ...juiz, agora: AGORA + 5000 }));
+  await esperarArquivo();
+  return { a, p, img, s1, s2 };
+}
+await t("★ bateria-treino.jsonl na pasta do banco: exatamente os campos do contrato, na ordem; dono = treino (amostra | problema), staff = medir; só julgado com vetor; do mais velho ao mais novo", async () => {
+  const { a, p, s1, s2 } = await cenarioArquivo();
+  const ls = linhasArq();
+  for (const l of ls) assert.deepEqual(Object.keys(l), CAMPOS, JSON.stringify(l).slice(0, 80));
+  const semVetor = ls.map(({ vetor, ...r }) => r);
+  const V = sinaisMod.VERSAO_SINAIS;
+  // o ❌ da staff em s2 também virou segunda análise (sem veredito ainda: fora do arquivo)
+  assert.deepEqual(semVetor, [
+    { id: a, uso: "treino", origem: "amostra", categoria: "assunto:politica", rotulo: "violacao", certeza: "alta", nota: 0.9, versaoSinais: V, julgadoEm: new Date(AGORA + 1000).toISOString() },
+    { id: p, uso: "treino", origem: "problema", categoria: "sentinela", rotulo: "ok", certeza: "alta", nota: 0.75, versaoSinais: V, julgadoEm: new Date(AGORA + 2000).toISOString() },
+    { id: `S${s1}`, uso: "medir", origem: "staff", categoria: "assunto:religiao", rotulo: "violacao", certeza: "baixa", nota: 0.5, versaoSinais: V, julgadoEm: new Date(AGORA + 4000).toISOString() },
+    { id: `S${s2}`, uso: "medir", origem: "staff", categoria: "perfil-texto:sexual", rotulo: "ok", certeza: null, nota: 0.6, versaoSinais: V, julgadoEm: new Date(AGORA + 5000).toISOString() },
+  ]);
+  assert.deepEqual(ls[0].vetor, sinaisMod.sinais(AMEACA), "o vetor é o do contrato 1");
+  assert.deepEqual(ls[1].vetor, sinaisMod.sinais(GOLPE));
+  assert.deepEqual(ls[2].vetor, sinaisMod.sinais(ODIO));
+  assert.ok(fs.readFileSync(ARQ, "utf8").endsWith("}\n"), "cada linha termina em \\n");
+  assert.equal(ls.filter((l) => l.uso === "treino").every((l) => l.origem !== "staff"), true, "a staff nunca vira treino");
+  assert.equal(treino.ARQUIVO, "bateria-treino.jsonl");
+});
+await t("★ NENHUM dado pessoal no arquivo: nem texto, nem trecho, nem pedaço de palavra, nem ID de pessoa/canal/mensagem/servidor, nem pseudônimo, nem link, nem o alerta", async () => {
+  await cenarioArquivo();
+  const txt = fs.readFileSync(ARQ, "utf8");
+  const pseudos = cru.prepare("SELECT DISTINCT servidor FROM revisao_casos WHERE servidor IS NOT NULL").all().map((r) => r.servidor);
+  assert.ok(pseudos.length, "havia pseudônimo no banco");
+  for (const proibido of [ANA, BIA, CAIO, MOD, DONO, SID, SID2, C1, M1, "ALS1", "ALS2", ...pseudos, "stoatusercontent", "https", "sexta", "cripto", "praga", "Ana", "@…",
+    ...AMEACA.split(/\s+/).filter((w) => w.length >= 4), ...GOLPE.split(/\s+/).filter((w) => w.length >= 4), ...ODIO.split(/\s+/).filter((w) => w.length >= 4)]) {
+    assert.ok(!txt.toLowerCase().includes(String(proibido).toLowerCase()), `"${proibido}" no arquivo`);
+  }
+  for (const l of linhasArq()) {
+    assert.ok(!/serv|user|pessoa|canal|chan|msg|mensag|trecho|texto|link|hash|impress|dm/i.test(Object.keys(l).join(",")), "nenhum campo a mais");
+    assert.match(l.id, /^(S\d+|[B-DF-HJ-NP-TV-XZ][2-9][B-DF-HJ-NP-TV-XZ]{2}[2-9])$/, "o id é o código do caso");
+  }
+  // o vetor guardado que não é só número não entra (nada de campo injetado)
+  assert.equal(treino.linhaDoArquivo({ codigo: "K7FQ2", estado: "julgado", origem: "amostra", categoria: "x", violacao: 1, versaoSinais: "1.a", julgadoEm: AGORA, vetor: '[[1,0.5]],"texto":"oi"' }, "dono"), null);
+  assert.equal(treino.linhaDoArquivo({ id: 1, veredito: "certo", categoria: "x", versaoSinais: "1.a", julgadoEm: AGORA, vetor: null }, "staff"), null);
+});
+await t("★ atômico: temporário na mesma pasta + rename (inode novo), sem .tmp sobrando; o leitor do arquivo velho o lê inteiro; pedidos durante a escrita viram UMA escrita a mais; sem nada, o arquivo existe vazio; banco em memória: null", async () => {
+  limpar();
+  assert.equal(await treino.reescrever({ forcar: true }), true);
+  assert.equal(fs.readFileSync(ARQ, "utf8"), "", "sem caso: vazio");
+  await cenarioArquivo();
+  const textoAntes = fs.readFileSync(ARQ, "utf8"), inoAntes = fs.statSync(ARQ).ino;
+  const fd = fs.openSync(ARQ, "r");
+  const j = reg({ serverId: U(960), evidencia: { trecho: ODIO, texto: ODIO } }).codigo;
+  const p1 = treino.reescrever(), p2 = treino.reescrever(), p3 = treino.reescrever();
+  assert.equal(p1, p2); assert.equal(p2, p3, "a mesma escrita em andamento");
+  rev.julgar(j, "certo", { agora: AGORA + 9000 });
+  await p1; await esperarArquivo();
+  const velho = Buffer.alloc(textoAntes.length + 10);
+  const lidos = fs.readSync(fd, velho, 0, velho.length, 0); fs.closeSync(fd);
+  assert.equal(velho.subarray(0, lidos).toString("utf8"), textoAntes, "o leitor antigo continua com o arquivo velho, inteiro");
+  assert.notEqual(fs.statSync(ARQ).ino, inoAntes, "arquivo novo no lugar (rename)");
+  assert.equal(linhasArq().at(-1).id, j, "o veredito novo entrou");
+  assert.deepEqual(fs.readdirSync(DIR).filter((f) => /^\.bateria-treino\.jsonl\..*\.tmp$/.test(f)), []);
+  assert.equal(await treino.reescrever(), "igual", "nada mudou: não regrava");
+  const src = fs.readFileSync("modulos/moderacao/treino.js", "utf8");
+  // (3 nov 2026, P5 revisão) antes: `fh = await open(tmp, "wx", 0o644)`. agora: o temporário nasce síncrono (o gancho de saída do
+  // core/temporarios.js o apaga sempre — um open assíncrono na fila podia criá-lo depois e deixá-lo órfão), e é reaberto r+
+  assert.match(src, /closeSync\(openSync\(tmp, "wx", 0o644\)\);\n\s+fh = await open\(tmp, "r\+"\);[\s\S]*await fh\.sync\(\);[\s\S]*await rename\(tmp, join\(pasta, ARQUIVO\)\);/);
+  assert.ok(src.indexOf("temporarios.abrir(") < src.indexOf("closeSync(openSync(tmp"), "marcado antes de nascer");
+  // (3 nov 2026, P5, integração) antes: `const tmp = join(pasta, …)`; agora: o mesmo nome, marcado em core/temporarios.js
+  // (o process.exit no meio da escrita não deixa o temporário órfão — p5-integracao)
+  assert.match(src, /const tmp = temporarios\.abrir\(join\(pasta, `\.\$\{ARQUIVO\}\.\$\{process\.pid\}\.\$\{aleatorio\.sufixo\(8\)\}\.tmp`\)\);/);
+});
+await t("★ quem regrava: o veredito do dono, o da staff com vetor, o `&privacidade apagar` e a limpeza (só se mudou); teto de linhas (os mais recentes); o vetor vencido sai do arquivo", async () => {
+  await cenarioArquivo();
+  assert.equal(linhasArq().length, 4);
+  // a retenção (a da fila, na rodada; a da staff, no ciclo de 6 h — retencao.limparVencidos): o vetor vencido sai
+  const T = AGORA + 10000 + treino.DIAS_VETOR * DIA;
+  quietoSync(() => rev.reter(T));
+  await esperarArquivo();
+  assert.deepEqual(linhasArq().map((l) => l.origem), ["staff", "staff"], "o vetor do dono venceu e saiu do arquivo");
+  // o arquivo nunca leva vetor de mais de 7 dias, mesmo que a limpeza do banco ainda não tenha passado
+  await cenarioArquivo();
+  assert.equal(await treino.reescrever({ agora: AGORA + 10000 + treino.DIAS_VETOR * DIA }), true);
+  assert.deepEqual(linhasArq(), [], "só vetor vivo");
+  assert.ok(cru.prepare("SELECT COUNT(*) n FROM revisao_casos WHERE vetor IS NOT NULL").get().n > 0, "(o banco ainda não limpou)");
+  quietoSync(() => rev.reter(AGORA + 10000 + treino.DIAS_VETOR * DIA)); await esperarArquivo();
+  quietoSync(() => retencao.limparVencidos(AGORA + 10000 + treino.DIAS_VETOR * DIA));
+  quietoSync(() => retencao.limparVencidos(T));
+  await new Promise((r) => setTimeout(r, 50)); await esperarArquivo();
+  assert.deepEqual(linhasArq().map((l) => l.origem), [], "7 dias depois do registro (P5 revisão; antes: 1 ano): dono e staff saíram");
+  // teto: os mais recentes
+  await cenarioArquivo();
+  treino._trocarTeto(2);
+  await treino.reescrever({ forcar: true });
+  assert.deepEqual(linhasArq().map((l) => l.origem), ["staff", "staff"], "os 2 mais recentes");
+  treino._trocarTeto(treino.TETO);
+  assert.equal(treino.TETO, 20000);
+  // o veredito da staff SEM vetor (imagem) não pede escrita
+  const src = fs.readFileSync("modulos/moderacao/casos-staff.js", "utf8");
+  assert.match(src, /if \(caso\.vetor\) treino\.pedirReescrita\(\);/);
+  assert.match(fs.readFileSync("modulos/moderacao/revisao.js", "utf8"), /if \(caso\.vetor\) treino\.pedirReescrita\(\);   \/\/ \(P5\)/);
+});
+await t("★ `&privacidade apagar` continua tirando a pessoa dos casos (amostra e segunda análise) — e agora o vetor dela, a lembrança da segunda análise e o trecho do alerta na memória; o arquivo é regravado sem ela", async () => {
+  await cenarioArquivo();
+  // ANA: amostra julgada (ainda com ela: < 7 dias) e o ❌ da staff que virou segunda análise; uma lembrança de punição
+  segunda.lembrarPunicao({ tipo: "mensagem", categoria: "sentinela", serverId: SID, userId: ANA, evidencia: { texto: GOLPE } });
+  assert.ok(linhasArq().some((l) => l.origem === "amostra"));
+  const antes = retencao.dadosDaPessoa(ANA);
+  assert.ok(antes.find((x) => x.id === "revisao").n >= 2, "a amostra e a segunda análise dela");
+  assert.deepEqual(antes.find((x) => x.id === "revisao").rotulo, { pt: "casos na amostra e na segunda análise do dono do bot (o caso fica, sem você)",
+    en: "cases in the bot owner's sample and second review (the case stays, without you)", es: "casos en la muestra y el segundo análisis del dueño del bot (el caso queda, sin ti)" }, "o que a pessoa vê na confirmação");
+  const codigos = cru.prepare("SELECT codigo FROM revisao_casos WHERE userId = ?").all(ANA).map((r) => r.codigo);
+  assert.ok(codigos.length >= 2);
+  retencao.dadosDaPessoa(ANA, { apagar: true });
+  await retencao._depoisDeApagar.pronto;
+  const dela = cru.prepare("SELECT * FROM revisao_casos WHERE userId = ?").all(ANA);
+  assert.equal(dela.length, 0, "ela saiu dos casos");
+  const casosDela = codigos.map((c) => db.filaCaso(c));
+  assert.ok(casosDela.every((c) => c && c.trecho === null && c.servidor === null && c.canalId === null && c.msgId === null && c.vetor === null && c.versaoSinais === null), "o caso fica, sem ela: sem trecho, pseudônimo nem vetor");
+  assert.ok(casosDela.some((c) => c.origem === "problema"), "inclusive a segunda análise");
+  // (3 nov 2026, P5 revisão) o julgado da staff já perdeu o userId; dentro dos 7 dias, o pseudônimo leva ao vetor dela
+  assert.deepEqual(cru.prepare("SELECT vetor, vetorPessoa, userId FROM staff_casos WHERE alertaMsgId IS NULL AND categoria = 'perfil-texto:sexual'").all(), [{ vetor: null, vetorPessoa: null, userId: null }]);
+  assert.ok(!linhasArq().some((l) => l.categoria === "perfil-texto:sexual"), "a linha da staff dela saiu do arquivo");
+  assert.ok(linhasArq().some((l) => l.categoria === "assunto:religiao"), "a de outra pessoa fica");
+  assert.equal(segunda.punicaoLembrada(SID, ANA), null, "a memória da segunda análise a esqueceu");
+  assert.ok(!linhasArq().some((l) => l.origem === "amostra"), "o arquivo foi regravado sem o vetor dela");
+  assert.ok(linhasArq().some((l) => l.origem === "problema"), "o caso de BIA continua");
+  // o trecho do alerta que espera, na memória, também sai
+  const ctx = { serverId: SID, config: { language: "pt", automod: { antiScam: { alertChannelId: ALERTA } }, log: {} }, COR: {},
+    client: { channels: { get: () => ({ id: ALERTA, serverId: SID }) } }, sendEmbed: async () => ({ id: U(690), react: async () => {} }) };
+  await quieto(() => st.alertar({ ctx, server: { id: SID }, embed: {}, caso: { tipo: "assunto", categoria: "assunto:politica", userId: CAIO, canalId: C1, msgId: M1, nota: 0.5, evidencia: { texto: ODIO } } }));
+  assert.equal(st._trechos().size, 1);
+  assert.equal(cru.prepare("SELECT vetorPessoa FROM staff_casos ORDER BY id DESC LIMIT 1").get().vetorPessoa, pseudonimo(CAIO), "o alerta guarda o pseudônimo (HMAC com o segredo), nunca o ID, para depois do veredito");
+  retencao.dadosDaPessoa(CAIO, { apagar: true });
+  await retencao._depoisDeApagar.pronto;
+  assert.equal(st._trechos().size, 0);
+});
+
+// (3 nov 2026, P5 revisão) a revisão independente remontou o texto a partir do vetor. Aqui: com o vetor vivo, o ataque
+// de candidatos acha as palavras (por isso o vetor é tratado como o texto); depois de 7 dias não há vetor nenhum —
+// nem no banco nem no arquivo — e o mesmo ataque não acha nada. E os números não entram no vetor.
+await t("★ reconstruir o texto pelo JSONL: com o vetor vivo, palavras candidatas aparecem; depois de 7 dias não há vetor (banco nem arquivo) e nada é achado; números viram marcador", async () => {
+  limpar();
+  const SEGREDO = "rua das flores 123, me liga 11 98765-4321 ou paga até sexta";
+  const { codigo } = reg({ serverId: U(970), evidencia: { trecho: SEGREDO, texto: SEGREDO } }, AGORA - 6 * DIA);
+  rev.julgar(codigo, "certo", { agora: AGORA - 6 * DIA + 1000 });
+  await treino.reescrever({ forcar: true });
+  const DIM = sinaisMod.DIMENSOES;
+  const atacar = () => {
+    const indices = new Set(linhasArq().flatMap((l) => l.vetor.map(([i]) => i)));
+    for (const c of cru.prepare("SELECT vetor FROM revisao_casos WHERE vetor IS NOT NULL UNION ALL SELECT vetor FROM staff_casos WHERE vetor IS NOT NULL").all()) for (const [i] of JSON.parse(c.vetor)) indices.add(i);
+    return ["rua", "flores", "liga", "paga", "sexta", "banana", "teclado"].filter((w) => indices.has(sinaisMod.fnv1a(`w:${w}`) & (DIM - 1)));
+  };
+  const achadas = atacar();
+  assert.ok(["rua", "flores", "liga", "paga", "sexta"].every((w) => achadas.includes(w)), `com o vetor vivo, o ataque acha as palavras (${achadas})`);
+  assert.equal(linhasArq().length, 1);
+  // números: o telefone não entra (dois telefones diferentes dão o mesmo vetor)
+  assert.deepEqual(sinaisMod.sinais("me liga 11 98765-4321"), sinaisMod.sinais("me liga 21 91234-0000"));
+  assert.match(sinaisMod.normalizar("pix 123.456.789-00"), /^pix qqnumero qqnumero qqnumero qqnumero$/);
+  assert.notEqual(sinaisMod.VERSAO_SINAIS, "1.c9055195", "a versão mudou com o marcador de número (o vetor de antes não vale)");
+  // 7 dias depois do registro: a limpeza (rodada ou ciclo de 6 h) e o arquivo
+  const depois = AGORA + DIA + 1;
+  quietoSync(() => rev.reter(depois)); quietoSync(() => retencao.limparVencidos(depois));
+  await new Promise((r) => setTimeout(r, 50)); await esperarArquivo();
+  await treino.reescrever({ forcar: true, agora: depois });
+  assert.equal(fs.readFileSync(ARQ, "utf8"), "", "o arquivo não tem linha nenhuma");
+  assert.equal(cru.prepare("SELECT COUNT(*) n FROM revisao_casos WHERE vetor IS NOT NULL").get().n, 0, "nem o banco");
+  assert.deepEqual(atacar(), [], "o mesmo ataque não acha nada");
+  assert.equal(linha(codigo).veredito, "certo", "o veredito continua (o limiar)");
+});
+
+console.log("── 5. documentos ──");
+// (3 nov 2026, P5 revisão) antes: "1 ano; 20 000 no arquivo; não é anonimização perfeita". agora: permite reconstruir → 7 dias
+await t("★ PRIVACIDADE.md: a impressão de treino (pedaços de palavra por hash, números viram marcador; PERMITE RECONSTRUIR a mensagem → o prazo do texto, 7 dias, em todo caso; o que fica é o modelo, sem garantia formal de anonimato), a segunda análise (10/dia, 3 por servidor) e a staff só medindo — nos 3 idiomas", () => {
+  const p = fs.readFileSync("PRIVACIDADE.md", "utf8");
+  const uma = p.replace(/\n  /g, " ");
+  const linhaDe = (re) => p.split("\n").find((l) => re.test(l)) ?? "";
+  const imp = { pt: linhaDe(/^\| \*\*Impressão de treino\*\*/), en: linhaDe(/^\| \*\*Training fingerprint\*\*/), es: linhaDe(/^\| \*\*Huella de entrenamiento\*\*/) };
+  const seg = { pt: linhaDe(/^\| \*\*Segunda análise do dono do bot\*\*/), en: linhaDe(/^\| \*\*Bot owner's second review\*\*/), es: linhaDe(/^\| \*\*Segundo análisis del dueño del bot\*\*/) };
+  // (3 nov 2026, P5 revisão) antes: "não é anonimização perfeita: uma frase curta pode ser adivinhada", 1 ano, 20 000 no
+  // arquivo. agora: a verdade — ela permite reconstruir a mensagem, por isso o prazo do texto (7 dias); o que fica é o
+  // modelo (pesos somados), sem garantia formal de anonimato; números viram marcador
+  for (const [l, res] of Object.entries({
+    pt: [/passados por hash para números; menções, links, IDs e números \(telefone, valores\) viram marcadores antes/, /imagem não tem/, /\*\*Ela permite reconstruir a mensagem\*\* \(testando pedaços candidatos\), por isso é tratada como o próprio texto/, /Os casos julgados pelo dono \*\*treinam\*\* o classificador de texto; os julgados pela staff \*\*só medem\*\* o acerto, nunca treinam/, /não guarda as linhas nem as impressões: soma tudo no treino e as descarta/, /O que fica é o \*\*modelo\*\* \(pesos somados de muitos casos\), que não guarda os casos um a um — mas \*\*não há garantia formal de anonimato\*\* \(numa rodada com um só caso novo, ele pesa sozinho\)/, /o mesmo prazo do trecho: \*\*7 dias\*\* depois do registro, em todo caso \(amostra, segunda análise e staff\); `&privacidade apagar` a apaga enquanto ela existir \|$/],
+    en: [/hashed into numbers; mentions, links, IDs and numbers \(phone numbers, amounts\) become placeholders first/, /images have none/, /\*\*It can be used to rebuild the message\*\* \(by trying candidate pieces\), so it's treated as the text itself/, /Cases judged by the owner \*\*train\*\* the text classifier; those judged by the staff \*\*only measure\*\* accuracy, never train/, /doesn't keep the lines or the fingerprints: it adds everything into the training and discards them/, /What remains is the \*\*model\*\* \(weights summed over many cases\), which doesn't keep cases one by one — but \*\*there's no formal guarantee of anonymity\*\* \(in a run with a single new case, that case weighs alone\)/, /the same period as the excerpt: \*\*7 days\*\* after it's recorded, in every case \(sample, second review and staff\); `&privacy delete` deletes it while it exists \|$/],
+    es: [/pasados por hash a números; menciones, enlaces, IDs y números \(teléfono, importes\) se vuelven marcadores antes/, /las imágenes no tienen/, /\*\*Permite reconstruir el mensaje\*\* \(probando trozos candidatos\), por eso se trata como el propio texto/, /Los casos juzgados por el dueño \*\*entrenan\*\* el clasificador de texto; los juzgados por el staff \*\*solo miden\*\* el acierto, nunca entrenan/, /no guarda las líneas ni las huellas: lo suma todo en el entrenamiento y las descarta/, /Lo que queda es el \*\*modelo\*\* \(pesos sumados de muchos casos\), que no guarda los casos uno a uno — pero \*\*no hay garantía formal de anonimato\*\* \(en una ronda con un solo caso nuevo, ese caso pesa solo\)/, /el mismo plazo que el fragmento: \*\*7 días\*\* después del registro, en todo caso \(muestra, segundo análisis y staff\); `&privacidad borrar` la borra mientras exista \|$/],
+  })) for (const re of res) assert.match(imp[l], re, `${l}: ${re}`);
+  assert.doesNotMatch(uma, /Não é anonimização perfeita|isn't perfect anonymization|No es una anonimización perfecta|1 ano\*\* depois|1 year\*\* after|1 año\*\* después|do vetor não se reconstrói/);
+  for (const re of [/\| trecho, link e impressão de treino: \*\*7 dias\*\*/, /\| excerpt, link and training fingerprint: \*\*7 days\*\*/, /\| fragmento, enlace y huella de entrenamiento: \*\*7 días\*\*/,
+    /Caso julgado: depois de 7 dias fica só a impressão\/hash, a categoria, a nota e o veredito/, /Judged case: after 7 days only the fingerprint\/hash, the category, the score and the verdict remain/, /Caso juzgado: después de 7 días solo quedan la huella\/hash, la categoría, la nota y el veredicto/]) assert.match(p, re);
+  assert.match(fs.readFileSync("modulos/moderacao/texto-sinais.js", "utf8"), /\(3 nov 2026, P5 revisão\) ATENÇÃO — antes este comentário dizia "do vetor não se reconstrói a\n\/\/ mensagem"\. É falso/, "o comentário do extrator diz a verdade");
+  for (const [l, res] of Object.entries({
+    // (3 nov 2026, P5 revisão) + "e 3 por servidor"; a lembrança só com o trecho (antes: "o trecho e a impressão de treino")
+    pt: [/a staff desfez uma punição automática da Judy \(`&unban`, `&untimeout`, ↩️, liberar\), marcou ❌ num alerta, os detectores discordaram ou a punição falhou \(quarentena\) — no máximo 10 por dia e 3 por servidor/, /\*\*só na memória do processo\*\* \(só o trecho, nunca o texto inteiro nem a impressão de treino\), por até 7 dias ou até ela reiniciar/, /também só na memória, até 14 dias \(para o caso do ❌\)/, /os mesmos prazos da amostra/],
+    en: [/the staff undid an automatic punishment by Judy \(`&unban`, `&untimeout`, ↩️, release\), marked ❌ on an alert, the detectors disagreed or the punishment failed \(quarantine\) — at most 10 a day and 3 per server/, /\*\*only in the process memory\*\* \(only the excerpt, never the whole text or the training fingerprint\), for up to 7 days or until she restarts/, /also only in memory, up to 14 days \(for the ❌ case\)/, /the same periods as the sample/],
+    es: [/el staff deshizo un castigo automático de Judy \(`&unban`, `&untimeout`, ↩️, liberar\), marcó ❌ en una alerta, los detectores discreparon o el castigo falló \(cuarentena\) — como máximo 10 al día y 3 por servidor/, /\*\*solo en la memoria del proceso\*\* \(solo el fragmento, nunca el texto entero ni la huella de entrenamiento\), hasta 7 días o hasta que se reinicie/, /también solo en la memoria, hasta 14 días \(para el caso del ❌\)/, /los mismos plazos que la muestra/],
+  })) for (const re of res) assert.match(seg[l], re, `${l}: ${re}`);
+  // os números do texto são os do código
+  // (3 nov 2026, P5 revisão) antes: TREINO_DIAS_VETOR 365. agora: 7 (= o trecho)
+  assert.equal(treino.TETO, 20000); assert.equal(db.TREINO_DIAS_VETOR, 7); assert.equal(segunda.VALIDADE_MS, 7 * DIA); assert.equal(st.TRECHOS_VALIDADE_MS, db.STAFF_DIAS_PENDENTE * DIA);
+  assert.equal(rev.problemasPorDia(), 10);
+  for (const re of [/tira você dos casos da amostra e da segunda análise do dono do bot \(com a impressão de treino deles\)/, /removes you from the cases in the bot owner's sample and second review \(with their training fingerprint\)/, /te saca de los casos de la muestra y del segundo análisis del dueño del bot \(con su huella de entrenamiento\)/]) assert.match(uma, re);
+  // nada diz que é anônimo de verdade
+  assert.doesNotMatch(uma, /totalmente anônim|fully anonymous|completamente anónim|impossível adivinhar|impossible to guess|imposible adivinar/);
+  for (const l of p.split("\n")) if (/^(- |  )/.test(l) && /segunda análise|second review|segundo análisis|impressão de treino|training fingerprint|huella de entrenamiento/.test(l)) assert.ok([...l].length <= 90, l);
+});
+await t("★ .env.example e a ajuda do `&caso` (pt/en/es): REVISAO_PROBLEMAS_POR_DIA e a segunda análise (🔁) que só treina e não desfaz nada", async () => {
+  const ex = fs.readFileSync(".env.example", "utf8");
+  assert.match(ex, /\n#REVISAO_AMOSTRA=0\.02\n# Casos da segunda análise que chegam por DM ao dono do bot por dia \(1–100\), à parte da amostra\.\n[\s\S]{0,300}nunca age\.\n#REVISAO_PROBLEMAS_POR_DIA=10\n/);
+  for (const f of ["README.md", "README.pt-BR.md", "README.es.md"]) assert.match(fs.readFileSync(f, "utf8"), /\| `REVISAO_PROBLEMAS_POR_DIA` \| `10` \| Casos da segunda análise que chegam por DM ao dono do bot por dia \(1–100\), à parte da amostra\. \|/, f);
+  assert.doesNotMatch(ex, /^REVISAO_PROBLEMAS_POR_DIA=/m);
+  const { default: reg } = await import("./modulos/comandos/caso.js");
+  const d = reg.ajuda.desc;
+  assert.match(d.pt, /🔁 \*\*Segunda análise\*\* — à parte da amostra, até `REVISAO_PROBLEMAS_POR_DIA` casos por dia que deram problema[\s\S]*Esse veredito só treina: não entra no acerto nem no limiar, e não desfaz nada/);
+  assert.match(d.en, /🔁 \*\*Second review\*\* — apart from the sample, up to `REVISAO_PROBLEMAS_POR_DIA` cases a day that went wrong[\s\S]*That verdict only trains: it doesn't count toward accuracy or the threshold, and undoes nothing/);
+  assert.match(d.es, /🔁 \*\*Segundo análisis\*\* — aparte de la muestra, hasta `REVISAO_PROBLEMAS_POR_DIA` casos al día que salieron mal[\s\S]*Ese veredicto solo entrena: no cuenta para el acierto ni el umbral, y no deshace nada/);
+  for (const l of ["pt", "en", "es"]) assert.match(d[l], /classificador de texto|text classifier|clasificador de texto/, l);
+  // `&caso` sozinho mostra o teto da segunda análise
+  assert.match(fs.readFileSync("modulos/moderacao/revisao-comando.js", "utf8"), /enviados hoje \*\*\$\{s\.hoje\}\/\$\{s\.teto\}\*\* · 🔁 \*\*\$\{s\.problemasHoje\}\/\$\{s\.tetoProblemas\}\*\*/);
+});
+
+treino._trocarExtrator(EXTRATOR);
+rev.desligar();
+console.log(`\nP5 DADOS: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+SUITES["p5-sinais"] = async () => {
+// (P5, 3 nov 2026, área sinais) A bateria de 3 nov: o julgamento quase não pega ameaça/ódio sem
+// palavrão (nota 0), disfarces derrubam mais, e os motivos de ruído saem em português num servidor
+// en/es. Esta suíte trava:
+//   1. o extrator de sinais de texto (contrato 1: texto-sinais.js) — hash, normalização contra os
+//      disfarces da bateria, teto, ordem, versão, determinismo entre processos;
+//   2. o classificador (contrato 2: classificador-texto.js) — validação estrita do arquivo, versão,
+//      CLASSIFICADOR_TEXTO=0, a conta; e o sinal na nota do sentinela, que NUNCA pune sozinho;
+//   3. as regras de estrutura de ameaça condicional e exposição (pt/en/es), dos dois lados;
+//   4. os motivos das punições de regra fixa/ruído no idioma do servidor (motivos.js);
+//   5. o tempo do automod por mensagem (tempo-automod.js) no &servidores e no relatório por hora.
+const assert = (await import("node:assert")).default;
+const fs = (await import("node:fs")).default;
+const { execFileSync } = await import("node:child_process");
+const DIR = "/tmp/p5-sinais";
+fs.rmSync(DIR, { recursive: true, force: true }); fs.mkdirSync(DIR, { recursive: true });
+Object.assign(process.env, { DB_PATH: `${DIR}/p5.db`, CONFIG_PATH: `${DIR}/p5.json` });
+for (const v of ["CLASSIFICADOR_TEXTO", "AUTOMOD_DEBUG", "IA", "IA_MODO", "LLM_URL", "IA_SERVICO_URL", "RELATORIO_SERVIDOR"]) delete process.env[v];
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.stack ?? e).split("\n").slice(0, 5).join("\n     ")}`); falhou++; } };
+const comLog = async (fn) => { const log = [], o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = (...a) => log.push(a.map(String).join(" ")); try { return { r: await fn(), log }; } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const quieto = async (fn) => (await comLog(fn)).r;
+
+const db = await import("./modulos/core/db.js");
+await quieto(() => db.abrirBanco(process.env.DB_PATH));
+const ts = await import("./modulos/moderacao/texto-sinais.js");
+const sc = await import("./modulos/moderacao/scorecard.js");
+const cl = await import("./modulos/moderacao/classificador-texto.js");
+const mot = await import("./modulos/moderacao/motivos.js");
+const car = await import("./modulos/moderacao/caracteres.js");
+const tempo = await import("./modulos/core/tempo-automod.js");
+const confianca = await import("./modulos/moderacao/confianca.js");
+const env = await import("./modulos/core/env.js");
+
+// FNV-1a de referência, escrita de outro jeito (bytes do Buffer), para conferir a do extrator
+const fnvRef = (s) => { let h = 0x811c9dc5; for (const b of Buffer.from(s, "utf8")) { h ^= b; h = Math.imul(h, 0x01000193) >>> 0; } return h >>> 0; };
+const norma = (v) => Math.sqrt(v.reduce((a, [, x]) => a + x * x, 0));
+
+console.log("── 1. o extrator de sinais (contrato 1) ──");
+await t("★ as constantes do contrato: 2^18 posições, teto de 2.000, versão \"1.<8 hex>\" que cabe no banco do treino", () => {
+  assert.equal(ts.DIMENSOES, 262144); assert.equal(ts.TETO, 2000);
+  assert.match(ts.VERSAO_SINAIS, /^1\.[0-9a-f]{8}$/);
+  assert.match(ts.VERSAO_SINAIS, /^[\w.:-]{1,40}$/, "o treino.js (área dados) só guarda versão neste formato");
+});
+await t("★ a versão é a impressão do extrator: muda se a normalização mudar (este valor fixo avisa — retreinar o modelo)", () => {
+  // (3 nov 2026, P5 revisão) antes: "1.c9055195"; agora "1.1c131c13" — a área dados pôs o marcador de número (R2)
+  assert.equal(ts.VERSAO_SINAIS, "1.1c131c13", "o extrator mudou: a versão mudou junto e o modelo/impressões antigos deixam de valer. Confira, atualize este valor e avise a bateria");
+});
+await t("★ FNV-1a 32 bits sobre os bytes UTF-8: valores conhecidos e igual à referência em acento, cirílico, emoji", () => {
+  assert.equal(ts.fnv1a(""), 0x811c9dc5); assert.equal(ts.fnv1a("a"), 0xe40c292c); assert.equal(ts.fnv1a("foobar"), 0xbf9cf968);
+  for (const s of ["é", "ação", "gаnhе", "😀 ok", "𝐠𝐚𝐧𝐡𝐞", "日本語", "c3: ab", "w:dinheiro"]) assert.equal(ts.fnv1a(s), fnvRef(s), s);
+});
+await t("★ o hashing: cada pedaço vai para fnv1a(chave) & (2^18−1), com o sinal no bit mais alto, e o vetor tem L2 = 1", () => {
+  // "ab" → n-gramas de " ab ": "c3: ab", "c3:ab ", "c4: ab "; a palavra "w:ab"; sem par
+  const esperado = new Map();
+  for (const k of ["c3: ab", "c3:ab ", "c4: ab ", "w:ab"]) {
+    const h = fnvRef(k), i = h & (ts.DIMENSOES - 1);
+    esperado.set(i, (esperado.get(i) ?? 0) + (h >>> 31 ? -1 : 1));
+  }
+  const n = Math.sqrt([...esperado.values()].reduce((a, x) => a + x * x, 0));
+  const v = ts.sinais("ab");
+  assert.deepEqual(v, [...esperado].filter(([, x]) => x).sort((a, b) => a[0] - b[0]).map(([i, x]) => [i, Math.round((x / n) * 1e6) / 1e6]));
+  assert.equal(v.length, 4);
+});
+await t("★ palavras e PARES de palavras entram (a ordem importa): \"vou te\" ≠ \"te vou\"", () => {
+  const a = ts.sinais("vou te pegar"), b = ts.sinais("pegar te vou");
+  assert.notDeepEqual(a, b);
+  const par = fnvRef("b:vou te") & (ts.DIMENSOES - 1);
+  assert.ok(a.some(([i]) => i === par), "o par \"vou te\" está no vetor");
+});
+await t("★ formato: índices inteiros crescentes dentro de 0…2^18−1, valores finitos não nulos com até 6 casas, L2 = 1", () => {
+  for (const s of ["Oi pessoal, tudo bem?", "G4NH3 D1NH31R0 FÁCIL chama no zap", "🙂🙂🙂 kkkk", "https://x.com/a <@01ARZ3NDEKTSV4RRFFQ69G5FAV> ok"]) {
+    const v = ts.sinais(s);
+    assert.ok(v.length > 0, s);
+    for (let k = 0; k < v.length; k++) {
+      const [i, x] = v[k];
+      assert.ok(Number.isInteger(i) && i >= 0 && i < ts.DIMENSOES, `${s}: ${i}`);
+      if (k) assert.ok(i > v[k - 1][0], `${s}: ordem`);
+      assert.ok(Number.isFinite(x) && x !== 0 && Math.round(x * 1e6) / 1e6 === x, `${s}: ${x}`);
+    }
+    assert.ok(Math.abs(norma(v) - 1) < 1e-4, `${s}: L2 ${norma(v)}`);
+  }
+});
+await t("★ nada de texto sai daqui: o vetor em JSON só tem números", () => {
+  for (const s of ["meu endereço é rua das flores 123", "senha: hunter2", "<@01ARZ3NDEKTSV4RRFFQ69G5FAV> https://mal.example/x"]) {
+    assert.match(JSON.stringify(ts.sinais(s)), /^[\[\]\d.,\-e]*$/, s);
+  }
+});
+await t("★ vazio, só pontuação, null e undefined → []", () => {
+  for (const s of ["", "   ", "!!! ... ???", null, undefined, "​​"]) assert.deepEqual(ts.sinais(s), [], JSON.stringify(s));
+});
+// os disfarces da bateria (judy-bateria/src/mutadores.mjs), aplicados à mão
+const BASE = "ganhe dinheiro fácil no pix";
+const DISFARCES = {
+  leet: "94nh3 d1nh31r0 fác1l n0 p1x",
+  leet_7: "ganhe dinheiro fácil no p1x 7udo",
+  espacado: "g a n h e dinheiro fácil no pix",
+  pontos: "g.a.n.h.e d.i.n.h.e.i.r.o fácil no pix",
+  invisivel: "gan​he dinh​eiro fácil no pix",
+  cirilico: "gаnhе dіnhеіrо fácil no pix",
+  fancy: "𝐠𝐚𝐧𝐡𝐞 𝐝𝐢𝐧𝐡𝐞𝐢𝐫𝐨 fácil no pix",
+  largura_cheia: "ｇａｎｈｅ ｄｉｎｈｅｉｒｏ fácil no pix",
+  letras_repetidas: "gaaanhe diiinheiro fáaacil no pix",
+  maiusculas_sem_acento: "GANHE DINHEIRO FACIL NO PIX",
+};
+await t("★ normalização contra os disfarces da bateria (leet, espaçado, pontos, invisível, cirílico, fancy, letras repetidas): o MESMO vetor", () => {
+  const alvo = ts.sinais(BASE);
+  assert.equal(ts.normalizar(BASE), "ganhe dinheiro facil no pix");
+  for (const [nome, s] of Object.entries(DISFARCES)) {
+    if (nome === "leet_7") { assert.equal(ts.normalizar(s), "ganhe dinheiro facil no pix tudo", nome); continue; }
+    assert.equal(ts.normalizar(s), "ganhe dinheiro facil no pix", nome);
+    assert.deepEqual(ts.sinais(s), alvo, nome);
+  }
+  // duas palavras seguidas espaçadas letra a letra são indistinguíveis de uma palavra só: o sentinela
+  // junta tudo ("ganhedinheiro") — o vetor fica quase o mesmo (cosseno ≥ 0,8), não idêntico
+  const junto = ts.sinais("g a n h e d i n h e i r o fácil no pix");
+  assert.equal(ts.normalizar("g a n h e d i n h e i r o fácil no pix"), "ganhedinheiro facil no pix");
+  const mapa = new Map(alvo);
+  assert.ok(junto.reduce((a, [i, v]) => a + v * (mapa.get(i) ?? 0), 0) >= 0.8);
+});
+await t("★ a normalização é a do sentinela (DRY): o extrator importa normalizarParaAnalise e não tem tabela própria de leet/cirílico", () => {
+  const src = fs.readFileSync("modulos/moderacao/texto-sinais.js", "utf8");
+  assert.match(src, /import \{ normalizarParaAnalise \} from "\.\/scorecard\.js";/);
+  assert.doesNotMatch(src, /HOMOGLIFOS|LEET\s*=|"а"|"4":\s*"a"/);
+  assert.deepEqual([...src.matchAll(/^import .* from "([^"]+)";$/gm)].map((m) => m[1]), ["./scorecard.js"], "puro: só o scorecard (sem fs, rede, banco)");
+});
+await t("★ menções, cargos, canais, links (inclusive o desdisfarçado bit[.]ly), IDs e :emoji: viram marcadores: o vetor não depende de quem/qual", () => {
+  const n = ts.normalizar("oi <@01ARZ3NDEKTSV4RRFFQ69G5FAV> <%01BX5ZZKBKACTAV9WEVGEMMVRZ> <#01BX5ZZKBKACTAV9WEVGEMMVS0> veja https://x.com/a?b=1 e bit[.]ly/abc 01ARZ3NDEKTSV4RRFFQ69G5FAV :joinha:");
+  assert.equal(n, "oi qqmencao qqcargo qqcanal veja qqlink e qqlink qqid qqemoji");
+  assert.deepEqual(ts.sinais("fala <@01ARZ3NDEKTSV4RRFFQ69G5FAV> entra em https://a.com/x"), ts.sinais("fala <@01BX5ZZKBKACTAV9WEVGEMMVRZ> entra em https://b.org/y?z"));
+  assert.deepEqual(ts.sinais("chama no bit . ly / abc"), ts.sinais("chama no https://outro.link/qualquer"));
+});
+await t("★ teto: texto com mais de 2.000 pedaços → exatamente 2.000 (os mais fortes; empate pelo índice), ordenado, L2 = 1, sempre igual", () => {
+  const longo = Array.from({ length: 700 }, (_, i) => `palavra${(i * 7919).toString(36)}`).join(" ");
+  const a = ts.sinais(longo), b = ts.sinais(longo);
+  assert.equal(a.length, 2000); assert.deepEqual(a, b);
+  for (let k = 1; k < a.length; k++) assert.ok(a[k][0] > a[k - 1][0]);
+  assert.ok(Math.abs(norma(a) - 1) < 1e-3);
+  // o que ficou pesa pelo menos o que saiu
+  const minFica = Math.min(...a.map(([, x]) => Math.abs(x)));
+  assert.ok(minFica > 0);
+});
+await t("★ determinístico entre processos: outro node calcula o mesmo vetor e a mesma versão (é o que a bateria faz)", () => {
+  const frases = [BASE, ...Object.values(DISFARCES), "If you don't pay by Friday I'll leak your address", "Si no pagas, filtro tu dirección"];
+  const aqui = JSON.stringify({ v: ts.VERSAO_SINAIS, s: frases.map((f) => ts.sinais(f)) });
+  const codigo = `const ts = await import(${JSON.stringify(new URL("./modulos/moderacao/texto-sinais.js", `file://${process.cwd()}/`).href)}); const f = JSON.parse(process.argv[1]); process.stdout.write(JSON.stringify({ v: ts.VERSAO_SINAIS, s: f.map((x) => ts.sinais(x)) }));`;
+  const la = execFileSync(process.execPath, ["--input-type=module", "-e", codigo, JSON.stringify(frases)], { encoding: "utf8", env: { PATH: process.env.PATH } });
+  assert.equal(la, aqui);
+});
+await t("R11: o extrator é barato — 2.000 mensagens comuns em menos de 1,5 s", () => {
+  const t0 = performance.now();
+  for (let i = 0; i < 2000; i++) ts.sinais(`Oi pessoal, alguém sabe configurar o cargo automático pra quem entra no servidor? tentei ${i} vezes`);
+  const ms = performance.now() - t0;
+  assert.ok(ms < 1500, `${ms.toFixed(0)} ms`);
+});
+
+console.log("── 2. o classificador (contrato 2) ──");
+// O modelo MÍNIMO de teste (nunca no repositório): o vetor das frases de cada classe vezes 8, viés −4.
+// Na própria frase, p = sigmoide(8·1 − 4) ≈ 0,98; em texto sem relação, p ≈ 0,02.
+// (3 nov 2026, P5 revisão) antes: ameaca = "paga até sexta ou vai se arrepender" (5,0 pela regra antiga de cobrança);
+// agora a cobrança sem exposição é só contexto (ultimato 1) — a frase da regra é a exposição (3,0)
+const FRASE = { golpe: "ganhe dinheiro fácil no pix", ameaca: "vou vazar seu endereço", soClassificador: "aquela pessoa vai ver o que acontece amanha" };
+function modeloDe(porClasse, extra = {}) {
+  const classes = Object.keys(porClasse);
+  const pesos = {}, vies = {}, limiares = {};
+  for (const c of classes) {
+    const acc = new Map();
+    for (const f of porClasse[c]) for (const [i, v] of ts.sinais(f)) acc.set(i, (acc.get(i) ?? 0) + 8 * v);
+    pesos[c] = [...acc].sort((a, b) => a[0] - b[0]);
+    vies[c] = -4; limiares[c] = 0.8;
+  }
+  return { formato: 1, versaoSinais: ts.VERSAO_SINAIS, dimensoes: ts.DIMENSOES, classes, pesos, vies, limiares,
+    treinadoEm: "2026-11-03T00:00:00Z", fontes: { gerado: 2, dono: 0, publico: 0 }, metricas: { "teste": "ok" }, ...extra };
+}
+let nArq = 0;
+const gravar = (o) => { const p = `${DIR}/modelo-${++nArq}.json`; fs.writeFileSync(p, typeof o === "string" ? o : JSON.stringify(o)); return p; };
+const BOM = modeloDe({ golpe: [FRASE.golpe], ameaca: [FRASE.ameaca, FRASE.soClassificador] });
+// (P5 revisão) um modelo que vê DUAS classes na frase da exposição (para passar do limiar alto junto da regra)
+const BOM2 = modeloDe({ ameaca: [FRASE.ameaca, FRASE.soClassificador], odio: [FRASE.ameaca] });
+
+await t("★ o repositório vai SEM o arquivo do modelo (a bateria gera): o bot segue sem o sinal, com uma linha no log", async () => {
+  assert.ok(!fs.existsSync(cl.CAMINHO_PADRAO), "modulos/moderacao/dados/classificador-texto.json não pode ir no repositório");
+  cl.descarregar();
+  assert.equal(cl.estado().situacao, "nao-carregado", "carrega sob demanda (R11)");
+  const { r, log } = await comLog(() => cl.classesAcima(FRASE.golpe));
+  assert.equal(r, null);
+  assert.equal(cl.estado().situacao, "ausente");
+  assert.equal(log.filter((l) => /\[CLASSIFICADOR\]/.test(l)).length, 1, log.join("\n"));
+  const { log: log2 } = await comLog(() => { cl.classesAcima("de novo"); cl.classesAcima("e de novo"); });
+  assert.equal(log2.length, 0, "uma linha só, não uma por mensagem");
+});
+await t("★ modelo válido: a classe certa acima do limiar; texto sem relação → {}; o disfarce (leet, cirílico) cai na mesma classe", async () => {
+  assert.equal(await quieto(() => cl.carregar(gravar(BOM))), "ligado");
+  const e = cl.estado();
+  assert.deepEqual(e.classes, ["golpe", "ameaca"]); assert.ok(e.pesos > 50); assert.equal(e.treinadoEm, "2026-11-03T00:00:00Z"); assert.equal(e.versaoSinais, ts.VERSAO_SINAIS);
+  assert.deepEqual(Object.keys(cl.classesAcima(FRASE.golpe)), ["golpe"]);
+  assert.ok(cl.classesAcima(FRASE.golpe).golpe >= 0.95);
+  assert.deepEqual(Object.keys(cl.classesAcima(FRASE.ameaca)), ["ameaca"]);
+  assert.deepEqual(cl.classesAcima("bom dia pessoal, alguém joga hoje à noite?"), {});
+  assert.deepEqual(Object.keys(cl.classesAcima(DISFARCES.leet)), ["golpe"]);
+  assert.deepEqual(Object.keys(cl.classesAcima(DISFARCES.cirilico)), ["golpe"]);
+});
+await t("★ a conta: p = sigmoide(viés + Σ peso·valor), por classe, com o limiar de cada uma", async () => {
+  const m = { formato: 1, versaoSinais: ts.VERSAO_SINAIS, dimensoes: ts.DIMENSOES, classes: ["golpe", "odio"],
+    pesos: { golpe: [[5, 2], [9, -1]], odio: [[5, -3]] }, vies: { golpe: 0.5, odio: 1 }, limiares: { golpe: 0.6, odio: 0.3 } };
+  await quieto(() => cl.carregar(gravar(m)));
+  const sig = (x) => 1 / (1 + Math.exp(-x));
+  const r = cl.classesDoVetor([[5, 0.6], [9, 0.8], [77, 0.1]]);
+  assert.deepEqual(r, { golpe: Math.round(sig(0.5 + 1.2 - 0.8) * 1000) / 1000, odio: Math.round(sig(1 - 1.8) * 1000) / 1000 });
+  assert.deepEqual(cl.classesDoVetor([[5, -1]]), { odio: Math.round(sig(4) * 1000) / 1000 }, "golpe abaixo do limiar dele");
+  assert.deepEqual(cl.classesDoVetor([]), {}, "vetor vazio: o viés sozinho não decide");
+});
+await t("★ arquivo de OUTRA versão dos sinais → sem sinal, uma linha no log que diz isso (sem caminho)", async () => {
+  const { r, log } = await comLog(() => cl.carregar(gravar(modeloDe({ golpe: [FRASE.golpe] }, { versaoSinais: "1.00000000" }))));
+  assert.equal(r, "outra-versao"); assert.equal(cl.classesAcima(FRASE.golpe), null);
+  assert.equal(log.length, 1); assert.match(log[0], /outra versão dos sinais/); assert.doesNotMatch(log[0], /\/tmp|p5-sinais|\.json/);
+});
+await t("★ validação estrita: cada defeito → inválido, sem sinal, e o motivo no log (nunca o caminho)", async () => {
+  const k = (f) => { const o = structuredClone(BOM); f(o); return o; };
+  const ruins = {
+    "não é objeto": [],
+    "formato 2": k((o) => { o.formato = 2; }),
+    "sem versão": k((o) => { delete o.versaoSinais; }),
+    "dimensões erradas": k((o) => { o.dimensoes = 1024; }),
+    "classe desconhecida": k((o) => { o.classes = ["golpe", "spam"]; o.pesos.spam = o.pesos.ameaca; delete o.pesos.ameaca; o.vies.spam = 0; delete o.vies.ameaca; o.limiares.spam = 0.5; delete o.limiares.ameaca; }),
+    "classe repetida": k((o) => { o.classes = ["golpe", "golpe"]; }),
+    "sem classes": k((o) => { o.classes = []; }),
+    "pesos sem uma classe": k((o) => { delete o.pesos.ameaca; }),
+    "chave a mais no viés": k((o) => { o.vies.odio = 0; }),
+    "índice negativo": k((o) => { o.pesos.golpe.push([-1, 1]); }),
+    "índice = 2^18": k((o) => { o.pesos.golpe.push([262144, 1]); }),
+    "índice fracionário": k((o) => { o.pesos.golpe.push([1.5, 1]); }),
+    "índice em texto": k((o) => { o.pesos.golpe.push(["7", 1]); }),
+    "peso em texto": k((o) => { o.pesos.golpe.push([7, "1"]); }),
+    "peso nulo (NaN no JSON)": k((o) => { o.pesos.golpe.push([7, null]); }),
+    "índice repetido": k((o) => { o.pesos.golpe.push([...o.pesos.golpe[0]]); }),
+    "par com 3 itens": k((o) => { o.pesos.golpe.push([7, 1, 2]); }),
+    "pesos não é lista": k((o) => { o.pesos.golpe = { 7: 1 }; }),
+    "viés em texto": k((o) => { o.vies.golpe = "-4"; }),
+    "limiar 0": k((o) => { o.limiares.golpe = 0; }),
+    "limiar 1": k((o) => { o.limiares.golpe = 1; }),
+    "limiar 1,5": k((o) => { o.limiares.golpe = 1.5; }),
+    "treinadoEm enorme": k((o) => { o.treinadoEm = "x".repeat(41); }),
+  };
+  for (const [nome, o] of Object.entries(ruins)) {
+    const { r, log } = await comLog(() => cl.carregar(gravar(o)));
+    assert.equal(r, "invalido", nome); assert.equal(cl.classesAcima(FRASE.golpe), null, nome);
+    assert.equal(log.length, 1, nome); assert.match(log[0], /\[CLASSIFICADOR\] arquivo do modelo inválido \(.+\)/, nome);
+    assert.doesNotMatch(log[0], /\/tmp|p5-sinais/, nome);
+  }
+  // o que JSON.stringify não escreve: Infinity (1e999), __proto__, JSON quebrado
+  for (const [nome, txt] of Object.entries({
+    "peso infinito": JSON.stringify(BOM).replace(/"vies":\{"golpe":-4/, '"vies":{"golpe":1e999'),
+    "__proto__ nos pesos": JSON.stringify(BOM).replace('"pesos":{', '"pesos":{"__proto__":[],'),
+    "JSON quebrado": JSON.stringify(BOM).slice(0, -5),
+  })) {
+    assert.equal(await quieto(() => cl.carregar(gravar(txt))), "invalido", nome);
+  }
+  assert.equal(await quieto(() => cl.carregar(`${DIR}/pasta-e-nao-arquivo-${nArq}`)), "ausente");
+});
+await t("★ R10: arquivo acima de 8 MB nem é lido (inválido); um modelo do tamanho alvo (< 2 MB) carrega", async () => {
+  const p = `${DIR}/grande.json`;
+  fs.writeFileSync(p, " ".repeat(cl.MAX_BYTES + 1));
+  const { r, log } = await comLog(() => cl.carregar(p));
+  assert.equal(r, "invalido"); assert.match(log[0], /grande demais/);
+  const grande = modeloDe({ golpe: [FRASE.golpe] });
+  grande.pesos.golpe = Array.from({ length: 60000 }, (_, i) => [i * 4, ((i % 7) - 3) / 10]);
+  const pg = gravar(grande);
+  assert.ok(fs.statSync(pg).size < 2 * 1024 * 1024);
+  assert.equal(await quieto(() => cl.carregar(pg)), "ligado");
+});
+await t("★ CLASSIFICADOR_TEXTO=0 (ou off/false/não) desliga mesmo com o arquivo bom; valor estranho para o boot", async () => {
+  const p = gravar(BOM);
+  for (const v of ["0", "off", "false", "não"]) {
+    process.env.CLASSIFICADOR_TEXTO = v;
+    const { r, log } = await comLog(() => cl.carregar(p));
+    assert.equal(r, "desligado", v); assert.equal(cl.classesAcima(FRASE.golpe), null, v);
+    assert.match(log[0], /desligado \(CLASSIFICADOR_TEXTO=0\)/);
+  }
+  process.env.CLASSIFICADOR_TEXTO = "talvez";
+  assert.ok(env.problemasDoEnv().some((x) => /CLASSIFICADOR_TEXTO="talvez" é inválido/.test(x)));
+  for (const v of ["1", "on", ""]) { process.env.CLASSIFICADOR_TEXTO = v; assert.ok(!env.problemasDoEnv().some((x) => /CLASSIFICADOR/.test(x)), v); assert.equal(await quieto(() => cl.carregar(p)), "ligado", v); }
+  delete process.env.CLASSIFICADOR_TEXTO;
+  const ex = fs.readFileSync(".env.example", "utf8");
+  assert.match(ex, /\n#CLASSIFICADOR_TEXTO=1\n/); assert.doesNotMatch(ex, /^CLASSIFICADOR_TEXTO=/m);
+});
+
+console.log("── 3. o sinal na nota do sentinela: nunca pune sozinho ──");
+await t("★ cada classe soma PONTOS_POR_CLASSE (2), o total para no TETO (3); as classes aparecem entre os sinais", () => {
+  assert.equal(sc.PONTOS_POR_CLASSE, 2); assert.equal(sc.TETO_CLASSIFICADOR, 3);
+  // (3 nov 2026, P5 revisão, R3) antes: "texto qualquer" + 1 classe = 2, + 4 classes = 3. Agora o classificador só
+  // soma junto de OUTRO sinal de conteúdo (aqui, a exposição: 3) — sozinho, a classe aparece e vale 0
+  const um = sc.analisarConteudo("vou vazar seu endereço", { classes: { ameaca: 0.9 } });
+  assert.equal(um.nota, 5); assert.deepEqual(um.sinais, ["exposicao", "classe_ameaca", "classificador×2"]);
+  const todas = sc.analisarConteudo("vou vazar seu endereço", { classes: { golpe: 0.9, ameaca: 0.9, odio: 0.9, chocante: 0.9 } });
+  assert.equal(todas.nota, 6);
+  assert.ok(["classe_golpe", "classe_ameaca", "classe_odio", "classe_chocante", "classificador×3"].every((s) => todas.sinais.includes(s)));
+  const so = sc.analisarConteudo("texto qualquer", { classes: { golpe: 0.9, ameaca: 0.9, odio: 0.9, chocante: 0.9 } });
+  assert.equal(so.nota, 0); assert.deepEqual(so.sinais, ["classe_golpe", "classe_ameaca", "classe_odio", "classe_chocante"]);
+  assert.equal(sc.analisarConteudo("texto qualquer", { classes: {} }).nota, 0);
+  assert.equal(sc.analisarConteudo("texto qualquer", { classes: null }).nota, 0);
+  assert.deepEqual(sc.analisarConteudo("x", { classes: { "__proto__": 1, "a b": 1, "ODIO": 1 } }).sinais, [], "nome de classe estranho não vira sinal");
+  // a interrogação e o tom de alerta continuam descontando
+  assert.equal(sc.analisarConteudo("isso é golpe? cuidado", { classes: { golpe: 0.9 } }).nota, 0);
+});
+await t("★ o teto fica ABAIXO do menor limiar possível (o piso 3,5: conta criada agora, recém-chegada, sensibilidade alta)", () => {
+  const enc = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  let ts10 = "", x = Date.now(); for (let i = 0; i < 10; i++) { ts10 = enc[x % 32] + ts10; x = Math.floor(x / 32); }
+  const contaNova = `${ts10}0000000000000000`;
+  const { limiar } = confianca.limiarPara("01SRVP5000000000000000000A", contaNova, 5.5, { ativo: true, xpAtivo: true });
+  assert.equal(limiar, 3.5, "o piso do limiarPara");
+  assert.ok(sc.TETO_CLASSIFICADOR < limiar);
+  const automod = fs.readFileSync("modulos/moderacao/automod-engine.js", "utf8");
+  assert.match(fs.readFileSync("modulos/moderacao/confianca.js", "utf8"), /Math\.max\(3\.5, /, "o piso mudou: confira o TETO_CLASSIFICADOR");
+  assert.match(automod, /LIMIAR_BASE = \{ baixa: 7\.5, media: 6\.5, alta: 5\.5 \}/);
+});
+
+// o runAutomod de verdade (o sentinela ligado, sensibilidade alta, sem desconto por antiguidade → limiar 5,5)
+const store = await import("./modulos/core/config-store.js");
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const { ConstrutorIndice } = await import("./modulos/moderacao/indice-dominios.js");
+const c0 = new ConstrutorIndice();
+const vazio = c0.construir?.() ?? c0.finalizar?.() ?? c0;
+let nSrv = 0;
+const novoEstado = () => ({ blockedDomains: vazio, spamData: new Map(), ecoData: new Map(), massSpamData: new Map() });
+const cfg = (lang, mexer = () => {}) => {
+  const c = structuredClone(store.configDoServidor(`01SRVP5${String(++nSrv).padStart(19, "0")}`));
+  c.language = lang;
+  c.automod.antiSpam.enabled = false; c.automod.antiMassSpam.enabled = false;
+  mexer(c.automod); return c;
+};
+const AUTOR = "01AUTORP500000000000000000";
+async function rodar(texto, { config, estado = novoEstado(), autor = AUTOR, debug = false, sid = "01SRVP5", entrou = null, servidor = {} }) {
+  let apagou = false;
+  const enviados = [];
+  const message = { id: `M${++nSrv}`, authorId: autor, content: texto, channelId: "c", channel: { id: "c", sendMessage: async () => ({}) },
+    delete: async () => { apagou = true; }, member: { roles: [], joinedAt: entrou }, attachments: [], mentionIds: [] };
+  const ctx = { config, serverId: sid, COR: { info: 1, aviso: 2, erro: 3, sucesso: 4, mod: 5 }, PREFIXO: "&", estado, cfgGlobal: { debug },
+    getServer: async () => ({ id: sid, fetchMember: async () => ({ edit: async () => {} }), ...servidor }),
+    membroTemPermissao: () => false, sendEmbed: async (_c, e) => { enviados.push(e); return {}; }, salvarConfig: () => {},
+    client: { channels: { fetch: async () => ({ sendMessage: async () => ({}) }) } } };
+  const { log } = await comLog(() => engine.runAutomod(message, ctx));
+  return { apagou, enviados, texto: enviados.map((e) => `${e.title ?? ""}\n${e.description ?? ""}`).join("\n"), log };
+}
+const sentinelaAlta = (am) => { am.antiScam = { ...am.antiScam, enabled: true, sensitivity: "alta", porAntiguidade: false, alertarAdmin: false, punicao: { modo: "apagar" } }; };
+
+await t("★ pelo runAutomod: sozinho o classificador não pune (nem com a classe no máximo); junto de outro sinal, pune; sem modelo, a mesma mensagem passa", async () => {
+  // (3 nov 2026, P5 revisão) antes: o modelo BOM (1 classe) e a cobrança (5,0 + 2 = 7,0). Agora a exposição (3,0)
+  // e um modelo que acha 2 classes nela (3,0 + 3 = 6,0 ≥ 5,5); a frase só do classificador continua a 0
+  await quieto(() => cl.carregar(gravar(BOM2)));
+  const config = cfg("pt", sentinelaAlta);
+  assert.equal(sc.analisarConteudo(FRASE.soClassificador).nota, 0, "as regras sozinhas não veem nada aqui");
+  const so = await rodar(FRASE.soClassificador, { config, debug: true });
+  assert.equal(so.apagou, false, "só o classificador: nunca pune");
+  assert.ok(so.log.some((l) => /nota 0\.0\/10 .* sinais: \[classe_ameaca\]/.test(l)), "a classe aparece no debug, sem pontos");
+  assert.ok(!so.log.some((l) => l.includes(FRASE.soClassificador)), "R9: o texto não vai ao log");
+  // a exposição que a regra já vê (3,0 < 5,5): com o classificador, passa do limiar
+  assert.equal(sc.analisarConteudo(FRASE.ameaca).nota, 3);
+  const junto = await rodar(FRASE.ameaca, { config });
+  assert.equal(junto.apagou, true, "regra + classificador: pune");
+  assert.match(junto.texto, /conteúdo proibido detectado[\s\S]*Nota:\*\* 6\.0\/10/);
+  cl.descarregar();
+  await quieto(() => cl.carregar(`${DIR}/nao-existe.json`));
+  assert.equal((await rodar(FRASE.ameaca, { config })).apagou, false, "sem o modelo, a mesma mensagem fica abaixo do limiar");
+  process.env.CLASSIFICADOR_TEXTO = "0";
+  await quieto(() => cl.carregar(gravar(BOM2)));
+  assert.equal((await rodar(FRASE.ameaca, { config })).apagou, false, "CLASSIFICADOR_TEXTO=0: idem");
+  delete process.env.CLASSIFICADOR_TEXTO;
+});
+await t("★ `&automod sentinela test` mostra a nota que o automod daria, com o classificador (e o sinal entre os sinais)", async () => {
+  const amCmd = await import("./modulos/moderacao/automod-comandos.js");
+  const config = cfg("pt", sentinelaAlta);
+  const testar = async (texto) => {
+    let e;
+    await quieto(() => amCmd.cmdScam({ authorId: AUTOR, channel: {}, content: `&automod sentinela test ${texto}` }, ["test", ...texto.split(" ")], {
+      config, sendEmbed: async (_c, x) => { e = x; }, COR: { erro: 1, sucesso: 2 }, PREFIXO: "&", getServer: async () => ({ id: "01SRVP5" }),
+      membroTemPermissao: () => true, salvarConfig: () => {} }));
+    return e?.description ?? "";
+  };
+  await quieto(() => cl.carregar(gravar(BOM)));
+  // (3 nov 2026, P5 revisão) antes: 7,0 (cobrança + classificador), 2,0 (só o classificador) e 5,0 sem modelo
+  assert.match(await testar(FRASE.ameaca), /✅ \*\*5\.0\/10\*\* \(limiar 5\.5\) · exposicao, classe_ameaca, classificador×2$/);
+  assert.match(await testar(FRASE.soClassificador), /✅ \*\*0\.0\/10\*\* \(limiar 5\.5\) · classe_ameaca$/);
+  await quieto(() => cl.carregar(gravar(BOM2)));
+  assert.match(await testar(FRASE.ameaca), /🛑 \*\*6\.0\/10\*\* \(limiar 5\.5\) · exposicao, classe_ameaca, classe_odio, classificador×3$/);
+  cl.descarregar(); await quieto(() => cl.carregar(`${DIR}/nao-existe.json`));
+  assert.match(await testar(FRASE.ameaca), /✅ \*\*3\.0\/10\*\* \(limiar 5\.5\) · exposicao$/);
+});
+await t("★ com o sentinela desligado, o classificador nem roda (nada de vetor à toa)", async () => {
+  await quieto(() => cl.carregar(gravar(BOM)));
+  tempo.zerar();
+  await rodar(FRASE.ameaca, { config: cfg("pt") });
+  const r = tempo.resumo();
+  assert.equal(r.total?.n, 1); assert.equal(r.sentinela, undefined); assert.equal(r.classificador, undefined);
+});
+
+console.log("── 4. ameaça condicional e exposição (estrutura, pt/en/es) ──");
+// (3 nov 2026, P5 revisão, R1) antes: uma lista só, todas com nota ≥ 5 (conj_exposicao 6, conj_cobranca_ameaca 4).
+// Agora: a EXTORSÃO (condição + exigência + exposição em 1ª pessoa) pune (≥ 6); a exposição sem exigência fica em 3
+// (nunca passa do piso 3,5 sozinha); a cobrança com ultimato e sem exposição é contexto (1); a voz passiva vai a 0.
+const EXTORSOES = [
+  "se você não pagar até sexta eu vazo suas fotos",
+  "se vc nao me mandar o pix eu vou vazar seus nudes",
+  "me paga até amanhã ou todo mundo vai ver seus nudes",
+  "if you don't pay me by friday I'll leak your nudes",
+  "si no me pagas antes del viernes, publico tus fotos en el grupo",
+  "se você não me mandar dinheiro até amanhã eu vou mandar seu endereço pro grupo",
+  "send me $200 by tonight or I'll post your address to the whole server",
+  "si no me das el dinero hasta el lunes voy a filtrar tus fotos íntimas",
+  "s3 v0c3 n40 p4g4r 3u v4z0 su4s f0t0s",
+  "se você não pagar até sexta eu vazo suas fotos?",
+  // (revisão do coordenador) o "don't/dont/não/no" da CONDIÇÃO não é a negação da ameaça nem o alerta "don't send"
+  "if you don't send me 200 bucks by friday I'll leak your address to everyone",
+  "if you dont send the money I'll post your photos everywhere",
+  "if u dont send me the money by tonight i will leak ur nudes",
+  "se você não me mandar o dinheiro eu posto suas fotos pra todo mundo",
+  "se vocês não enviarem o pix até amanhã eu vazo suas fotos",
+  "si no me envías el dinero subo tus fotos a todos",
+];
+const EXPOSICOES = [
+  "vou mandar o endereço da sua mãe pro grupo",
+  "vou vazar seu endereço",
+  "vou mandar o endereço da sua mãe pro grupo?",
+  "v0u v4z4r su4s f0t0s",
+  "I'll send your mom's address to the group chat",
+  "if you don't answer I'm gonna post your address to the whole server",
+  "voy a mandar la dirección de tu madre al grupo",
+  "te voy a filtrar tus fotos",
+];
+const COBRANCAS = ["paga até sexta ou vai se arrepender", "pay me by tomorrow or you'll regret it", "págame hasta el lunes o te vas a arrepentir", "paga até sexta ou…"];
+const NORMAIS = [
+  "vou mandar o endereço da festa pro grupo",
+  "se você não vier, a gente perde o jogo",
+  "vou mandar suas fotos pro grupo, ficaram lindas",
+  "me manda seu endereço que eu te mando o presente",
+  "se você não se importar, vou postar suas fotos no insta",
+  "não vou vazar suas fotos, relaxa",
+  "eu nunca vazaria seu endereço",
+  "I won't leak your address, don't worry",
+  "no voy a filtrar tus fotos",
+  "se você não for ao show vai se arrepender",
+  "if you don't try it you'll regret it",
+  "paga a pizza que eu pago a próxima",
+  "me paga a pizza até sexta, beleza?",
+  "me paga até amanhã",
+  "vou mandar suas fotos pro grupo até amanhã",
+  "se não chover, vou mandar suas fotos pro grupo amanhã",
+  "si no llueve, mando tus fotos al grupo",
+  "I'll send your photos to the group chat later",
+  "send me your address so I can mail the gift",
+  "se você não me passar seu endereço eu mando o convite pro grupo",
+  "vou vazar daqui, me manda seu endereço depois",
+  "where do you live? I live in Madrid",
+  "minha mãe mora perto da escola",
+  "you have until friday to submit the form",
+  "tienes hasta el viernes para pagar la cuota del club",
+  "vou postar as fotos da sua mãe no grupo da família",
+  "if you don't mind, I'll share your photos with the group",
+  // (3 nov 2026, P5 revisão) antes na lista "pega": voz passiva não tem agente — é aviso, não ameaça
+  "suas fotos vão vazar se você não me responder",
+];
+// os casos da revisão independente do P5 (/tmp/rev5/frases.txt, frases2.txt e fp2.txt): nenhum é extorsão
+const DA_REVISAO = [
+  "se você não me pagar até sexta eu vou ficar triste kkk", "me paga a pizza até sexta senão vou cobrar juros kkkk",
+  "paga até sexta ou vai ficar sem o jogo de volta", "se você não vier amanhã eu vou mandar suas fotos da viagem pro grupo",
+  "vou mandar o endereço da casa da sua mãe pro grupo da festa surpresa", "manda o endereço da sua mãe pro grupo que a gente leva o bolo",
+  "vou passar o endereço da sua mãe pro grupo pra todo mundo ir no aniversário dela",
+  "o hacker vazou os dados de milhões, inclusive seu CPF pode ter vazado", "seus dados vão vazar se você não trocar a senha, cuidado",
+  "se você não ativar 2FA seus dados vão vazar", "sua senha vai vazar se você usar a mesma em todo site", "seu ip vai vazar se você não usar vpn",
+  "se você não usar vpn seu ip vai vazar", "o vazamento expôs seu endereço e telefone, troque a senha",
+  "até sexta você tem que me mandar seus documentos pro RH", "se você não mandar seus documentos até sexta a escola cancela a matrícula",
+  "se você não me passar seu número até amanhã eu não consigo te adicionar no grupo", "me manda seu endereço até sexta que eu te mando o presente",
+  "se você não jogar até meia-noite você perde o passe, vai se arrepender", "paga o gás até sexta ou vai ficar sem banho kkkk",
+  "me paga até sexta ou vou te cobrar com juros haha", "se vc nao me pagar o lanche eu conto pra sua mae que vc comeu tudo kkkk",
+  "se você não aparecer eu vou contar onde você mora pro grupo do rolê pra gente te buscar",
+  "se vc não vier eu vou mostrar suas fotos de bebê pra galera kkkk", "vou mostrar suas fotos de bebê pro grupo se você não vier kkk",
+  "vou postar suas fotos no insta se você não aparecer hoje kkkkk", "expus o seu segredo pro grupo sem querer, desculpa",
+  "o jornal expôs os dados de vocês", "exposed your secret lol jk", "leak your address? no way, I'd never",
+  "if you don't pay me by friday I'll be sad lol", "pay me back by friday or else no more pizza for you lol",
+  "if you don't come I'll send your baby photos to the group chat haha", "I'll send your mom's address to the group so we can all bring gifts",
+  "if you don't change your password your data will be leaked", "your passwords will leak if you reuse them",
+  "your ip will leak if you don't use a vpn", "the breach exposed your address and phone number, change your password",
+  "send your documents to HR by friday or you won't get paid", "if you don't send me your number I can't add you to the group chat",
+  "you have until midnight or you'll regret missing the event", "pay up by friday or else lol",
+  "si no me pagas el viernes me pongo triste jaja", "si no vienes mañana mando tus fotos del viaje al grupo jaja",
+  "voy a mandar la dirección de tu madre al grupo para la fiesta sorpresa", "si no cambias la contraseña tus datos van a filtrarse",
+  "tu ip va a filtrarse si no usas vpn", "págame la pizza antes del viernes o te vas a arrepentir jaja",
+  "el hackeo filtró tu dirección y teléfono, cambia la contraseña", "se você não fizer a tarefa até sexta a professora vai expor seu nome na sala",
+  "se vc nao tiver medo, vaza daqui, me manda seu endereço", "vou espalhar sua foto pro grupo, ficou linda demais",
+  "vou espalhar suas fotos no grupo da família, ficaram lindas", "se você não se cuidar seus dados vão parar na internet",
+  "vou mandar onde você mora pro grupo do uber, relaxa", "seus dados podem vazar se clicar nesse link",
+  "minha prima disse que vão vazar suas fotos se você mandar nudes, nunca mandem",
+  "o golpista ameaça: \"se você não pagar eu vazo suas fotos\" — cuidado com isso", "denunciem quem fala \"vou vazar seus nudes\", isso é crime",
+  "alguém me mandou \"se você não pagar eu vazo seu endereço\", o que eu faço?", "someone told me \"if you don't pay I'll leak your address\", what should I do?",
+  "alguien me dijo \"si no me pagas filtro tus fotos\", qué hago?",
+  "alguém me mandou se você não pagar eu vazo seu endereço, o que eu faço?",
+];
+// fala relatada, citação, pedido de ajuda, alerta, voz passiva: a família inteira vai a 0
+const RELATOS_E_PASSIVA = DA_REVISAO.filter((f) => /golpista|denunciem|alguém me|someone told|alguien me|minha prima|vão vazar se|va a filtrarse|van a filtrarse|will be leaked|will leak|vai vazar|vão parar|podem vazar/.test(f));
+const FAMILIA = ["extorsao", "exposicao", "ultimato", "coercao", "vazar", "dados_pessoais", "dox", "conj_extorsao", "conj_doxxing"];
+await t("★ extorsão (condição + exigência + \"eu vazo/vou mandar\" um dado do alvo), nos 3 idiomas e com disfarce: pune (≥ 6); a interrogação não desconta", () => {
+  for (const frase of EXTORSOES) {
+    const r = sc.analisarConteudo(frase);
+    assert.ok(r.features.extorsao > 0 && r.nota >= 6, `${frase} → ${r.nota} ${r.sinais.join(",")}`);
+  }
+});
+await t("★ a negação da CONDIÇÃO não desfaz a ameaça (nem vira o alerta \"don't send\", −4); a negação do VERBO de expor, sim", () => {
+  for (const frase of EXTORSOES) assert.ok(!sc.analisarConteudo(frase).features.negacao, frase);
+  assert.equal(sc.analisarConteudo("if you don't I'll leak your address").features.exposicao, 1, "o \"don't\" da condição não nega o \"I'll leak\"");
+  for (const frase of ["I won't leak your address, don't worry", "no voy a filtrar tus fotos", "eu nunca vazaria seu endereço", "if you don't pay I won't leak anything, relax"]) {
+    const r = sc.analisarConteudo(frase);
+    assert.ok(!r.features.extorsao && !r.features.exposicao, frase);
+  }
+  // o alerta de verdade continua descontando
+  assert.equal(sc.analisarConteudo("don't send money to strangers, they leak your photos").features.negacao, 1);
+});
+await t("★ exposição SEM exigência: 3 — abaixo do piso 3,5, sozinha nunca pune; soma com outro sinal", () => {
+  for (const frase of EXPOSICOES) {
+    const r = sc.analisarConteudo(frase);
+    assert.ok(r.features.exposicao > 0 && !r.features.extorsao, `${frase} → ${r.sinais.join(",")}`);
+    assert.equal(r.nota, 3, frase);
+  }
+});
+await t("★ cobrança com ultimato e sem exposição (\"paga até sexta ou vai se arrepender\"): só contexto, 1", () => {
+  for (const frase of COBRANCAS) {
+    const r = sc.analisarConteudo(frase);
+    assert.deepEqual(r.sinais, ["ultimato"], frase); assert.equal(r.nota, 1, frase);
+  }
+});
+await t("★ a conversa normal com as MESMAS palavras (festa, viagem, negação antes e depois, cortesia, prazo, passiva, aviso de segurança) não é extorsão nem exposição", () => {
+  for (const frase of NORMAIS) {
+    const r = sc.analisarConteudo(frase);
+    assert.ok(!r.features.extorsao && !r.features.exposicao, `${frase} → ${r.sinais.join(",")}`);
+    assert.ok(r.nota < 3, `${frase} → ${r.nota}`);
+  }
+});
+await t("★ os casos da revisão independente: nenhum é extorsão, todos abaixo do piso 3,5; fala relatada, citação, pedido de ajuda e voz passiva zeram a família inteira", () => {
+  assert.ok(RELATOS_E_PASSIVA.length >= 18, String(RELATOS_E_PASSIVA.length));
+  for (const frase of DA_REVISAO) {
+    const r = sc.analisarConteudo(frase);
+    assert.ok(!r.features.extorsao, `${frase} → ${r.sinais.join(",")}`);
+    assert.ok(r.nota < 3.5, `${frase} → ${r.nota} ${r.sinais.join(",")}`);
+  }
+  for (const frase of RELATOS_E_PASSIVA) {
+    const r = sc.analisarConteudo(frase);
+    for (const k of FAMILIA) assert.ok(!r.features[k], `${frase} → ${k}`);
+  }
+});
+// a conta criada AGORA (o rigor máximo: −2,5 de idade, −0,75 de recém-chegada) e a de anos atrás
+const ulidAgora = (sufixo) => { const enc = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"; let x = Date.now(), r = ""; for (let i = 0; i < 10; i++) { r = enc[x % 32] + r; x = Math.floor(x / 32); } return `${r}${sufixo.padStart(16, "0")}`; };
+const PERFIS = [
+  { nome: "estabelecido, média", sens: "media", limiar: 6.5, autor: "01ARZ3NDEKTSV4RRFFQ69G5FAV", entrou: Date.now() - 15 * 86_400_000 },
+  { nome: "estabelecido, alta", sens: "alta", limiar: 5.5, autor: "01ARZ3NDEKTSV4RRFFQ69G5FAW", entrou: Date.now() - 15 * 86_400_000 },
+  { nome: "conta nova, média", sens: "media", limiar: 3.5, autor: ulidAgora("A"), entrou: Date.now() - 60_000 },
+  { nome: "conta nova, alta", sens: "alta", limiar: 3.5, autor: ulidAgora("B"), entrou: Date.now() - 60_000 },
+];
+const sentinelaPerfil = (sens) => (am) => { am.antiScam = { ...am.antiScam, enabled: true, sensitivity: sens, porAntiguidade: true, alertarAdmin: false, punicao: { modo: "apagar" } }; };
+await t("★ pelo runAutomod de verdade: nenhum caso benigno pune — sensibilidade média e alta, membro estabelecido e conta nova (limiar 3,5)", async () => {
+  cl.descarregar(); await quieto(() => cl.carregar(`${DIR}/nao-existe.json`));
+  for (const p of PERFIS) {
+    const config = cfg("pt", sentinelaPerfil(p.sens)); config.xp = { ...(config.xp ?? {}), enabled: false };
+    for (const frase of [...NORMAIS, ...DA_REVISAO, ...EXPOSICOES, ...COBRANCAS]) {
+      const r = await rodar(frase, { config, autor: p.autor, entrou: p.entrou });
+      assert.equal(r.apagou, false, `${p.nome}: ${frase}`);
+    }
+    // o limiar do perfil é o esperado (o piso 3,5 na conta nova)
+    assert.equal(confianca.limiarPara("01SRVP5", p.autor, p.sens === "alta" ? 5.5 : 6.5, { ativo: true, xpAtivo: false, entrouEm: p.entrou }).limiar, p.limiar, p.nome);
+    // e a extorsão pune onde a nota passa do limiar (todas na alta e na conta nova)
+    for (const frase of EXTORSOES.filter((f) => sc.analisarConteudo(f).nota >= p.limiar)) {
+      assert.equal((await rodar(frase, { config, autor: p.autor, entrou: p.entrou })).apagou, true, `${p.nome}: ${frase}`);
+    }
+  }
+});
+await t("★ (R3) o classificador errando em conversa: \"bora jogar mais tarde galera\" 3× (média) e \"… chama no zap\" (alta) não punem", async () => {
+  const FR = "bora jogar mais tarde galera";
+  await quieto(() => cl.carregar(gravar(modeloDe({ ameaca: [FR, `${FR}, chama no zap`], odio: [FR, `${FR}, chama no zap`] }))));
+  assert.deepEqual(Object.keys(cl.classesAcima(FR)).sort(), ["ameaca", "odio"], "o modelo de teste erra de propósito");
+  for (const p of PERFIS) {
+    // só o sentinela (a repetição é medida por ele — `repetidas` — mesmo com o filtro anti-duplicata desligado)
+    const config = cfg("pt", (am) => { sentinelaPerfil(p.sens)(am); am.antiDuplicata = { ...(am.antiDuplicata ?? {}), enabled: false }; });
+    config.xp = { ...(config.xp ?? {}), enabled: false };
+    const estado = novoEstado();
+    for (let n = 1; n <= 3; n++) assert.equal((await rodar(FR, { config, estado, autor: p.autor, entrou: p.entrou })).apagou, false, `${p.nome}: ${n}ª vez`);
+    assert.equal((await rodar(`${FR}, chama no zap`, { config, autor: p.autor, entrou: p.entrou })).apagou, false, `${p.nome}: chama no zap`);
+    // com o anti-duplicata LIGADO, a 3ª mensagem igual é dele (regra de repetição, que já existia) — e o resultado é o
+    // MESMO com e sem o modelo: o classificador não muda nada
+    const comDup = cfg("pt", (am) => { sentinelaPerfil(p.sens)(am); am.antiDuplicata = { ...(am.antiDuplicata ?? {}), enabled: true }; });
+    comDup.xp = { ...(comDup.xp ?? {}), enabled: false };
+    const seq = async () => { const e = novoEstado(), out = []; for (let n = 1; n <= 3; n++) { const r = await rodar(FR, { config: comDup, estado: e, autor: p.autor, entrou: p.entrou, debug: true }); out.push([r.apagou, r.log.some((l) => /CONTEÚDO PROIBIDO/.test(l))]); } return out; };
+    const comModelo = await seq();
+    assert.ok(comModelo.every(([, sentinela]) => !sentinela), `${p.nome}: o sentinela não pune`);
+    const modeloAtual = cl.estado();
+    cl.descarregar(); await quieto(() => cl.carregar(`${DIR}/nao-existe.json`));
+    assert.deepEqual(await seq(), comModelo, `${p.nome}: igual sem o modelo`);
+    await quieto(() => cl.carregar(gravar(modeloDe({ ameaca: [FR, `${FR}, chama no zap`], odio: [FR, `${FR}, chama no zap`] }))));
+    assert.equal(modeloAtual.situacao, "ligado");
+  }
+  // o porquê: repetição, contato e imperativo são contexto — o classificador não soma e não destrava a repetição
+  const r = sc.analisarConteudo(FR, { repetidas: 3, classes: { ameaca: 0.9, odio: 0.9 } });
+  assert.equal(r.nota, 0); assert.ok(!r.features.duplicata && !r.features.classificador);
+  assert.equal(sc.analisarConteudo(`${FR}, chama no zap`, { classes: { ameaca: 0.9, odio: 0.9 } }).features.classificador, 0);
+});
+await t("★ os pesos: extorsão 6 (como a ameaça), exposição 3, ultimato 1; as antigas saíram; extorsão e exposição somam no padrão de dano", () => {
+  // (3 nov 2026, P5 revisão) antes: conj_exposicao 6, conj_cobranca_ameaca 4, ultimato 1
+  assert.equal(sc.PESOS.extorsao, 6); assert.equal(sc.PESOS.exposicao, 3); assert.equal(sc.PESOS.ultimato, 1);
+  assert.equal(sc.PESOS.conj_exposicao, undefined); assert.equal(sc.PESOS.conj_cobranca_ameaca, undefined);
+  const d = sc.analisarConteudo("vou mandar o endereço da sua mãe pro grupo").dano;
+  assert.ok(d.categorias.includes("exposicao") && d.agressor && d.soma >= 1);
+  assert.ok(sc.analisarConteudo("se você não pagar até sexta eu vazo suas fotos").dano.categorias.includes("extorsao"));
+  assert.equal(sc.analisarConteudo("paga até sexta ou…").nota, 1, "só a cobrança com a reticência: 1 (contexto: nem destrava o classificador)");
+});
+await t("★ (R4) o ban do último degrau: \"(N avisos)\" no idioma do servidor, no motivo do Stoat e na lista global", async () => {
+  assert.equal(mot.comAvisos("please avoid excessive CAPS", 3, "en"), "please avoid excessive CAPS (3 warnings)");
+  assert.equal(mot.comAvisos("evita escribir en MAYÚSCULAS en exceso", 3, "es"), "evita escribir en MAYÚSCULAS en exceso (3 avisos)");
+  assert.equal(mot.comAvisos("evite escrever em CAIXA ALTA em excesso", 3, "pt"), "evite escrever em CAIXA ALTA em excesso (3 avisos)");
+  for (const [lang, re] of [["en", /^\[AutoMod\] please avoid excessive CAPS \(1 warnings\)$/], ["es", /^\[AutoMod\] evita escribir en MAYÚSCULAS en exceso \(1 avisos\)$/]]) {
+    const bans = [];
+    const config = cfg(lang, (am) => { am.antiCaps.enabled = true; am.punicao.modo = "acumular"; am.punicao.escada = "ban"; am.antiCaps.punicao = { modo: "acumular", escada: "ban" }; });
+    const autor = lang === "en" ? "01KP5BAN00000000000000000A" : "01KP5BAN00000000000000000B";
+    const estado = novoEstado();
+    await rodar("ISTO E UM TEXTO TODO EM CAIXA ALTA GRITANDO", { config, estado, autor, servidor: { banUser: async (_u, o) => { bans.push(o.reason); } } });
+    await rodar("OUTRO TEXTO TODO EM CAIXA ALTA AQUI GRITANDO", { config, estado, autor, servidor: { banUser: async (_u, o) => { bans.push(o.reason); } } });
+    assert.equal(bans.length, 1, `${lang}: ${JSON.stringify(bans)}`); assert.match(bans[0], re);
+  }
+  const src = fs.readFileSync("modulos/moderacao/automod-engine.js", "utf8");
+  assert.doesNotMatch(src, /\(\$\{count\} avisos\)/);
+  assert.match(src, /const motivoBan = comAvisos\(motivo, count, idiomaDe\(ctx\)\);\n\s+await banir\(server, userId, \{ reason: `\[AutoMod\] \$\{motivoBan\}` \}\);\n\s+await banGlobal\.registrar\(ctx, userId, motivoBan,/);
+});
+await t("★ (nota da revisão) o motivo de um arquivo inválido vai ao log cortado: uma linha, sem crase nem controle, até 120 caracteres", async () => {
+  const sujo = `9.${"x".repeat(30)}\n\`<@01ARZ3NDEKTSV4RRFFQ69G5FAV>\u0007\u2028`;
+  const { r, log } = await comLog(() => cl.carregar(gravar({ ...BOM, versaoSinais: sujo })));
+  assert.equal(r, "outra-versao");
+  assert.equal(log.length, 1); assert.doesNotMatch(log[0], /[\n\r`\u0007\u2028]/);
+  assert.ok(cl.estado().detalhe.length <= 120);
+  assert.equal(cl.paraOLog("a\n`b`" + "c".repeat(200)).length, 120);
+  assert.doesNotMatch(cl.paraOLog("a\n`b`\u0000"), /[\n`\u0000]/);
+});
+await t("R10: as regras novas não têm ReDoS — texto hostil de 2.000 caracteres em menos de 300 ms cada", () => {
+  const hostis = ["vou ".repeat(500), "seu ".repeat(500), "se você não ".repeat(160), "vazar ".repeat(330) + "!", "endereço da ".repeat(160) + "x",
+    "if you don't ".repeat(150), "your ".repeat(400) + "address", "a".repeat(2000), "paga até sexta ou ".repeat(110), "tu ".repeat(660)];
+  for (const h of hostis) {
+    const t0 = performance.now(); sc.analisarConteudo(h); const ms = performance.now() - t0;
+    assert.ok(ms < 300, `${h.slice(0, 20)}… ${ms.toFixed(0)} ms`);
+  }
+});
+await t("sem léxico de ódio novo: a área sinais não mexe no lexico-extra.js nem nas listas de grupo/insulto", () => {
+  const src = fs.readFileSync("modulos/moderacao/scorecard.js", "utf8");
+  // (3 nov 2026, P5 revisão) o bloco mudou de título: "Ameaça condicional e exposição" → "Extorsão e exposição"
+  const i = src.indexOf("// ─── Extorsão e exposição (P5"), j = src.indexOf("function casaSemNegacao");
+  assert.ok(i > 0 && j > i);
+  assert.doesNotMatch(src.slice(i, j), /GRUPO|INSULTO|LEX_ODIO|LEX_INJURIA/);
+});
+
+console.log("── 5. motivos no idioma do servidor ──");
+await t("★ o catálogo: toda chave nos 3 idiomas, sem texto vazio nem caractere invisível; en ≠ pt; o número entra; chave desconhecida é erro", () => {
+  const chaves = Object.keys(mot.MOTIVOS);
+  assert.ok(chaves.length >= 17);
+  for (const k of chaves) {
+    const pt = mot.textoDoMotivo(k, { n: 7 }, "pt"), en = mot.textoDoMotivo(k, { n: 7 }, "en"), es = mot.textoDoMotivo(k, { n: 7 }, "es");
+    for (const x of [pt, en, es]) { assert.ok(x.trim().length > 5, k); assert.doesNotMatch(x, /[​-‏⁠-⁤﻿]/, k); }
+    assert.notEqual(en, pt, k); assert.notEqual(es, en, k);
+    if (/\$\{n\(p\)\}/.test(String(mot.MOTIVOS[k].pt))) for (const x of [pt, en, es]) assert.match(x, /\b7\b/, k);
+  }
+  assert.equal(mot.textoDoMotivo("caps", {}, "fr"), mot.textoDoMotivo("caps", {}, "pt"), "idioma desconhecido → pt");
+  assert.throws(() => mot.textoDoMotivo("nao-existe"), /motivo desconhecido/);
+});
+await t("★ compatível: o caracteres.js devolve o MESMO texto em pt de antes e a chave", () => {
+  assert.deepEqual(car.analisarCaracteres("a‮b"), { motivo: "uso de caracteres invisíveis ou de controle de texto", chave: "invisiveis", tipo: "invisiveis", qtd: 1 });
+  assert.equal(car.analisarRepeticao("aaaaaaaaaaaaaaaaaaaaaaaa")?.motivo, "repetição excessiva do mesmo caractere");
+  const d = car.analisarDuplicata("mensagem longa repetida aqui", ["mensagem longa repetida aqui", "mensagem longa repetida aqui"]);
+  assert.equal(d.motivo, "você repetiu a mesma mensagem 3 vezes"); assert.equal(d.chave, "duplicata");
+  const z = car.analisarCaracteres("z" + "̀́̂̃̄̅̆̇̈".repeat(2));
+  assert.equal(z.chave, "zalgo"); assert.match(z.motivo, /zalgo/);
+});
+const capsLigado = (modo) => (am) => { am.antiCaps.enabled = true; am.punicao.modo = modo; };
+await t("★ servidor em inglês: o toque, o aviso e o que vai ao banco saem em inglês (antes: \"evite escrever em CAIXA ALTA\")", async () => {
+  const config = cfg("en", capsLigado("acumular")), estado = novoEstado(), autor = "01AUTORP5EN00000000000000A";
+  const toque = await rodar("ISTO E UM TEXTO TODO EM CAIXA ALTA GRITANDO", { config, estado, autor });
+  assert.equal(toque.apagou, true);
+  assert.match(toque.texto, /please avoid excessive CAPS/); assert.doesNotMatch(toque.texto, /CAIXA ALTA|evite/);
+  const aviso = await rodar("OUTRO TEXTO TODO EM CAIXA ALTA AQUI GRITANDO", { config, estado, autor });
+  assert.match(aviso.texto, /please avoid excessive CAPS \*\(warning 1\)\*/);
+  assert.equal(db.lerPunicao("01SRVP5", autor)?.motivo, "please avoid excessive CAPS", "o banco guarda o texto que a staff de lá lê");
+});
+await t("★ (pedido do coordenador) a punição automática leva `tipo` e `categoria` à segunda análise: a família do sentinela, `automod:<motivo>` nas regras", async () => {
+  const segunda = await import("./modulos/moderacao/segunda-analise.js");
+  // a família que mais somou (o classificador vai para a da classe dele)
+  const cat = (txt, classes) => sc.categoriaDoConteudo(sc.analisarConteudo(txt, { classes }).features);
+  assert.equal(cat("paga até sexta ou vai se arrepender"), "ameaca");
+  assert.equal(cat("vou mandar o endereço da sua mãe pro grupo"), "ameaca");
+  assert.equal(cat("ganhe dinheiro fácil, chama no privado bit.ly/x"), "golpe");
+  assert.equal(cat("bom dia"), "sentinela");
+  // (3 nov 2026, P5 revisão, R3) antes: "bom dia" + classe odio → "odio". Agora o classificador sozinho não soma
+  // nada, então a categoria fica "sentinela"; junto de outro sinal, os pontos dele vão para a família da classe
+  assert.equal(cat("bom dia", { odio: 0.9 }), "sentinela");
+  assert.equal(sc.categoriaDoConteudo({ link_encurtador: 1, classe_odio: 1, classificador: 3 }), "odio");
+  assert.equal(sc.categoriaDoConteudo({ link_encurtador: 1, classe_chocante: 1, classificador: 3 }), "chocante");
+  assert.equal(cat("se você não pagar até sexta eu vazo suas fotos"), "ameaca");
+  for (const c of ["ameaca", "golpe", "sentinela", "odio", "chocante", "adulto", "grave", "automod:caps", "automod:risadatitulo", "automod:massspam"]) assert.match(c, /^[a-z0-9][a-z0-9:_-]{0,39}$/);
+  // pelo runAutomod: o sentinela (acumular, sem rede) e uma regra de ruído
+  await quieto(() => cl.carregar(gravar(BOM2)));
+  const config = cfg("pt", (am) => { sentinelaAlta(am); am.antiScam.punicao = { modo: "acumular" }; am.antiCaps.enabled = true; am.punicao.modo = "acumular"; });
+  // (a segunda análise só guarda IDs válidos do Stoat: 26 caracteres Crockford)
+  const SIDC = "01SRVP5CAT000000000000000Z", a1 = "01KP5CAT00000000000000000A", a2 = "01KP5CAT00000000000000000B";
+  assert.equal((await rodar(FRASE.ameaca, { config, autor: a1, sid: SIDC })).apagou, true);
+  const c1 = segunda.punicaoLembrada(SIDC, a1);
+  assert.equal(c1?.categoria, "ameaca", JSON.stringify(c1)); assert.equal(c1?.tipo, "mensagem");
+  const estado = novoEstado();
+  await rodar("ISTO E UM TEXTO TODO EM CAIXA ALTA GRITANDO", { config, estado, autor: a2, sid: SIDC });   // o toque não pune
+  assert.equal(segunda.punicaoLembrada(SIDC, a2), null);
+  await rodar("OUTRO TEXTO TODO EM CAIXA ALTA AQUI GRITANDO", { config, estado, autor: a2, sid: SIDC });
+  const c2 = segunda.punicaoLembrada(SIDC, a2);
+  assert.equal(c2?.categoria, "automod:caps"); assert.equal(c2?.tipo, "mensagem");
+  const src = fs.readFileSync("modulos/moderacao/automod-engine.js", "utf8");
+  assert.equal((src.match(/return (barrar|punirRuido)\(/g) ?? []).length, (src.match(/return (barrar|punirRuido)\([^\n]*qual\(/g) ?? []).length, "toda punição de regra passa a chave");
+  assert.match(src, /motivo: motivoDe\("conteudo"\), nota: r\.nota, grave: r\.grave,\n\s+tipo: "mensagem", categoria: categoriaDoConteudo\(r\.features\) \}\);/);
+});
+await t("★ servidor em espanhol: idem em espanhol (caps, caracteres invisíveis, emoji, menções)", async () => {
+  const config = cfg("es", (am) => { capsLigado("avisar")(am); am.antiCaracteres.enabled = true; am.antiEmoji = { ...(am.antiEmoji ?? {}), enabled: true, maxEmojis: 5 }; am.antiMassMention.enabled = true; am.antiMassMention.maxMentions = 2; });
+  const casos = [
+    ["ISTO E UM TEXTO TODO EM CAIXA ALTA GRITANDO", /evita escribir en MAYÚSCULAS en exceso/],
+    ["oi‮tudo bem", /uso de caracteres invisibles o de control de texto/],
+    ["😀😀😀😀😀😀😀😀", /demasiados emojis en un solo mensaje \(8\)/],
+  ];
+  for (const [txt, re] of casos) {
+    const r = await rodar(txt, { config });
+    assert.equal(r.apagou, true, txt); assert.match(r.texto, re, txt);
+    assert.doesNotMatch(r.texto, /evite|invisíveis|muitos emojis/, txt);
+  }
+});
+await t("★ servidor em português: o texto de sempre (regressão)", async () => {
+  const r = await rodar("ISTO E UM TEXTO TODO EM CAIXA ALTA GRITANDO", { config: cfg("pt", capsLigado("avisar")) });
+  assert.match(r.texto, /evite escrever em CAIXA ALTA em excesso/);
+});
+await t("★ DRY: nenhum motivo de punição escrito à mão no automod-engine.js (todos pelo motivos.js)", () => {
+  const src = fs.readFileSync("modulos/moderacao/automod-engine.js", "utf8");
+  for (const velho of ["linguagem de ódio não é tolerada", "muitos emojis numa", "muitas imagens/arquivos", "não é permitido enviar convites",
+    "conteúdo proibido detectado", "lista de bloqueio do servidor", "você mencionou", "título só com risada", "CAIXA ALTA em excesso",
+    "risada em sequência (", "flood de mensagens", "mensagens muito rapidamente"]) assert.ok(!src.includes(velho), velho);
+  assert.doesNotMatch(src, /punirRuido\([^,]+, r\.motivo|barrar\([^,]+, "|motivo: "/);
+  assert.doesNotMatch(fs.readFileSync("modulos/moderacao/caracteres.js", "utf8"), /motivo: "|motivo: `/);
+});
+
+console.log("── 6. o tempo do automod (R11) ──");
+await t("★ contadores por hora: n, p50/p95 pelo histograma (faixas ×√2), máximo exato; valor inválido ignorado; 3 horas guardadas", () => {
+  tempo.zerar();
+  const H = tempo.HORA, base = 1000 * H;
+  for (let i = 1; i <= 100; i++) tempo.registrar("total", i, base + 10);
+  for (const ruim of [NaN, -1, Infinity, "5"]) tempo.registrar("total", ruim, base + 10);
+  tempo.registrar(42, 1, base + 10);
+  const r = tempo.resumo(1000);
+  assert.equal(r.total.n, 100); assert.equal(r.total.max, 100);
+  assert.ok(r.total.p50 >= 50 && r.total.p50 <= 50 * Math.SQRT2 + 1e-9, `p50 ${r.total.p50}`);
+  assert.ok(r.total.p95 >= 95 && r.total.p95 <= 100, `p95 ${r.total.p95}`);
+  assert.deepEqual(Object.keys(r), ["total"]);
+  tempo.registrar("total", 0, base + 3 * H); tempo.registrar("total", 0.001, base + 3 * H);
+  assert.deepEqual(tempo.resumo(1000), {}, "a hora 1000 saiu (só as 3 últimas ficam)");
+  assert.equal(tempo.resumo(1003).total.n, 2); assert.ok(tempo.resumo(1003).total.p50 <= 0.01);
+  for (let i = 0; i < 40; i++) tempo.registrar(`etapa${i}`, 1, base + 3 * H);
+  assert.ok(Object.keys(tempo.resumo(1003)).length <= 16, "teto de etapas por hora");
+  assert.deepEqual(tempo.resumo(999999), {});
+});
+await t("★ descrever: uma linha nos 3 idiomas, só números (nada de usuário/servidor); sem medida → null", () => {
+  tempo.zerar();
+  const agora = Date.now();
+  tempo.registrar("total", 0.4, agora); tempo.registrar("total", 12, agora); tempo.registrar("sentinela", 0.2, agora); tempo.registrar("classificador", 0.05, agora);
+  const r = tempo.resumo(tempo.horaDe(agora));
+  assert.match(tempo.descrever(r, "pt"), /^2 msg · p50 0\.\d\d ms · p95 12 ms · máx 12 ms — sentinela p50 0\.\d\d ms · p95 0\.\d\d ms — classificador p50 0\.0\d ms · p95 0\.0\d ms$/);
+  assert.match(tempo.descrever(r, "en"), /· max 12 ms — sentinel p50 .* — classifier p50/);
+  assert.match(tempo.descrever(r, "es"), /· máx 12 ms — centinela p50 .* — clasificador p50/);
+  assert.equal(tempo.descrever({}, "pt"), null); assert.equal(tempo.descrever(tempo.resumo(1), "en"), null);
+});
+await t("★ o runAutomod mede cada mensagem (total, a etapa do sentinela e a do classificador quando há modelo) — inclusive a que é punida", async () => {
+  await quieto(() => cl.carregar(gravar(BOM)));
+  tempo.zerar();
+  const config = cfg("pt", sentinelaAlta);
+  await rodar("bom dia", { config }); await rodar(FRASE.ameaca, { config });
+  const r = tempo.resumo();
+  assert.equal(r.total.n, 2); assert.equal(r.sentinela.n, 2); assert.equal(r.classificador.n, 2);
+  assert.ok(r.total.max >= r.sentinela.max);
+  assert.doesNotMatch(JSON.stringify(r), /bom dia|01AUTOR|01SRV/);
+  cl.descarregar(); await quieto(() => cl.carregar(`${DIR}/nao-existe.json`));
+  await rodar("bom dia", { config });
+  assert.equal(tempo.resumo().classificador.n, 2, "sem modelo, o classificador não é medido (não rodou)");
+});
+const servidores = await import("./modulos/moderacao/servidores.js");
+const painel = async (lang) => {
+  let e;
+  await quieto(() => servidores.cmdServidores({ authorId: "DONO", channel: {} }, [], { sendEmbed: async (_c, x) => { e = x; }, COR: {}, PREFIXO: "&", config: { language: lang },
+    ehSuperAdmin: () => true, client: { servers: new Map([["S1", { id: "S1", name: "Um", memberCount: 3 }]]) } }));
+  return `${e?.title ?? ""}\n${e?.description ?? ""}`.replace(/[⁣⁤]/g, "");
+};
+await t("★ &servidores (DM do dono): o tempo do automod (esta hora / a anterior) e o estado do classificador, nos 3 idiomas", async () => {
+  tempo.zerar();
+  const agora = Date.now();
+  tempo.registrar("total", 1.5, agora); tempo.registrar("total", 3, agora - tempo.HORA);
+  await quieto(() => cl.carregar(gravar(BOM)));
+  const pt = await painel("pt");
+  assert.match(pt, /\*\*⏱️ Automod \(esta hora\):\*\* 1 msg · p50 1\.5 ms/); assert.match(pt, /\*\*⏱️ Automod \(hora anterior\):\*\* 1 msg · p50 3\.0 ms/);
+  assert.match(pt, /\*\*🧠 Classificador de texto:\*\* ligado — golpe, ameaca · \d+ peso\(s\) · treinado em 2026-11-03/);
+  const en = await painel("en");
+  assert.match(en, /⏱️ Automod \(this hour\):\*\* 1 msg/); assert.match(en, /🧠 Text classifier:\*\* on — golpe, ameaca/);
+  const es = await painel("es");
+  assert.match(es, /⏱️ Automod \(esta hora\):\*\* 1 msg/); assert.match(es, /🧠 Clasificador de texto:\*\* activado/);
+  cl.descarregar(); await quieto(() => cl.carregar(`${DIR}/nao-existe.json`));
+  assert.match(await painel("pt"), /🧠 Classificador de texto:\*\* sem o arquivo do modelo/);
+  await quieto(() => cl.carregar(gravar({ ...BOM, formato: 9 })));
+  const inval = await painel("en");
+  assert.match(inval, /🧠 Text classifier:\*\* invalid file \(formato 9 \(esperado 1\)\)/); assert.doesNotMatch(inval, /\/tmp|p5-sinais/);
+  process.env.CLASSIFICADOR_TEXTO = "0"; await quieto(() => cl.carregar(gravar(BOM)));
+  assert.match(await painel("es"), /🧠 Clasificador de texto:\*\* desactivado \(`CLASSIFICADOR_TEXTO=0`\)/);
+  delete process.env.CLASSIFICADOR_TEXTO;
+  tempo.zerar();
+  assert.match(await painel("pt"), /\*\*⏱️ Automod:\*\* nenhuma mensagem medida nas últimas 2 h/);
+});
+await t("★ relatório por hora: a linha do tempo do automod da hora do relatório; não conta como \"algo aconteceu\"", async () => {
+  const rel = await import("./modulos/ferramentas/relatorio.js");
+  tempo.zerar();
+  const ate = Math.floor(Date.now() / tempo.HORA) * tempo.HORA, desde = ate - tempo.HORA;
+  let r = await quieto(() => rel.gerar({ client: { servers: new Map() }, cfg: {}, ate, esvaziar: false }));
+  assert.doesNotMatch(r.description, /Automod/);
+  tempo.registrar("total", 2, desde + 5); tempo.registrar("total", 4, desde + 6); tempo.registrar("total", 99, ate + 5);
+  r = await quieto(() => rel.gerar({ client: { servers: new Map() }, cfg: {}, ate, esvaziar: false }));
+  assert.match(r.description, /\n\n⏱️ \*\*Automod:\*\* 2 msg · p50 2\.\d ms · p95 4\.\d ms · máx 4\.0 ms$/, "só a hora do relatório (não a atual)");
+  assert.equal(r.vazio, true, "a hora sem evento continua vazia (pularVazias segue valendo)");
+  assert.equal(rel.linhaDoTempo(ate - 10 * tempo.HORA), null);
+  // (3 nov 2026, P5 revisão) antes: sempre em português; agora no idioma do dono (o do servidor dele)
+  assert.match(rel.linhaDoTempo(desde, "en"), /^⏱️ \*\*Automod:\*\* 2 msg · p50 .* · max 4\.0 ms$/);
+  assert.match(rel.linhaDoTempo(desde, "es"), /^⏱️ \*\*Automod:\*\* 2 msg · p50 .* · máx 4\.0 ms$/);
+  const dono = await import("./modulos/core/dono.js");
+  assert.equal(rel.linhaDoTempo(desde), rel.linhaDoTempo(desde, dono.idiomaDoDono()));
+  assert.match(fs.readFileSync("modulos/ferramentas/relatorio.js", "utf8"), /export function linhaDoTempo\(desde, idioma = idiomaDoDono\(\)\)/);
+});
+cl.descarregar();
+
+console.log(`\nP5 SINAIS: ${ok} ok, ${falhou} falha(s)`);
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// p5-integracao  (3 nov 2026) — a integração do P5: onde mora o modelo do classificador
+// de texto (CLASSIFICADOR_TEXTO_ARQUIVO → pasta do banco → código), o `&servidores` com a
+// origem e a versão do modelo, e as NOVIDADES/pacote do P5.
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p5-integracao"] = async () => {
+const assert = (await import("node:assert")).default;
+const fs = (await import("node:fs")).default;
+const os = (await import("node:os")).default;
+const path = (await import("node:path")).default;
+const { spawnSync } = await import("node:child_process");
+const DIR = fs.mkdtempSync(path.join(os.tmpdir(), "p5-integracao-"));
+const BANCO = path.join(DIR, "banco"), FORA = path.join(DIR, "judy-dados");
+fs.mkdirSync(BANCO); fs.mkdirSync(FORA);
+Object.assign(process.env, { DB_PATH: path.join(BANCO, "stoat.db"), CONFIG_PATH: path.join(DIR, "p5i.json"), LOG_SEGREDO: "segredo-de-teste" });
+for (const v of ["CLASSIFICADOR_TEXTO", "CLASSIFICADOR_TEXTO_ARQUIVO"]) delete process.env[v];
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.stack ?? e).split("\n").slice(0, 5).join("\n     ")}`); falhou++; } };
+const comLog = async (fn) => { const log = [], o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = (...a) => log.push(a.map(String).join(" ")); try { return { r: await fn(), log }; } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const quieto = async (fn) => (await comLog(fn)).r;
+const ler = (f) => fs.readFileSync(f, "utf8");
+const semComent = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/[^\n]*/g, "$1");
+
+const db = await import("./modulos/core/db.js");
+await quieto(() => db.abrirBanco(process.env.DB_PATH));
+const env = await import("./modulos/core/env.js");
+const ts = await import("./modulos/moderacao/texto-sinais.js");
+const cl = await import("./modulos/moderacao/classificador-texto.js");
+const servidores = await import("./modulos/moderacao/servidores.js");
+
+const FRASE = "ganhe dinheiro fácil no pix";
+const modelo = (extra = {}) => {
+  const pesos = ts.sinais(FRASE).map(([i, v]) => [i, 8 * v]);
+  return { formato: 1, versaoSinais: ts.VERSAO_SINAIS, dimensoes: ts.DIMENSOES, classes: ["golpe"], pesos: { golpe: pesos },
+    vies: { golpe: -4 }, limiares: { golpe: 0.8 }, treinadoEm: "2026-11-03T00:00:00Z", ...extra };
+};
+const sha8 = (arq) => (spawnSync("sha256sum", [arq], { encoding: "utf8" }).stdout || "").slice(0, 8);
+const NO_BANCO = path.join(BANCO, "classificador-texto.json"), NA_VAR = path.join(FORA, "classificador-texto.json");
+const semCaminho = (txt) => { for (const p of [DIR, BANCO, FORA, cl.CAMINHO_PADRAO, "/tmp", "classificador-texto.json"]) assert.ok(!txt.includes(p), `caminho no texto: ${p}\n${txt}`); };
+const painel = async (lang) => {
+  let e;
+  await quieto(() => servidores.cmdServidores({ authorId: "DONO", channel: {} }, [], { sendEmbed: async (_c, x) => { e = x; }, COR: {}, PREFIXO: "&", config: { language: lang },
+    ehSuperAdmin: () => true, client: { servers: new Map([["S1", { id: "S1", name: "Um", memberCount: 3 }]]) } }));
+  return (e?.description ?? "").replace(/[\u2063\u2064]/g, "").split("\n").find((l) => l.includes("🧠")) ?? "";
+};
+
+console.log("── onde mora o modelo ──");
+await t("★ a ordem: sem a variável → pasta do DB_PATH e depois o código; com ela → a variável e depois o código", () => {
+  assert.equal(cl.NOME_ARQUIVO, "classificador-texto.json");
+  assert.ok(cl.CAMINHO_PADRAO.endsWith(path.join("modulos", "moderacao", "dados", "classificador-texto.json")));
+  assert.deepEqual(cl.caminhosDoModelo({ DB_PATH: "/data/stoat.db" }), [{ origem: "banco", caminho: "/data/classificador-texto.json" }, { origem: "codigo", caminho: cl.CAMINHO_PADRAO }]);
+  assert.deepEqual(cl.caminhosDoModelo({}).map((c) => [c.origem, c.caminho]), [["banco", "classificador-texto.json"], ["codigo", cl.CAMINHO_PADRAO]], "sem DB_PATH: ./stoat.db → a pasta atual");
+  assert.deepEqual(cl.caminhosDoModelo({ DB_PATH: "/data/stoat.db", CLASSIFICADOR_TEXTO_ARQUIVO: "/judy-dados/classificador-texto.json" }),
+    [{ origem: "variavel", caminho: "/judy-dados/classificador-texto.json" }, { origem: "codigo", caminho: cl.CAMINHO_PADRAO }]);
+  // (pedido da bateria) definida mas VAZIA (ou só espaços) = não definida
+  for (const v of ["", "   "]) assert.deepEqual(cl.caminhosDoModelo({ DB_PATH: "/data/stoat.db", CLASSIFICADOR_TEXTO_ARQUIVO: v }).map((c) => c.origem), ["banco", "codigo"], JSON.stringify(v));
+  // o mesmo arquivo não é olhado duas vezes
+  assert.deepEqual(cl.caminhosDoModelo({ CLASSIFICADOR_TEXTO_ARQUIVO: cl.CAMINHO_PADRAO }).map((c) => c.origem), ["variavel"]);
+  assert.deepEqual(cl.caminhosDoModelo({ DB_PATH: path.join(path.dirname(cl.CAMINHO_PADRAO), "x.db") }).map((c) => c.origem), ["banco"]);
+});
+await t("★ .env: CLASSIFICADOR_TEXTO_ARQUIVO vazio = não definido; caminho absoluto qualquer passa (mesmo sem o arquivo: não para o boot); relativo ou com controle para o boot, sem ecoar o valor", () => {
+  const problemas = (v) => { if (v === undefined) delete process.env.CLASSIFICADOR_TEXTO_ARQUIVO; else process.env.CLASSIFICADOR_TEXTO_ARQUIVO = v; return env.problemasDoEnv().filter((x) => /CLASSIFICADOR_TEXTO_ARQUIVO/.test(x)); };
+  for (const v of [undefined, "", "   ", "/judy-dados/classificador-texto.json", "/data/classificador-texto.json", "/nao/existe/modelo.bin", " /data/m.json "]) assert.deepEqual(problemas(v), [], JSON.stringify(v));
+  assert.equal(env.arquivoDoClassificador({ CLASSIFICADOR_TEXTO_ARQUIVO: "  " }), null);
+  assert.equal(env.arquivoDoClassificador({ CLASSIFICADOR_TEXTO_ARQUIVO: " /judy-dados/classificador-texto.json " }), "/judy-dados/classificador-texto.json");
+  for (const v of ["modelo-relativo.json", "./dados/classificador-texto.json", "~/m.json", "/data/a\nb.json", "/data/a\u0007.json", "/" + "x".repeat(1100)]) {
+    const p = problemas(v);
+    assert.equal(p.length, 1, JSON.stringify(v));
+    assert.match(p[0], /CLASSIFICADOR_TEXTO_ARQUIVO é inválido \(use um caminho absoluto/);
+    assert.ok(!p[0].includes(v.trim()), "o valor não aparece");
+  }
+  delete process.env.CLASSIFICADOR_TEXTO_ARQUIVO;
+  const ex = ler(".env.example");
+  assert.match(ex, /\n#CLASSIFICADOR_TEXTO_ARQUIVO=\/data\/classificador-texto\.json\n/);
+  assert.doesNotMatch(ex, /^CLASSIFICADOR_TEXTO_ARQUIVO=/m, "comentada: vazio é o padrão");
+  assert.match(ex, /docker cp classificador-texto\.json stoat-bot:\/data\/ && docker restart stoat-bot/);
+  assert.doesNotMatch(ex, /lido de\s*\n# modulos\/moderacao\/dados\/classificador-texto\.json/, "o comentário antigo dizia que só o código valia");
+  for (const r of ["README.md", "README.pt-BR.md", "README.es.md"]) assert.match(ler(r), /\| `CLASSIFICADOR_TEXTO_ARQUIVO` \| `\/data\/classificador-texto\.json` \|/, r);
+});
+await t("★ sem arquivo em lugar nenhum: ausente, uma linha no log com o que foi olhado (rótulos, sem caminho)", async () => {
+  assert.ok(!fs.existsSync(cl.CAMINHO_PADRAO), "o repositório vai sem o modelo");
+  cl.descarregar();
+  const { r, log } = await comLog(() => cl.carregar());
+  assert.equal(r, "ausente");
+  assert.equal(log.length, 1);
+  assert.match(log[0], /^\[CLASSIFICADOR\] sem o arquivo do modelo \(procurei: pasta do banco \(volume\), pasta do código \(imagem\)\) — o sentinela segue sem o sinal$/);
+  const e = cl.estado();
+  assert.deepEqual([e.origem, e.procurados, e.modelo], [null, ["banco", "codigo"], null]);
+  // pasta no lugar do arquivo = não achou (olha o próximo)
+  fs.mkdirSync(NO_BANCO);
+  assert.equal(await quieto(() => cl.carregar()), "ausente");
+  assert.deepEqual(cl.estado().procurados, ["banco", "codigo"]);
+  fs.rmSync(NO_BANCO, { recursive: true });
+});
+await t("★ o modelo na pasta do banco (o volume /data) carrega: origem e versão (SHA-256) no log, sem caminho", async () => {
+  fs.writeFileSync(NO_BANCO, JSON.stringify(modelo()));
+  cl.descarregar();
+  const { r, log } = await comLog(() => cl.classesAcima(FRASE));
+  assert.deepEqual(Object.keys(r), ["golpe"], "carregou sob demanda e funciona");
+  const e = cl.estado();
+  assert.deepEqual([e.situacao, e.origem, e.procurados, e.modelo], ["ligado", "banco", ["banco"], sha8(NO_BANCO)]);
+  assert.match(e.modelo, /^[0-9a-f]{8}$/);
+  assert.equal(log.length, 1);
+  assert.match(log[0], new RegExp(`^\\[CLASSIFICADOR\\] ligado: golpe · \\d+ peso\\(s\\) · treinado em 2026-11-03T00:00:00Z · modelo ${e.modelo} · pasta do banco \\(volume\\)$`));
+  semCaminho(log[0]);
+});
+await t("★ trocar o modelo sem rebuild (docker cp + restart): o arquivo novo na pasta do banco entra na próxima carga, com outra versão", async () => {
+  const antes = cl.estado().modelo;
+  fs.writeFileSync(NO_BANCO, JSON.stringify(modelo({ treinadoEm: "2026-11-04T00:00:00Z" })));
+  cl.descarregar();   // = o restart
+  assert.equal(await quieto(() => cl.carregar()), "ligado");
+  const e = cl.estado();
+  assert.notEqual(e.modelo, antes); assert.equal(e.modelo, sha8(NO_BANCO)); assert.equal(e.treinadoEm, "2026-11-04T00:00:00Z");
+});
+await t("★ CLASSIFICADOR_TEXTO_ARQUIVO aponta para outro lugar (a bateria: /judy-dados/…): vale ele, e a pasta do banco nem é olhada", async () => {
+  fs.writeFileSync(NA_VAR, JSON.stringify(modelo({ treinadoEm: "2026-11-05T00:00:00Z" })));
+  process.env.CLASSIFICADOR_TEXTO_ARQUIVO = NA_VAR;
+  try {
+    const { r, log } = await comLog(() => cl.carregar());
+    assert.equal(r, "ligado");
+    const e = cl.estado();
+    assert.deepEqual([e.origem, e.procurados, e.modelo, e.treinadoEm], ["variavel", ["variavel"], sha8(NA_VAR), "2026-11-05T00:00:00Z"]);
+    assert.match(log[0], / · variável CLASSIFICADOR_TEXTO_ARQUIVO$/); semCaminho(log[0]);
+    // definida, mas o arquivo não existe: o bot segue sem o sinal, uma linha no log (o modelo da pasta do banco NÃO entra)
+    process.env.CLASSIFICADOR_TEXTO_ARQUIVO = path.join(FORA, "nao-existe.json");
+    assert.deepEqual(env.problemasDoEnv().filter((x) => /CLASSIFICADOR/.test(x)), [], "não para o boot");
+    const x = await comLog(() => cl.carregar());
+    assert.equal(x.r, "ausente"); assert.equal(x.log.length, 1);
+    assert.match(x.log[0], /procurei: variável CLASSIFICADOR_TEXTO_ARQUIVO, pasta do código \(imagem\)\)/);
+    assert.equal(cl.classesAcima(FRASE), null);
+    // vazia = não definida: volta à pasta do banco
+    process.env.CLASSIFICADOR_TEXTO_ARQUIVO = "";
+    assert.equal(await quieto(() => cl.carregar()), "ligado"); assert.equal(cl.estado().origem, "banco");
+  } finally { delete process.env.CLASSIFICADOR_TEXTO_ARQUIVO; }
+});
+await t("★ achado um arquivo, a validação estrita dele decide: inválido ou de outra versão NÃO cai no próximo lugar", async () => {
+  fs.writeFileSync(NO_BANCO, JSON.stringify(modelo({ formato: 2 })));
+  let x = await comLog(() => cl.carregar());
+  assert.equal(x.r, "invalido");
+  assert.deepEqual([cl.estado().origem, cl.estado().procurados], ["banco", ["banco"]], "parou na pasta do banco");
+  assert.match(x.log[0], /^\[CLASSIFICADOR\] arquivo do modelo inválido \(formato 2 \(esperado 1\)\) · pasta do banco \(volume\) — o sentinela segue sem o sinal$/);
+  assert.match(cl.estado().modelo, /^[0-9a-f]{8}$/, "a versão do arquivo lido aparece mesmo inválido (qual arquivo foi recusado)");
+  fs.writeFileSync(NO_BANCO, JSON.stringify(modelo({ versaoSinais: "1.00000000" })));
+  x = await comLog(() => cl.carregar());
+  assert.equal(x.r, "outra-versao"); assert.match(x.log[0], /de outra versão dos sinais .* · pasta do banco \(volume\)/); semCaminho(x.log[0]);
+  fs.writeFileSync(NO_BANCO, "{");
+  assert.equal(await quieto(() => cl.carregar()), "invalido"); assert.equal(cl.estado().detalhe, "JSON inválido");
+  // e o CLASSIFICADOR_TEXTO=0 desliga antes de olhar qualquer lugar
+  fs.writeFileSync(NO_BANCO, JSON.stringify(modelo()));
+  process.env.CLASSIFICADOR_TEXTO = "0";
+  try { assert.equal(await quieto(() => cl.carregar()), "desligado"); assert.deepEqual(cl.estado().procurados, []); }
+  finally { delete process.env.CLASSIFICADOR_TEXTO; }
+});
+await t("★ carregar(caminho) com um arquivo explícito (testes, bateria): só ele, origem \"arquivo indicado\"", async () => {
+  const { r, log } = await comLog(() => cl.carregar(NA_VAR));
+  assert.equal(r, "ligado");
+  assert.deepEqual([cl.estado().origem, cl.estado().procurados], ["arquivo", ["arquivo"]]);
+  assert.match(log[0], / · arquivo indicado$/);
+});
+
+console.log("── &servidores (DM do dono) ──");
+await t("★ &servidores mostra a origem e a versão do modelo nos 3 idiomas, sem caminho", async () => {
+  fs.writeFileSync(NO_BANCO, JSON.stringify(modelo()));
+  cl.descarregar(); await quieto(() => cl.carregar());
+  const v = cl.estado().modelo;
+  const pt = await painel("pt"), en = await painel("en"), es = await painel("es");
+  assert.match(pt, new RegExp(`^\\*\\*🧠 Classificador de texto:\\*\\* ligado — golpe · \\d+ peso\\(s\\) · treinado em 2026-11-03 · modelo \`${v}\` · origem: pasta do banco \\(volume\\)$`));
+  assert.match(en, new RegExp(`🧠 Text classifier:\\*\\* on — golpe · .* · model \`${v}\` · source: database folder \\(volume\\)$`));
+  assert.match(es, new RegExp(`🧠 Clasificador de texto:\\*\\* activado — golpe · .* · modelo \`${v}\` · origen: carpeta de la base de datos \\(volumen\\)$`));
+  for (const l of [pt, en, es]) semCaminho(l);
+  process.env.CLASSIFICADOR_TEXTO_ARQUIVO = NA_VAR;
+  try { cl.descarregar(); assert.match(await painel("en"), /· source: CLASSIFICADOR_TEXTO_ARQUIVO variable$/); }
+  finally { delete process.env.CLASSIFICADOR_TEXTO_ARQUIVO; }
+  fs.rmSync(NO_BANCO);
+  cl.descarregar();
+  assert.match(await painel("pt"), /sem o arquivo do modelo \(o sentinela segue sem ele\) · procurado em: pasta do banco \(volume\), pasta do código \(imagem\)$/);
+  assert.match(await painel("es"), /sin el archivo del modelo \(el centinela sigue sin él\) · buscado en: carpeta de la base de datos \(volumen\), carpeta del código \(imagen\)$/);
+  fs.writeFileSync(NO_BANCO, JSON.stringify(modelo({ formato: 9 })));
+  cl.descarregar();
+  const inv = await painel("en");
+  assert.match(inv, /invalid file \(formato 9 \(esperado 1\)\) — the sentinel works without it · model `[0-9a-f]{8}` · source: database folder \(volume\)$/); semCaminho(inv);
+  fs.rmSync(NO_BANCO); cl.descarregar();
+});
+
+console.log("── temporários das escritas atômicas ──");
+const tmpMod = await import("./modulos/core/temporarios.js");
+const retencao = await import("./modulos/core/retencao.js");
+const velho = (arq, minutos) => { const t = new Date(Date.now() - minutos * 60_000); fs.utimesSync(arq, t, t); return arq; };
+await t("★ limparOrfaos: apaga só os temporários do bot com mais de 10 min — nunca o arquivo de verdade, link, pasta, nome parecido nem o que está sendo escrito", () => {
+  const P = path.join(DIR, "orfaos"); fs.mkdirSync(P);
+  const some = [".bateria-treino.jsonl.123.ab12cd34.tmp", ".bateria-imagens.jsonl.9.zz.tmp", ".bateria-aviso.chave.4567.k0k0k0k0.tmp", "blocklist-cache.bin.tmp"];
+  const fica = ["bateria-treino.jsonl", "stoat.db", ".bateria-treino.jsonl.tmp", ".bateria-treino.jsonl.12.AB.tmp", "x.tmp", ".outro.jsonl.1.ab.tmp", ".bateria-treino.jsonl.1.ab.tmp.bak", "log-segredo.key"];
+  for (const f of [...some, ...fica]) velho((fs.writeFileSync(path.join(P, f), "x"), path.join(P, f)), 11);
+  const recente = velho((fs.writeFileSync(path.join(P, ".bateria-treino.jsonl.5.novo.tmp"), ""), path.join(P, ".bateria-treino.jsonl.5.novo.tmp")), 9);
+  fs.mkdirSync(path.join(P, ".bateria-treino.jsonl.6.pasta.tmp")); velho(path.join(P, ".bateria-treino.jsonl.6.pasta.tmp"), 60);
+  fs.symlinkSync(path.join(P, "stoat.db"), path.join(P, ".bateria-treino.jsonl.7.link.tmp"));
+  const escrevendo = velho((fs.writeFileSync(path.join(P, ".bateria-treino.jsonl.8.agora.tmp"), ""), path.join(P, ".bateria-treino.jsonl.8.agora.tmp")), 60);
+  tmpMod.abrir(escrevendo);
+  assert.equal(tmpMod.limparOrfaos(P), some.length);
+  for (const f of some) assert.ok(!fs.existsSync(path.join(P, f)), f);
+  for (const f of fica) assert.ok(fs.existsSync(path.join(P, f)), f);
+  assert.ok(fs.existsSync(recente), "menos de 10 min: pode ser uma escrita agora");
+  assert.ok(fs.statSync(path.join(P, ".bateria-treino.jsonl.6.pasta.tmp")).isDirectory());
+  assert.ok(fs.lstatSync(path.join(P, ".bateria-treino.jsonl.7.link.tmp")).isSymbolicLink() && fs.existsSync(path.join(P, "stoat.db")), "link: nem ele nem o alvo");
+  assert.ok(fs.existsSync(escrevendo), "o que este processo está escrevendo fica");
+  tmpMod.fechar(escrevendo);
+  assert.equal(tmpMod.limparOrfaos(P), 1, "fechado, vira órfão como os outros");
+  assert.equal(tmpMod.limparOrfaos(path.join(DIR, "nao-existe")), 0); assert.equal(tmpMod.limparOrfaos(null), 0);
+  assert.equal(tmpMod.IDADE_MS, 10 * 60_000);
+});
+await t("★ na subida e no ciclo de 6 h (retencao.limparVencidos): os órfãos da pasta do banco saem, os recentes ficam; o main.js registra", () => {
+  const orf = velho((fs.writeFileSync(path.join(BANCO, ".bateria-treino.jsonl.42.velho0.tmp"), ""), path.join(BANCO, ".bateria-treino.jsonl.42.velho0.tmp")), 30);
+  const blk = velho((fs.writeFileSync(path.join(BANCO, "blocklist-cache.bin.tmp"), ""), path.join(BANCO, "blocklist-cache.bin.tmp")), 30);
+  const novo = path.join(BANCO, ".bateria-imagens.jsonl.42.novo00.tmp"); fs.writeFileSync(novo, "");
+  // o `agora` dos testes (um ano à frente) não faz a limpeza apagar o que é recente no disco
+  const r = retencao.limparVencidos(Date.now() + 365 * 86_400_000);
+  assert.equal(r.temporarios, 2);
+  assert.ok(!fs.existsSync(orf) && !fs.existsSync(blk) && fs.existsSync(novo));
+  fs.rmSync(novo);
+  assert.match(ler("main.js"), /const v = retencao\.limparVencidos\(Date\.now\(\)\);[\s\S]{0,900}if \(v\.temporarios\) console\.info\(`\[PRIVACIDADE\] \$\{v\.temporarios\} temporário\(s\) órfão\(s\)/);
+});
+const filho = (codigo) => spawnSync(process.execPath, ["--no-warnings", "--input-type=module", "-e", codigo],
+  { cwd: process.cwd(), encoding: "utf8", timeout: 30_000, env: { ...process.env, DB_PATH: path.join(DIR, "filho", "stoat.db"), LOG_SEGREDO: "x" } });
+await t("★ o processo sai no meio de uma escrita (process.exit, como o SIGTERM e o fim de suíte): o temporário marcado sai junto; o já fechado fica", () => {
+  fs.mkdirSync(path.join(DIR, "filho"), { recursive: true });
+  const a = path.join(DIR, "filho", ".bateria-treino.jsonl.1.marcado.tmp"), b = path.join(DIR, "filho", ".bateria-treino.jsonl.2.fechado.tmp");
+  const r = filho(`import fs from "node:fs"; const t = await import("./modulos/core/temporarios.js");
+    fs.writeFileSync(${JSON.stringify(a)}, "x"); t.abrir(${JSON.stringify(a)});
+    fs.writeFileSync(${JSON.stringify(b)}, "x"); t.abrir(${JSON.stringify(b)}); t.fechar(${JSON.stringify(b)});
+    process.exit(0);`);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!fs.existsSync(a), "o marcado saiu"); assert.ok(fs.existsSync(b), "o fechado não é com o gancho");
+  fs.rmSync(b);
+});
+await t("★ treino.js de verdade: process.exit no meio da escrita do bateria-treino.jsonl não deixa .tmp; o código marca e desmarca o temporário", () => {
+  const pasta = path.join(DIR, "filho");
+  let pegos = 0;
+  for (let i = 0; i < 5; i++) {
+    const r = filho(`import fs from "node:fs";
+      const db = await import("./modulos/core/db.js"); db.abrirBanco(process.env.DB_PATH);
+      const treino = await import("./modulos/moderacao/treino.js");
+      const pasta = ${JSON.stringify(pasta)};
+      treino.reescrever({ forcar: true });
+      let n = 0;
+      const olhar = () => {
+        if (fs.readdirSync(pasta).some((f) => f.endsWith(".tmp"))) { console.log("no meio"); process.exit(0); }
+        if (++n > 200000) { console.log("terminou antes"); process.exit(0); }
+        setImmediate(olhar);
+      };
+      olhar();`);
+    assert.equal(r.status, 0, r.stderr);
+    if (/no meio/.test(r.stdout)) pegos++;
+    assert.deepEqual(fs.readdirSync(pasta).filter((f) => f.endsWith(".tmp")), [], `rodada ${i}: ${r.stdout}`);
+  }
+  assert.ok(pegos >= 1, "nenhuma das 5 saídas pegou a escrita no meio");
+  const src = ler("modulos/moderacao/treino.js");
+  assert.match(src, /const tmp = temporarios\.abrir\(join\(pasta, `\.\$\{ARQUIVO\}\.\$\{process\.pid\}\.\$\{aleatorio\.sufixo\(8\)\}\.tmp`\)\);/);
+  assert.match(src, /\} finally \{ temporarios\.fechar\(tmp\); \}/);
+  assert.match(ler("modulos/moderacao/indice-dominios.js"), /const tmp = temporarios\.abrir\(alvo \+ "\.tmp"\);[\s\S]{0,200}\} finally \{ temporarios\.fechar\(tmp\); \}/);
+  // o runner confere /tmp depois da rodada
+  assert.match(ler("testes.mjs"), /let tmpOrfaos = temporariosDoBot\(\)\.filter\(\(f\) => !TMP_ANTES\.has\(f\)\);/);
+});
+
+console.log("── PRIVACIDADE: o classificador e o tempo do automod ──");
+await t("★ PRIVACIDADE (pt/en/es): o classificador roda na máquina do operador e não guarda nada; o tempo do automod fica só na memória (3 h), sem dado de usuário — e o código confere", async () => {
+  const UMA = ler("PRIVACIDADE.md").replace(/\n  /g, " ");
+  const secao = (titulo) => { const i = UMA.indexOf(`## ${titulo}`); const j = UMA.indexOf("\n## ", i + 3); return UMA.slice(i, j < 0 ? undefined : j); };
+  const RE = {
+    "Português": [/- \*\*O classificador de texto\*\* \(um modelo pequeno, na máquina do operador, só quando há o arquivo do modelo\) dá à mensagem que o automod já analisa uma nota a mais: nada sai da máquina e ele não guarda nada — o resultado só entra na nota, como os outros sinais\./,
+      /- \*\*Quanto tempo o automod leva por mensagem\*\*: só os tempos, somados por hora, na memória do processo \(as últimas 3 horas; um reinício zera\), sem pessoa, servidor, canal nem texto\. Só o operador vê/],
+    "English": [/- \*\*The text classifier\*\* \(a small model, on the operator's machine, only when the model file is there\) gives the message the automod already analyzes one more score: nothing leaves the machine and it keeps nothing — the result only goes into the score, like the other signals\./,
+      /- \*\*How long the automod takes per message\*\*: only the times, added up per hour, in the process memory \(the last 3 hours; a restart clears them\), with no person, server, channel or text\. Only the operator sees them/],
+    "Español": [/- \*\*El clasificador de texto\*\* \(un modelo pequeño, en la máquina del operador, solo cuando está el archivo del modelo\) le da al mensaje que el automod ya analiza una nota más: nada sale de la máquina y no guarda nada — el resultado solo entra en la nota, como las otras señales\./,
+      /- \*\*Cuánto tarda el automod por mensaje\*\*: solo los tiempos, sumados por hora, en la memoria del proceso \(las últimas 3 horas; un reinicio los borra\), sin persona, servidor, canal ni texto\. Solo el operador los ve/],
+  };
+  for (const [titulo, res] of Object.entries(RE)) {
+    const sec = secao(titulo);
+    const leNaoGuarda = sec.slice(sec.search(/### (O que a Judy lê e não guarda|What Judy reads and doesn't keep|Lo que Judy lee y no guarda)/));
+    assert.ok(leNaoGuarda.length < sec.length, `${titulo}: a seção "lê e não guarda"`);
+    for (const re of res) assert.match(leNaoGuarda.split("\n### ")[0], re, titulo);
+  }
+  for (const l of ler("PRIVACIDADE.md").split("\n")) if (/classificador de texto\*\*|text classifier\*\*|clasificador de texto\*\*|automod leva|automod takes|tarda el automod/.test(l)) assert.ok(l.length <= 88, l);
+  // o código: o classificador só LÊ (sem escrita em disco, banco, rede ou processo filho)
+  const cl = semComent(ler("modulos/moderacao/classificador-texto.js"));
+  assert.doesNotMatch(cl, /writeFile|appendFile|createWriteStream|\bopen\(|rename|core\/db\.js|fetch\(|buscarSeguro|child_process/);
+  assert.match(cl, /fs\.readFileSync\(c\.caminho\)/);
+  // o tempo: em memória, só números, 3 horas, sem banco/disco
+  const tempo = await import("./modulos/core/tempo-automod.js");
+  assert.equal(tempo.HORAS_GUARDADAS, 3);
+  const tsrc = semComent(ler("modulos/core/tempo-automod.js"));
+  assert.doesNotMatch(tsrc, /^import /m, "não importa nada (nem fs nem o banco)");
+  assert.doesNotMatch(tsrc, /userId|serverId|channel|content|texto\b/);
+});
+
+console.log("── NOVIDADES e pacote ──");
+const nov = await import("./modulos/ferramentas/novidades.js");
+await t("★ o topo é a entrada do P5 (= docs/pacote.json P5 / 2026-11-03) e a trava do build passa", () => {
+  const pac = JSON.parse(ler("docs/pacote.json"));
+  assert.deepEqual([pac.pacote, pac.data], ["P5", "2026-11-03"]);
+  const n = nov.NOVIDADES[0];
+  assert.deepEqual([n.id, n.pacote, n.data], ["2026-11-03-p5", "P5", "2026-11-03"]);
+  assert.equal(nov.problemaDaTrava(nov.NOVIDADES, pac), null);
+  assert.equal(new Set(nov.NOVIDADES.map((x) => x.id)).size, nov.NOVIDADES.length);
+});
+await t("★ a entrada do P5: ameaça/exposição de dados reconhecidas e motivos no idioma do servidor — curta, nos 3 idiomas, citando comando; nada do dono nem do que não está ligado", () => {
+  const n = nov.NOVIDADES[0];
+  const RE = {
+    pt: [/Ameaças sem palavrão:\*\* o `\{&automod\.sentinela\}` agora reconhece cobrança com ultimato/, /ameaça de expor dados ou fotos de alguém \("se você não… vou mandar seu endereço pro grupo"\)/, /Motivos no idioma do servidor:\*\* .*`\{&config\.idioma\}`/],
+    en: [/Threats without swear words:\*\* `\{&automod\.sentinela\}` now recognizes payment ultimatums/, /threats to expose someone's data or photos \("if you don't… I'll send your address to the group"\)/, /Reasons in the server's language:\*\* .*`\{&config\.idioma\}`/],
+    es: [/Amenazas sin groserías:\*\* `\{&automod\.sentinela\}` ahora reconoce cobros con ultimátum/, /amenazas de exponer datos o fotos de alguien \("si no… mando tu dirección al grupo"\)/, /Motivos en el idioma del servidor:\*\* .*`\{&config\.idioma\}`/],
+  };
+  for (const l of ["pt", "en", "es"]) {
+    for (const re of RE[l]) assert.match(n[l], re, l);
+    assert.equal(n[l].split("\n").length, 2, `${l}: dois tópicos (R2)`);
+    assert.ok(n[l].length < 420, `${l}: curta (${n[l].length})`);
+    // a segunda análise e o treino são do dono (estão na PRIVACIDADE); o classificador vai sem modelo
+    assert.doesNotMatch(n[l], /dono do bot|bot owner|dueño del bot|segunda análise|second review|segundo análisis|trein|train|entren|classificador|classifier|clasificador/i, l);
+    const d = nov.embedNovidades([n], l, "&", {}).description;
+    assert.ok(d.length < 1900, `${l}: cabe no anúncio`);
+    assert.doesNotMatch(d, /\{&/, `${l}: toda citação resolvida`);
+  }
+});
+
+console.log(`\nP5 INTEGRAÇÃO: ${ok} ok, ${falhou} falha(s)`);
+fs.rmSync(DIR, { recursive: true, force: true });
+process.exit(falhou ? 1 : 0);
+};
+
 const PRECISA_DO_BOT = (nome) => /import\("\.\/main\.js"\)/.test(String(SUITES[nome]));
 
 if (process.env.__SUITE) {
@@ -23747,11 +25618,39 @@ if (process.env.__SUITE) {
   if (desconhecidas.length) { console.error(`suíte(s) desconhecida(s): ${desconhecidas.join(", ")} — veja \`node testes.mjs --lista\``); process.exit(2); }
   const fila = pedidos.length ? pedidos : Object.keys(SUITES);
   const LIMITE_MS = Number(process.env.TESTES_LIMITE_MS || 180_000);
+  // (3 nov 2026, P5) hermético também no disco: o log-segredo.key vazou para a raiz do repositório
+  // (o pseudonimo.js grava a chave ao lado do banco, e sem DB_PATH o banco é ./stoat.db). Cada suíte
+  // recebe DB_PATH e CONFIG_PATH numa pasta temporária SÓ DELA (as que definem os seus continuam
+  // valendo; o DB_PATH do shell nunca chega a uma suíte); e a rodada falha se deixar arquivo novo na raiz.
+  const fsR = await import("node:fs"), osR = await import("node:os");
+  const PASTA_SUITES = fsR.mkdtempSync(path.join(osR.tmpdir(), "judy-testes-"));
+  const RAIZ_ANTES = new Set(fsR.readdirSync(RAIZ));
+  // (3 nov 2026, P5) e nenhum temporário de escrita atômica do bot (core/temporarios.js) sobra em /tmp nem
+  // nas pastas de banco das suítes: a rodada deixava ~15 `.bateria-treino.jsonl.*.tmp` em /tmp a cada vez
+  const { PADRAO: TMP_DO_BOT } = await import("./modulos/core/temporarios.js");
+  const temporariosDoBot = () => {
+    const achados = [];
+    const varrer = (pasta, nivel) => {
+      let itens;
+      try { itens = fsR.readdirSync(pasta, { withFileTypes: true }); } catch { return; }
+      for (const it of itens) {
+        const p = path.join(pasta, it.name);
+        if (it.isFile() && TMP_DO_BOT.test(it.name)) achados.push(p);
+        else if (it.isDirectory() && nivel < 3) varrer(p, nivel + 1);
+      }
+    };
+    varrer(osR.tmpdir(), 1);
+    return achados;
+  };
+  const TMP_ANTES = new Set(temporariosDoBot());
 
   const rodar = (nome) => new Promise((resolver) => {
     const t0 = Date.now();
     // (31 out 2026) hermético: o .env de produção não entra (o main.js faz `import "dotenv/config"`)
-    const filho = spawn(process.execPath, ["--no-warnings", ESTE], { cwd: RAIZ, env: { ...process.env, __SUITE: nome, DOTENV_CONFIG_PATH: "/dev/null" } });
+    const pastaDaSuite = path.join(PASTA_SUITES, nome);
+    fsR.mkdirSync(pastaDaSuite, { recursive: true });
+    const filho = spawn(process.execPath, ["--no-warnings", ESTE], { cwd: RAIZ, env: { ...process.env, __SUITE: nome, DOTENV_CONFIG_PATH: "/dev/null",
+      DB_PATH: path.join(pastaDaSuite, "stoat.db"), CONFIG_PATH: path.join(pastaDaSuite, "automod-config.json") } });
     let saida = "";
     filho.stdout.on("data", (d) => { saida += d; });
     filho.stderr.on("data", (d) => { saida += d; });
@@ -23777,6 +25676,20 @@ if (process.env.__SUITE) {
   }));
   const falhas = resultados.filter((r) => r.codigo !== 0);
   const total = resultados.reduce((a, r) => a + r.ms, 0);
+  // (P5) o temporário que ainda existe meio segundo depois (não é uma escrita de outro processo terminando) é órfão
+  let tmpOrfaos = temporariosDoBot().filter((f) => !TMP_ANTES.has(f));
+  if (tmpOrfaos.length) { await new Promise((r) => setTimeout(r, 500)); tmpOrfaos = tmpOrfaos.filter((f) => fsR.existsSync(f)); }
+  fsR.rmSync(PASTA_SUITES, { recursive: true, force: true });
+  if (tmpOrfaos.length) {
+    console.log(`\n❌ a rodada deixou ${tmpOrfaos.length} temporário(s) de escrita atômica do bot:\n   ${tmpOrfaos.slice(0, 10).join("\n   ")}\n   Uma escrita foi cortada pela saída do processo sem passar pelo core/temporarios.js (abrir/fechar).`);
+    process.exit(1);
+  }
+  // (P5) nenhum arquivo novo na raiz do repositório depois da rodada (lixo de teste: chave, banco, jsonl…)
+  const sobrouNaRaiz = fsR.readdirSync(RAIZ).filter((f) => !RAIZ_ANTES.has(f)).sort();
+  if (sobrouNaRaiz.length) {
+    console.log(`\n❌ a rodada deixou arquivo(s) novo(s) na raiz do repositório: ${sobrouNaRaiz.join(", ")}\n   Alguma suíte gravou fora da pasta temporária dela (DB_PATH/CONFIG_PATH): corrija a suíte e apague o arquivo.`);
+    process.exit(1);
+  }
 
   // (31 out 2026, R3) Trava contra teste afrouxado: na rodada completa, cada suíte
   // tem de ter pelo menos as checagens que tinha (docs/testes-contagem.json). Suíte

@@ -23,6 +23,17 @@
 //
 // Um timer só, e só ligado quando há o que fazer (`armar`). O limiar de cada servidor (os
 // vereditos da staff dele) é do casos-staff.js, no ciclo de 6 h do main.js — não daqui.
+//
+// (3 nov 2026, P5 — decisão do dono) A amostra diária continua 100% aleatória. À PARTE, os casos
+// que deram problema vão ao dono para uma SEGUNDA ANÁLISE (`registrarProblema`, origem
+// "problema"; os eventos: segunda-analise.js): cartão próprio "🔁" na DM, com o mesmo ✅/❌ e a
+// mesma confirmação do P4.2, teto diário próprio (REVISAO_PROBLEMAS_POR_DIA, padrão 10), as
+// mesmas regras de privacidade e retenção da amostra. O veredito só calibra e treina (R13):
+// não age, não desfaz nada, não muda decisão da staff. Por ser escolhida pelo problema (não ao
+// acaso), a segunda análise NÃO entra no acerto medido nem no limiar global — só no treino.
+// (P5) Todo caso de texto (perfil-texto, assunto, mensagem) ganha, ao ser gravado, a impressão
+// de treino (o vetor do contrato 1: treino.js). (3 nov 2026, P5 revisão) antes: "que sobrevive à retenção
+// de 7 dias". agora: o vetor permite reconstruir o texto — sai JUNTO com o trecho (db.filaReterVetores).
 
 import { createHash } from "node:crypto";
 import * as db from "../core/db.js";
@@ -34,12 +45,16 @@ import { registrarErro } from "../core/erros.js";
 import { tr } from "../core/i18n.js";
 import * as aleatorio from "../core/aleatorio.js";
 import { donos, ehDono, idiomaDoDono, dmDoDono as abrirDmDoDono, esquecerDm } from "../core/dono.js";
+import * as treino from "./treino.js";
 
 // ── vocabulário da interface (BRIEF-P3a) ──
 // (31 out 2026, P3a, staff) antes: também o tipo/origem "staff" (o sinal da punição manual) e a
 // origem "dono" (`&caso perdeu`). Agora: o que é da staff não vai ao dono.
-export const TIPOS = new Set(["perfil-imagem", "perfil-texto", "assunto", "imagem"]);
-export const ORIGENS = new Set(["detector", "amostra", "discordancia"]);
+// (P5) + o tipo "mensagem" (o automod: a punição automática numa mensagem) e a origem "problema"
+// (a segunda análise), com o evento que deu problema
+export const TIPOS = new Set(["perfil-imagem", "perfil-texto", "assunto", "imagem", "mensagem"]);
+export const ORIGENS = new Set(["detector", "amostra", "discordancia", "problema"]);
+export const EVENTOS = new Set(["desfeita", "staff-errou", "discordancia", "quarentena"]);
 export const CERTEZAS = new Set(["alta", "media", "baixa"]);
 export const ACOES = new Set(["punido", "alertado", "nenhuma"]);
 const CATEGORIA = /^[a-z0-9][a-z0-9:_-]{0,39}$/;
@@ -61,6 +76,10 @@ export const porDia = () => numero("REVISAO_POR_DIA", 10, { min: 1, max: 100, in
 export const horaDaRodada = () => numero("REVISAO_HORA", 21, { min: 0, max: 23, inteiro: true });
 // (31 out 2026, P3a, staff) padrão 0,02 (antes 0,002): só a amostra chega ao dono agora
 export const fracaoDaAmostra = () => numero("REVISAO_AMOSTRA", 0.02, { min: 0, max: 0.1 });
+// (P5) a segunda análise: casos que deram problema por dia (registrados e enviados), à parte da amostra
+export const problemasPorDia = () => numero("REVISAO_PROBLEMAS_POR_DIA", 10, { min: 1, max: 100, inteiro: true });
+// (3 nov 2026, P5 revisão) e no máximo isto por servidor por dia (um servidor não enche a segunda análise sozinho)
+export const PROBLEMAS_TETO_SERVIDOR = 3;
 
 export const inicioDoDia = (agora = Date.now()) => Math.floor(agora / DIA) * DIA;   // UTC
 // (P4) quem é o dono do bot e a DM dele: core/dono.js (a mesma fonte do relatório por hora)
@@ -149,6 +168,9 @@ export const limparImpressao = (i) => {
   if (IMPRESSAO_CRUA.test(s)) return s;
   return "h1:" + createHash("sha256").update(s).digest("hex").slice(0, 32);
 };
+// (P5) O trecho que fica guardado (amostra, segunda análise, caso da staff esperando): sem menção a
+// ninguém (R9), sem ping em massa, até TRECHO_MAX caracteres. null = vazio.
+export const trechoSeguro = (texto) => (texto ? textoDeFora(String(texto).replace(/<[@%#]!?[0-9A-Za-z]{1,40}>/g, "@…").replace(/\s+/g, " ").trim(), { max: TRECHO_MAX }) || null : null);
 // Só link https do Stoat (o CDN de origem): o dono abre na origem; nada é copiado nem reenviado.
 export function linkDeOrigem(link) {
   let u;
@@ -236,7 +258,7 @@ export function precisaoNaFaixa(casos, t) {
 export function recalcularLimiares(agora = Date.now()) {
   const porCat = new Map();
   for (const c of db.filaJulgados({ limite: 20000 })) {
-    if (typeof c.nota !== "number") continue;
+    if (typeof c.nota !== "number" || c.origem === "problema") continue;   // (P5) a segunda análise não é amostra
     const l = porCat.get(c.categoria) ?? [];
     if (l.length < 500) l.push(c);   // os 500 mais recentes de cada categoria
     porCat.set(c.categoria, l);
@@ -266,10 +288,12 @@ export function registrarCaso(dados = {}, { agora = Date.now(), sorteio = sortea
   try {
     const c = normalizar(dados);
     if (!c || !cfg) return { codigo: null };
+    // (P5) os detectores discordaram: a segunda análise, à parte — o sorteio da amostra segue igual
+    if (c.origem === "discordancia") inserirProblema(comVetor(c), "discordancia", agora);
     if (c.origem !== "amostra" && (sorteio() >= fracaoDaAmostra())) return { codigo: null };
     if (!c.serverId || !cabeAmostra(c.serverId, agora)) return { codigo: null };
     const codigo = novoCodigo();
-    db.filaInserir({ ...c, codigo, criadoEm: agora, estado: c.origem === "amostra" ? "amostra" : "registro" });
+    db.filaInserir({ ...comVetor(c), codigo, criadoEm: agora, estado: c.origem === "amostra" ? "amostra" : "registro" });
     armar(agora);
     return { codigo };
   } catch (e) {
@@ -277,6 +301,9 @@ export function registrarCaso(dados = {}, { agora = Date.now(), sorteio = sortea
     return { codigo: null };
   }
 }
+// (P5) o caso pronto para gravar (validado, com trecho seguro e impressões; o texto inteiro só
+// fica no campo de passagem `_texto`, que nunca vai ao banco) — a segunda análise guarda isto
+export const prepararCaso = (dados = {}) => normalizar(dados);
 function normalizar(d) {
   const tipo = String(d.tipo ?? ""), origem = String(d.origem ?? ""), categoria = String(d.categoria ?? "").toLowerCase();
   const certeza = d.certeza == null ? null : String(d.certeza);
@@ -297,7 +324,45 @@ function normalizar(d) {
     userId: id(d.userId), canalId: id(d.canalId), msgId: id(d.msgId),
     link: linkDeOrigem(ev.link), trecho,
     ...impressoesDe(ev),
+    // (P5) um vetor já feito (o caso da staff) vem pronto; senão sai do texto, só ao gravar (comVetor)
+    ...(d.vetor && treino.limparVersao(d.versaoSinais) && treino.limparVetor(d.vetor)
+      ? { vetor: treino.limparVetor(d.vetor), versaoSinais: treino.limparVersao(d.versaoSinais) } : {}),
+    _texto: treino.TIPOS_TEXTO.has(tipo) ? String(ev.texto ?? ev.trecho ?? "") : "",
   };
+}
+// O vetor do texto (contrato 1), calculado uma vez, só quando o caso vai mesmo ser gravado (R11);
+// depois disso o texto inteiro sai do objeto
+export function comVetor(c) {
+  if (!c || c.vetor !== undefined) return c;
+  const { vetor, versaoSinais } = treino.vetorDe(c.tipo, c._texto);
+  c.vetor = vetor; c.versaoSinais = versaoSinais; c._texto = "";
+  return c;
+}
+
+// ── a segunda análise (P5) ──
+// Um caso que deu problema (`evento`: desfeita, staff-errou, discordancia, quarentena), já
+// normalizado ou cru. Fila desligada, teto do dia cheio ou a mesma pessoa com o mesmo problema
+// no mesmo servidor nas últimas 24 h → nada é gravado. Devolve { codigo } (null = não guardado).
+export function registrarProblema(dados, { evento, agora = Date.now(), preparado = false } = {}) {
+  try {
+    if (!cfg || !EVENTOS.has(evento)) return { codigo: null };
+    const c = preparado ? dados : normalizar({ ...dados, origem: "problema" });
+    if (!c) return { codigo: null };
+    return { codigo: inserirProblema(comVetor(c), evento, agora) };
+  } catch (e) {
+    registrarErro("REVISAO:problema", e);
+    return { codigo: null };
+  }
+}
+function inserirProblema(c, evento, agora) {
+  if (!cfg || !EVENTOS.has(evento)) return null;
+  if (db.filaProblemasDesde(inicioDoDia(agora)) >= problemasPorDia()) return null;
+  if (c.serverId && db.filaProblemasDesde(inicioDoDia(agora), c.serverId) >= PROBLEMAS_TETO_SERVIDOR) return null;
+  if (db.filaProblemaRepetido({ serverId: c.serverId, userId: c.userId, evento, categoria: c.categoria }, agora - DIA)) return null;
+  const codigo = novoCodigo();
+  db.filaInserir({ ...c, origem: "problema", evento, codigo, criadoEm: agora, estado: "problema" });
+  armar(agora);
+  return codigo;
 }
 
 // ── julgar ──
@@ -305,7 +370,9 @@ function normalizar(d) {
 // violação = (o dono disse "certo") === (o bot alegou)
 // (31 out 2026, P3a, staff) o veredito do dono só mede e calibra o padrão global: não avisa
 // detector nenhum (antes: `quandoJulgado`, que punia/devolvia a voz no perfil) e não vira herança.
-export const alegou = (caso) => caso.origem !== "amostra" || (caso.acao ?? "nenhuma") !== "nenhuma";
+// (P5) a segunda análise também olha o que o bot FEZ: num "detectores discordaram" em que ele não
+// agiu, ✅ quer dizer "não agir estava certo"
+export const alegou = (caso) => (caso.origem !== "amostra" && caso.origem !== "problema") || (caso.acao ?? "nenhuma") !== "nenhuma";
 export function julgar(codigo, veredito, { agora = Date.now() } = {}) {
   if (veredito !== "certo" && veredito !== "errou") return null;
   const caso = db.filaCaso(codigo);
@@ -313,6 +380,7 @@ export function julgar(codigo, veredito, { agora = Date.now() } = {}) {
   const violacao = (veredito === "certo") === alegou(caso) ? 1 : 0;
   db.filaAtualizar(caso.codigo, { veredito, violacao, julgadoEm: agora, estado: "julgado" });
   armar(agora);
+  if (caso.vetor) treino.pedirReescrita();   // (P5) o arquivo de treino da bateria (contrato 3)
   return { ...caso, veredito, violacao, julgadoEm: agora, estado: "julgado" };
 }
 
@@ -335,13 +403,21 @@ export function escolherDoDia({ agora = Date.now(), vagas = null, sorteio = alea
   return escolhidos;
 }
 
+// (P5) A segunda análise do dia: os casos com problema que esperam, do mais velho ao mais novo,
+// até o teto do dia (REVISAO_PROBLEMAS_POR_DIA menos os já enviados hoje). Sem sorteio.
+export function escolherProblemas({ agora = Date.now(), vagas = null } = {}) {
+  const livres = vagas ?? Math.max(0, problemasPorDia() - db.filaEnviadosDesde(inicioDoDia(agora), { problema: true }));
+  if (livres <= 0) return [];
+  return db.filaPorEstado(["problema"], agora - db.FILA_DIAS_PENDENTE * DIA).slice(0, livres);
+}
+
 // ── a DM ──
 let cfg = null;    // { client, enviar(canal, embed) → mensagem, editar(canalId, msgId, embed) }; null = fila desligada
 let timer = null;
 // Os números do .env são conferidos aqui (o main.js chama no boot): inválido → erro alto e a fila
 // fica DESLIGADA: nenhum caso novo é gravado (`registrarCaso` devolve código null, `amostrar` false).
 // A retenção do que já está no banco (e a edição das DMs que perderam o trecho) roda do mesmo jeito.
-export function conferirEnv() { porDia(); horaDaRodada(); fracaoDaAmostra(); }
+export function conferirEnv() { porDia(); horaDaRodada(); fracaoDaAmostra(); problemasPorDia(); }
 export function configurar({ client, enviar, editar = null } = {}) {
   desligar();
   let erroEnv = null;
@@ -363,10 +439,18 @@ let dmDeTeste = null;   // só os testes (ver _trocarEnvioParaTestes)
 const dmDoDono = () => (dmDeTeste ? Promise.resolve(dmDeTeste) : cfg?.client ? abrirDmDoDono(cfg.client) : Promise.resolve(null));
 const NOME_TIPO = {
   "perfil-imagem": ["perfil (imagem)", "profile (image)", "perfil (imagen)"], "perfil-texto": ["perfil (texto)", "profile (text)", "perfil (texto)"],
-  assunto: ["assunto", "topic", "tema"], imagem: ["imagem", "image", "imagen"],
+  assunto: ["assunto", "topic", "tema"], imagem: ["imagem", "image", "imagen"], mensagem: ["mensagem", "message", "mensaje"],
 };
 const NOME_CERTEZA = { alta: ["alta", "high", "alta"], media: ["média", "medium", "media"], baixa: ["baixa", "low", "baja"] };
-const NOME_ORIGEM = { detector: ["detector", "detector", "detector"], amostra: ["amostra", "sample", "muestra"], discordancia: ["discordância", "disagreement", "discrepancia"] };
+const NOME_ORIGEM = { detector: ["detector", "detector", "detector"], amostra: ["amostra", "sample", "muestra"], discordancia: ["discordância", "disagreement", "discrepancia"],
+  problema: ["segunda análise", "second review", "segundo análisis"] };
+// (P5) por que o caso veio à segunda análise
+const NOME_EVENTO = {
+  desfeita: ["a staff desfez a punição automática", "the staff undid the automatic punishment", "el staff deshizo el castigo automático"],
+  "staff-errou": ["a staff marcou ❌ no alerta", "the staff marked ❌ on the alert", "el staff marcó ❌ en la alerta"],
+  discordancia: ["os detectores discordaram", "the detectors disagreed", "los detectores discreparon"],
+  quarentena: ["a punição falhou (quarentena)", "the punishment failed (quarantine)", "el castigo falló (cuarentena)"],
+};
 const NOME_ACAO = { punido: ["punido", "punished", "castigado"], alertado: ["alerta à staff", "staff alert", "alerta al staff"], nenhuma: ["nenhuma", "none", "ninguna"] };
 const nome = (tab, k, ctx) => { const x = tab[k]; return x ? tr(ctx, x[0], x[1], x[2]) : String(k ?? "—"); };
 const num = (n) => (typeof n === "number" ? n.toFixed(2) : "—");
@@ -377,15 +461,21 @@ export function embedDoCaso(caso, ctx = ctxDono()) {
     `**${tr(ctx, "Nota", "Score", "Nota")}** ${num(caso.nota)}${typeof t === "number" ? ` · **${tr(ctx, "limiar", "threshold", "umbral")}** ${num(t)}` : ""}${caso.certeza ? ` · **${tr(ctx, "certeza", "certainty", "certeza")}** ${nome(NOME_CERTEZA, caso.certeza, ctx)}` : ""}`,
     `**${tr(ctx, "Origem", "Source", "Origen")}** ${nome(NOME_ORIGEM, caso.origem, ctx)}${caso.detector ? ` (${caso.detector})` : ""} · **${tr(ctx, "ação do bot", "bot action", "acción del bot")}** ${nome(NOME_ACAO, caso.acao, ctx)}`,
   ];
+  if (caso.origem === "problema" && NOME_EVENTO[caso.evento]) linhas.push(`**${tr(ctx, "Por quê", "Why", "Por qué")}** ${nome(NOME_EVENTO, caso.evento, ctx)}`);
   if (caso.servidor) linhas.push(`**${tr(ctx, "Servidor", "Server", "Servidor")}** \`${caso.servidor}\``);
   if (caso.link) linhas.push(`**${tr(ctx, "Na origem", "At the source", "En el origen")}** [${tr(ctx, "abrir", "open", "abrir")}](${caso.link})`);
   if (caso.trecho) linhas.push("", ...textoDeFora(caso.trecho, { max: TRECHO_MAX }).split("\n").slice(0, 12).map((l) => `> ${l}`));
   if (caso.veredito) linhas.push("", `**${tr(ctx, "Veredito", "Verdict", "Veredicto")}** ${caso.veredito === "certo" ? tr(ctx, "✅ o bot acertou", "✅ the bot was right", "✅ el bot acertó") : tr(ctx, "❌ errou", "❌ wrong", "❌ falló")}${caso.julgadoEm ? ` · ${tr(ctx, "recebido", "received", "recibido")} ${carimbo(caso.julgadoEm, "t")}` : ""}`);
   else linhas.push("", tr(ctx, "✅ o bot acertou · ❌ errou", "✅ the bot was right · ❌ wrong", "✅ el bot acertó · ❌ falló"));
   // (2 nov 2026, P4.2) julgado: o título ganha ✔️ e a cor muda (verde = acertou, vermelho = errou)
-  const cor = caso.veredito === "certo" ? COR_CERTO : caso.veredito === "errou" ? COR_ERROU : "#9B59B6";
-  return { title: `${caso.veredito ? "✔️" : "🔎"} ${caso.codigo} · ${nome(NOME_TIPO, caso.tipo, ctx)} · ${caso.categoria}`, description: linhas.join("\n"), colour: cor };
+  // (P5) a segunda análise tem cartão próprio: 🔁 no título e outra cor enquanto espera
+  const segunda = caso.origem === "problema";
+  const cor = caso.veredito === "certo" ? COR_CERTO : caso.veredito === "errou" ? COR_ERROU : segunda ? COR_SEGUNDA : "#9B59B6";
+  const marca = segunda ? `🔁 ${tr(ctx, "Segunda análise", "Second review", "Segundo análisis")} · ` : "";
+  const prefixo = caso.veredito ? "✔️ " : segunda ? "" : "🔎 ";
+  return { title: `${prefixo}${marca}${caso.codigo} · ${nome(NOME_TIPO, caso.tipo, ctx)} · ${caso.categoria}`, description: linhas.join("\n"), colour: cor };
 }
+const COR_SEGUNDA = "#E67E22";
 const COR_CERTO = "#2ECC71", COR_ERROU = "#E74C3C";
 // Manda os casos escolhidos (ou os dados) para a DM do dono; devolve os códigos enviados.
 export async function enviarCasos(casos, { agora = Date.now() } = {}) {
@@ -452,6 +542,8 @@ export async function confirmar(caso, julgado, veredito) {
 export function reter(agora = Date.now()) {
   const r = db.filaReter(agora);
   if (r.trecho || r.limpos || r.apagados) console.info(`[REVISAO] retenção: ${r.trecho} trecho(s) apagado(s), ${r.limpos} caso(s) julgado(s) sem identificação, ${r.apagados} caso(s) apagado(s)`);
+  // (P5) caso julgado apagado ou vetor vencido: o arquivo de treino muda (só regrava se mudou)
+  if (r.apagados || r.vetores) treino.pedirReescrita();
   return r;
 }
 // (31 out 2026, P3a, revisão) A DM do dono também perde o trecho e o link: todo caso que já
@@ -474,7 +566,7 @@ export async function marcarNaDm(caso, julgado) {
 }
 export function embedCurto(caso, ctx = ctxDono()) {
   const v = caso.veredito === "certo" ? "✅" : caso.veredito === "errou" ? "❌" : tr(ctx, "sem resposta", "no answer", "sin respuesta");
-  return { description: `🔒 ${caso.codigo} · ${caso.categoria} · ${v} — ${tr(ctx, "trecho apagado", "excerpt deleted", "fragmento borrado")}`, colour: "#9B59B6" };
+  return { description: `🔒 ${caso.origem === "problema" ? "🔁 " : ""}${caso.codigo} · ${caso.categoria} · ${v} — ${tr(ctx, "trecho apagado", "excerpt deleted", "fragmento borrado")}`, colour: "#9B59B6" };
 }
 const semMarcas = (x) => (typeof x === "string" ? x.replace(/[\u2063\u2064]/g, "") : x);
 function editorPadrao(client) {
@@ -515,6 +607,7 @@ export async function limparDms({ agora = Date.now(), editar = cfg?.editar ?? nu
 export function acertoPorCategoria(agora = Date.now()) {
   const m = new Map();
   for (const c of db.filaJulgados({ desde: agora - 30 * DIA })) {
+    if (c.origem === "problema") continue;   // (P5) o acerto medido é o da amostra aleatória
     const x = m.get(c.categoria) ?? { categoria: c.categoria, julgados: 0, certos: 0 };
     x.julgados++; if (c.veredito === "certo") x.certos++;
     m.set(c.categoria, x);
@@ -548,7 +641,7 @@ export async function rodadaDiaria({ agora = Date.now() } = {}) {
   const mudancas = recalcularLimiares(agora);
   const resumo = resumoDoDia({ agora, mudancas });
   const casos = escolherDoDia({ agora });
-  if (cfg?.enviar && (resumo.julgadosDesde || resumo.pendentes || casos.length || mudancas.length)) {
+  if (cfg?.enviar && (resumo.julgadosDesde || resumo.pendentes || casos.length || mudancas.length || escolherProblemas({ agora }).length)) {
     const dm = await dmDoDono();
     if (dm) {
       try { await cfg.enviar(dm, { title: resumo.title, description: resumo.description, colour: resumo.colour }); }
@@ -556,17 +649,21 @@ export async function rodadaDiaria({ agora = Date.now() } = {}) {
     }
   }
   const enviados = await enviarCasos(casos, { agora });
+  enviados.push(...await enviarCasos(escolherProblemas({ agora }), { agora }));   // (P5) a segunda análise, à parte
   const descartados = db.filaDescartarNaoEscolhidos(agora);
   db.filaDefinirEstado("ultimaRodada", agora);
   return { enviados, descartados, mudancas };
 }
 // Para o `&caso` sem DM ou sem caso novo: quantos esperam e quantos já foram hoje
+// (P5) e a segunda análise: enviados hoje e o teto dela
 export function situacao(agora = Date.now()) {
-  return { esperando: db.filaContar(["enviado"], agora - db.FILA_DIAS_PENDENTE * DIA), hoje: db.filaEnviadosDesde(inicioDoDia(agora)), teto: porDia() };
+  return { esperando: db.filaContar(["enviado"], agora - db.FILA_DIAS_PENDENTE * DIA), hoje: db.filaEnviadosDesde(inicioDoDia(agora)), teto: porDia(),
+    problemasHoje: db.filaEnviadosDesde(inicioDoDia(agora), { problema: true }), tetoProblemas: problemasPorDia() };
 }
-// `&caso` sozinho: os próximos da fila agora (até completar o teto do dia)
+// `&caso` sozinho: os próximos da fila agora (até completar o teto do dia) e, à parte, a segunda análise
 export async function enviarAgora({ agora = Date.now() } = {}) {
-  return enviarCasos(escolherDoDia({ agora }), { agora });
+  const enviados = await enviarCasos(escolherDoDia({ agora }), { agora });
+  return [...enviados, ...await enviarCasos(escolherProblemas({ agora }), { agora })];
 }
 
 // ── o timer: um só, ligado só quando há o que fazer ──

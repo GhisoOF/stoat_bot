@@ -1,6 +1,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import * as temporarios from "../core/temporarios.js";
 
 export function hashDominio(str) {
   let h1 = 0x811c9dc5 | 0;
@@ -105,8 +106,12 @@ export async function salvarCache(indice, cfgGlobal) {
     const corpo = Buffer.from(indice._h.buffer, indice._h.byteOffset, indice._h.byteLength);
     const alvo = caminhoCache();
     // escreve num temporário e renomeia: nunca deixa cache pela metade
-    await fs.promises.writeFile(alvo + ".tmp", Buffer.concat([cab, corpo]));
-    await fs.promises.rename(alvo + ".tmp", alvo);
+    // (3 nov 2026, P5) marcado em core/temporarios.js: se o processo sair no meio, o temporário sai junto
+    const tmp = temporarios.abrir(alvo + ".tmp");
+    try {
+      await fs.promises.writeFile(tmp, Buffer.concat([cab, corpo]));
+      await fs.promises.rename(tmp, alvo);
+    } finally { temporarios.fechar(tmp); }
   } catch (e) {
     console.error("[BLOCKLIST] Falha ao salvar cache:", e.message);
   }

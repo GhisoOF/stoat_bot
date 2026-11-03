@@ -9,6 +9,9 @@
 //     antes, nada é apagado).
 
 import * as db from "./db.js";
+import { pseudonimo } from "./pseudonimo.js";
+import { dirname } from "node:path";
+import { limparOrfaos } from "./temporarios.js";
 
 const d = () => db.getDb();
 const existe = (tabela) => !!d().prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(tabela);
@@ -21,10 +24,11 @@ const DA_PESSOA = [
   { id: "xp", rotulo: { pt: "XP e nível", en: "XP and level", es: "XP y nivel" }, partes: [["xp_usuarios", "userId = ?"]] },
   { id: "economia", rotulo: { pt: "saldo da economia", en: "economy balance", es: "saldo de la economía" }, partes: [["eco_saldos", "userId = ?"]] },
 ];
+// (3 nov 2026, P5) + a segunda análise (os mesmos casos da fila do dono)
 const REVISAO_ROTULO = {
-  pt: "casos na amostra do dono do bot (o caso fica, sem você)",
-  en: "cases in the bot owner's sample (the case stays, without you)",
-  es: "casos en la muestra del dueño del bot (el caso queda, sin ti)",
+  pt: "casos na amostra e na segunda análise do dono do bot (o caso fica, sem você)",
+  en: "cases in the bot owner's sample and second review (the case stays, without you)",
+  es: "casos en la muestra y el segundo análisis del dueño del bot (el caso queda, sin ti)",
 };
 const STAFF_ROTULO = {
   pt: "alertas de caso duvidoso esperando a staff (saem)",
@@ -58,10 +62,22 @@ export function dadosDaPessoa(userId, { apagar = false } = {}) {
     const n = apagar ? db.filaEsquecerUsuario(u) : contar("SELECT COUNT(*) n FROM revisao_casos WHERE userId = ?", u);
     r.push({ id: "revisao", rotulo: REVISAO_ROTULO, n });
   }
+  // (3 nov 2026, P5) a impressão de treino (o vetor) dos casos ligados a ela saiu junto (filaEsquecerUsuario): o
+  // arquivo da bateria é regravado; e a última punição automática dela, lembrada para a segunda análise, é esquecida
+  if (apagar) depoisDeApagar(u);
   // (31 out 2026, P3a, staff) os casos duvidosos dela que esperam a staff de um servidor saem
   // (o julgado já não tem a pessoa: só impressão, categoria, nota, veredito e servidor)
-  if (existe("staff_casos")) r.push({ id: "staff", rotulo: STAFF_ROTULO, n: db.staffDaPessoa(u, { apagar }) });
+  // (3 nov 2026, P5 revisão) e o vetor dos julgados dela que ainda vivem (achados pelo pseudônimo)
+  if (existe("staff_casos")) r.push({ id: "staff", rotulo: STAFF_ROTULO, n: db.staffDaPessoa(u, { apagar, pseudo: apagar ? pseudonimo(u) : null }) });
   return r;
+}
+
+// Os módulos de moderação carregam sob demanda (o core não depende deles)
+export const _depoisDeApagar = { pronto: Promise.resolve() };
+function depoisDeApagar(u) {
+  _depoisDeApagar.pronto = Promise.all([import("../moderacao/segunda-analise.js"), import("../moderacao/casos-staff.js"), import("../moderacao/treino.js")])
+    .then(([segunda, staff, treino]) => { segunda.esquecerPessoa(u); staff.esquecerPessoa(u); return treino.reescrever(); })
+    .catch((e) => console.error("[PRIVACIDADE] depois de apagar:", e?.message));
 }
 
 // ── O servidor ──
@@ -102,9 +118,17 @@ export const DIAS_APOS_SAIDA = Number(process.env.DIAS_APOS_SAIDA || 30);
 // timeout do Stoat): antes só saía quando alguém o lia.
 // (31 out 2026, P3a, staff) o caso duvidoso que esperou 14 dias sem reação da staff; e, dos julgados,
 // o que passou dos 500 mais recentes daquele servidor e categoria.
+// (3 nov 2026, P5) e o arquivo de treino da bateria (moderacao/treino.js), que só é regravado se algo mudou
+// (vetor vencido, caso que saiu, servidor apagado) — e é criado (vazio) na primeira subida
+// (3 nov 2026, P5, integração) e os temporários órfãos das escritas atômicas (core/temporarios.js) na pasta
+// do banco, com mais de 10 min — de um processo que morreu no meio da escrita
 export function limparVencidos(agora = Date.now()) {
+  const banco = db.caminhoDoBanco();
+  const temporarios = banco ? limparOrfaos(dirname(banco)) : 0;   // o relógio de verdade (não o `agora` dos testes): a idade é do disco
   const staff = db.staffReter(agora);
-  return { palavras: db.limparPalavrasVencidas(agora, { forcar: true }), perfilSilencio: db.perfilSilencioLimparVencidos(agora), casosStaff: staff.pendentes, casosStaffAntigos: staff.antigos };
+  db.filaReterVetores(agora);   // (3 nov 2026, P5 revisão) o vetor da fila do dono também sai aqui (7 dias), não só na rodada
+  import("../moderacao/treino.js").then((m) => m.pedirReescrita()).catch((e) => console.error("[PRIVACIDADE] arquivo de treino:", e?.message));
+  return { palavras: db.limparPalavrasVencidas(agora, { forcar: true }), perfilSilencio: db.perfilSilencioLimparVencidos(agora), casosStaff: staff.pendentes, casosStaffAntigos: staff.antigos, temporarios };
 }
 
 // No `ready`: o servidor que tem config mas a Judy não está nele saiu enquanto

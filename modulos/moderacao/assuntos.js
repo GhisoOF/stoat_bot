@@ -614,7 +614,7 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
       ctx, server, oQueFaz: O_QUE_FAZ[seConfirmado],
       embed: embedDoAlerta(ctx, { userId, canalId: message.channelId, messageId: message.id, tema, texto, motivoIA: v.motivo, nota, sinais, lang, categoria, duvida: true }),
       caso: { tipo: "assunto", categoria: categoriaDoCaso(tema, true), userId, canalId: message.channelId, msgId: message.id ?? null,
-        nota: Math.round(nota * 10) / 100, parte: categoria === "ataque" ? "ataque" : "discussao", evidencia: { texto } },
+        nota: Math.round(nota * 10) / 100, parte: categoria === "ataque" ? "ataque" : "discussao", certeza, evidencia: { texto } },   // (P5) a certeza vai à medição
     });
     alertou = !!r?.id;
   }
@@ -671,7 +671,8 @@ export async function verificar({ ctx, server, canal, message, userId, aplicarPu
   }
   // punir: apaga e aplica a punição do módulo (padrão: a escada do `acumular`)
   const pol = politicaDoTema(cfg);
-  await aplicarPunicao?.({ server, channel: canal ?? message.channel, message, userId, pol, motivo, nota });
+  // (P5) o tipo e a categoria do caso: se a staff desfizer a punição, a segunda análise do dono sabe o quê
+  await aplicarPunicao?.({ server, channel: canal ?? message.channel, message, userId, pol, motivo, nota, tipo: "assunto", categoria: categoriaDoCaso(tema, true) });
   return res;
 }
 

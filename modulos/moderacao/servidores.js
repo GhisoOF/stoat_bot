@@ -21,11 +21,13 @@ import * as store from "../core/config-store.js";
 import * as db from "../core/db.js";
 import { pseudonimo } from "../core/pseudonimo.js";
 import { citar } from "../core/aliases.js";
-import { tr } from "../core/i18n.js";
+import { tr, idiomaDe } from "../core/i18n.js";
 import { descreverErro, registrarErro } from "../core/erros.js";
 import { textoDeFora } from "../core/seguranca.js";
 import { anunciarNoLog } from "../ferramentas/novidades.js";
 import { REGISTRO } from "../comandos/index.js";
+import * as classificador from "./classificador-texto.js";      // (P5) o estado do classificador de texto
+import * as tempoAutomod from "../core/tempo-automod.js";       // (P5) o tempo do automod por mensagem
 
 const T = (ctx, pt, en, es) => tr(ctx, pt, en, es);
 const ajudaDe = (ctx, ref) => `\`${citar("help", "pt", ctx.PREFIXO ?? "&")} ${citar(ref, "pt", "")}\``;
@@ -96,6 +98,8 @@ export async function cmdServidores(message, args, ctx) {
   // (P4, revisão) o estado da IA da moderação COM o detalhe (o nome da variável, o erro do serviço): no
   // `&debug` de um servidor a staff vê só o estado (R10); o dono, que mexe na máquina, vê aqui, na DM
   linhas.push(await linhaDaIA(ctx));
+  // (P5, 3 nov 2026) o classificador de texto e o tempo do automod (R11: medir antes de otimizar)
+  linhas.push(linhaDoClassificador(ctx), ...linhasDoTempo(ctx));
   // (P4, 2 nov 2026) os erros de todos os servidores: antes no `&debug` de um servidor (R13), agora aqui, na DM
   let erros = null;
   try { erros = relatorio.errosRecentes(); } catch (e) { registrarErro("SERVIDORES", e); }
@@ -104,6 +108,45 @@ export async function cmdServidores(message, args, ctx) {
     : erros.length ? erros.map(([t, n]) => `${n}× \`${String(t).slice(0, 140)}\``)
       : [T(ctx, "nenhum erro nas últimas 24 h", "no errors in the last 24 h", "ningún error en las últimas 24 h")]));
   return sendEmbed(message.channel, { title: `🌐 ${T(ctx, "Servidores", "Servers", "Servidores")} (${dados.length})`, description: linhas.join("\n"), colour: COR.info });
+}
+
+// (P5) O classificador de texto: ligado (com o quê), sem arquivo, de outra versão, inválido ou desligado.
+// Só o motivo da validação, nunca o caminho (R10). (P5, integração) A ORIGEM do arquivo (variável,
+// pasta do banco, código — o rótulo, sem caminho) e a versão do modelo (8 hex do SHA-256 do arquivo):
+// depois de um `docker cp` + restart, o dono confere aqui que o modelo novo entrou.
+export function linhaDoClassificador(ctx) {
+  const rotulo = `**🧠 ${T(ctx, "Classificador de texto", "Text classifier", "Clasificador de texto")}:**`;
+  let e = classificador.estado();
+  if (e.situacao === "nao-carregado") { classificador.carregar(); e = classificador.estado(); }
+  const rotuloDe = (o) => T(ctx, classificador.ORIGENS[o].pt, classificador.ORIGENS[o].en, classificador.ORIGENS[o].es);
+  const deOnde = e.origem ? ` · ${T(ctx, "origem", "source", "origen")}: ${rotuloDe(e.origem)}` : "";
+  const versao = e.modelo ? ` · ${T(ctx, "modelo", "model", "modelo")} \`${e.modelo}\`` : "";
+  if (e.situacao === "ligado") {
+    return `${rotulo} ${T(ctx, "ligado", "on", "activado")} — ${e.classes.join(", ")} · ${e.pesos} ${T(ctx, "peso(s)", "weight(s)", "peso(s)")}`
+      + `${e.treinadoEm ? ` · ${T(ctx, "treinado em", "trained on", "entrenado el")} ${e.treinadoEm.slice(0, 10)}` : ""}${versao}${deOnde}`;
+  }
+  if (e.situacao === "desligado") return `${rotulo} ${T(ctx, "desligado", "off", "desactivado")} (\`CLASSIFICADOR_TEXTO=0\`)`;
+  if (e.situacao === "ausente") {
+    return `${rotulo} ${T(ctx, "sem o arquivo do modelo (o sentinela segue sem ele)", "no model file (the sentinel works without it)", "sin el archivo del modelo (el centinela sigue sin él)")}`
+      + `${e.procurados.length ? ` · ${T(ctx, "procurado em", "looked in", "buscado en")}: ${e.procurados.map(rotuloDe).join(", ")}` : ""}`;
+  }
+  const qual = e.situacao === "outra-versao"
+    ? T(ctx, "arquivo de outra versão dos sinais", "file from another signal version", "archivo de otra versión de las señales")
+    : T(ctx, "arquivo inválido", "invalid file", "archivo inválido");
+  return `${rotulo} ${qual} (${String(e.detalhe ?? "").replace(/`/g, "").slice(0, 120)}) — ${T(ctx, "o sentinela segue sem ele", "the sentinel works without it", "el centinela sigue sin él")}${versao}${deOnde}`;
+}
+
+// (P5) O tempo do automod por mensagem: a hora atual (até agora) e a anterior, p50/p95/máx por etapa.
+export function linhasDoTempo(ctx, agora = Date.now()) {
+  const idioma = idiomaDe(ctx);
+  const h = tempoAutomod.horaDe(agora);
+  const atual = tempoAutomod.descrever(tempoAutomod.resumo(h), idioma);
+  const anterior = tempoAutomod.descrever(tempoAutomod.resumo(h - 1), idioma);
+  if (!atual && !anterior) return [`**⏱️ Automod:** ${T(ctx, "nenhuma mensagem medida nas últimas 2 h", "no messages measured in the last 2 h", "ningún mensaje medido en las últimas 2 h")}`];
+  const out = [];
+  if (atual) out.push(`**⏱️ Automod (${T(ctx, "esta hora", "this hour", "esta hora")}):** ${atual}`);
+  if (anterior) out.push(`**⏱️ Automod (${T(ctx, "hora anterior", "previous hour", "hora anterior")}):** ${anterior}`);
+  return out;
 }
 
 async function linhaDaIA(ctx) {

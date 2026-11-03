@@ -308,6 +308,146 @@ const LEX_COERCAO = [
 // Desprezo por gente vulnerável: não pesa na nota, só no padrão acumulado.
 const LEX_DESPREZO = [/\bdoentes?\s+menta(l|is)\b/i, /\bretardad[oa]s?\b/i];
 
+// ─── Extorsão e exposição (P5, 3 nov 2026; refeito na revisão do P5, mesmo dia) ─────────────
+//
+// A bateria de 3 nov mostrou a ameaça SEM palavrão passando com nota 0. A primeira versão destas
+// regras pegava também conversa (a revisão independente achou: "vou mandar o endereço da casa da
+// sua mãe pro grupo da festa surpresa", "se você não ativar 2FA seus dados vão vazar", "alguém me
+// mandou 'se você não pagar eu vazo seu endereço', o que eu faço?"). O desenho agora, nos 3 idiomas:
+//   • `extorsao` (6, pune): condição/prazo + EXIGÊNCIA (pagar, pix, dinheiro, mandar algo, fazer o
+//     que mandam) + EXPOSIÇÃO com agente em 1ª pessoa ("eu vazo", "vou mandar", "I'll leak", "voy a
+//     publicar") de um dado do alvo — ou "todo mundo vai saber/ver";
+//   • `exposicao` (3, nunca pune sozinha — o piso dos limiares é 3,5): a exposição em 1ª pessoa sem
+//     exigência — vazar/expor um dado ou foto do alvo, ou "vou mandar/contar" um dado SENSÍVEL
+//     (endereço/onde mora, documentos, senha, nudes/fotos íntimas, segredo, telefone/IP); com tom de
+//     festa/presente/surpresa, não conta;
+//   • `ultimato` (1, contexto): a cobrança com condição ou alternativa ("paga até sexta ou…") — sozinha
+//     não é nada; não destrava o classificador.
+// Voz passiva/aviso de segurança ("seus dados vão vazar se…") não tem agente em 1ª pessoa → 0. Fala
+// relatada, citação entre aspas, pedido de ajuda e alerta ("alguém me mandou", "o que eu faço?",
+// "denunciem", "cuidado com") → esta família inteira (e o doxxing/extorsão antigos) vai a 0. Negação
+// antes ("não vou vazar") ou logo depois ("leak your address? no way") desfaz. Passado ("expus",
+// "exposed") não é ameaça.
+const POSSE2 = String.raw`(?:seu|sua|seus|suas|teu|tua|teus|tuas)`;
+const PARENTE_PT = String.raw`(?:m[aã]e|m[aã]ezinha|pai|fam[ií]lia|irm[aã]o?|irm[aã]s|namorad[ao]|filh[ao]s?|pais|av[oóô]|esposa|marido)`;
+const PARENTE_EN = String.raw`(?:mom|mother|mum|dad|father|family|parents|sister|brother|girlfriend|boyfriend|wife|husband|kids?)`;
+const PARENTE_ES = String.raw`(?:madre|mam[aá]|padre|pap[aá]|familia|herman[oa]s?|novi[oa]|hij[oa]s?|padres|abuel[oa]|esposa|marido)`;
+// o dado SENSÍVEL do alvo: expor já é ameaça (com qualquer verbo de mandar/contar em 1ª pessoa)
+const EXPO_SENS = String.raw`(?:(?:o\s+|a\s+)?(?:seu|teu)\s+(?:endere[cç]o|cpf|rg|telefone|celular|ip|documento|segredo)`
+  + String.raw`|(?:a\s+|as\s+)?(?:sua|tua|suas|tuas)\s+(?:senhas?|fotos?\s+(?:[ií]ntimas?|pelad[ao]s?|nu[ao]?s?)|v[ií]deos?\s+(?:[ií]ntimos?|pelad[ao]s?))`
+  + String.raw`|(?:os\s+)?(?:seus|teus)\s+(?:documentos|nudes|segredos|v[ií]deos\s+[ií]ntimos)`
+  + String.raw`|(?:o\s+|a\s+)?(?:endere[cç]o|casa|escola|col[eé]gio|trabalho|telefone|celular)\s+d[aoe]s?\s+${POSSE2}\s+${PARENTE_PT}`
+  + String.raw`|onde\s+(?:voc[eê]|vc|tu)\s+(?:mora|estuda|trabalha)|onde\s+${POSSE2}\s+${PARENTE_PT}\s+(?:mora|trabalha|estuda)`
+  + String.raw`|(?:your|ur)\s+(?:home\s+|real\s+|full\s+)?(?:address|phone(?:\s+number)?|ip|documents?|id|passport|ssn|passwords?|secrets?|nudes|(?:private|intimate|naked|nude)\s+(?:pics|photos|videos))`
+  + String.raw`|(?:your|ur)\s+${PARENTE_EN}['’]?s?\s+(?:home\s+)?(?:address|house|school|job|work(?:place)?|number|phone)`
+  + String.raw`|(?:the\s+)?(?:address|house|school|number)\s+of\s+(?:your|ur)\s+${PARENTE_EN}|where\s+(?:you|u)\s+(?:live|study|work)`
+  + String.raw`|(?:la\s+|el\s+)?tu\s+(?:direcci[oó]n|tel[eé]fono|ip|dni|documento|contrase[nñ]a|secreto)`
+  + String.raw`|(?:los\s+|las\s+)?tus\s+(?:nudes|documentos|contrase[nñ]as|secretos|fotos\s+(?:[ií]ntimas|desnud[oa]s?))`
+  + String.raw`|(?:la\s+|el\s+)?(?:direcci[oó]n|casa|escuela|colegio|trabajo|tel[eé]fono)\s+de\s+tus?\s+${PARENTE_ES}`
+  + String.raw`|d[oó]nde\s+(?:vives|estudias|trabajas)|d[oó]nde\s+(?:vive|trabaja)\s+tus?\s+${PARENTE_ES})`;
+// o que é do alvo mas comum (fotos, conversas, dados): só ameaça com verbo de VAZAR, ou dentro da extorsão
+const EXPO_COMUM = String.raw`(?:(?:a\s+|as\s+)?(?:sua|tua|suas|tuas)\s+(?:fotos?|conversas?|mensagens|prints?|v[ií]deos?)`
+  + String.raw`|(?:os\s+)?(?:seus|teus)\s+(?:dados|prints|v[ií]deos|n[uú]meros?)|(?:o\s+)?(?:seu|teu)\s+(?:n[uú]mero|perfil)`
+  + String.raw`|(?:your|ur)\s+(?:pics|photos|videos|chats|dms|messages|data|number)`
+  + String.raw`|(?:los\s+|las\s+)?tus\s+(?:fotos|datos|conversaciones|mensajes|chats|v[ií]deos)|(?:el\s+)?tu\s+n[uú]mero)`;
+// agente em 1ª pessoa: vazar/expor (hostil por natureza) e mandar/mostrar/contar (neutro)
+const EU_VAZAR = String.raw`(?:(?:eu\s+)?(?:vou|vo|irei)\s+(?:te\s+)?(?:vazar|expor|dox+ar)|(?:eu\s+)?(?:vazo|exponho|vazarei|exporei)`
+  + String.raw`|(?:i['’]?ll|i\s+will|i['’]?m\s+gonna|im\s+gonna|i\s+am\s+going\s+to|i['’]?m\s+going\s+to)\s+(?:leak|expose|dox+)`
+  + String.raw`|(?:te\s+|lo\s+|la\s+|los\s+|las\s+)?(?:voy|vamos)\s+a\s+(?:filtrar|exponer|difundir)|(?:filtro|expongo|difundo|filtrar[eé]))`;
+const EU_MANDAR = String.raw`(?:(?:eu\s+)?(?:vou|vo|irei)\s+(?:te\s+)?(?:mandar|enviar|postar|publicar|mostrar|contar|passar|divulgar|jogar|espalhar)|(?:eu\s+)?(?:mando|posto|publico|mostro|conto|divulgo|espalho)`
+  + String.raw`|(?:i['’]?ll|i\s+will|i['’]?m\s+gonna|im\s+gonna|i\s+am\s+going\s+to|i['’]?m\s+going\s+to)\s+(?:send|post|share|publish|forward|show|tell\s+(?:everyone|everybody))`
+  + String.raw`|(?:te\s+|lo\s+|la\s+|los\s+|las\s+)?(?:voy|vamos)\s+a\s+(?:mandar|enviar|publicar|subir|pasar|compartir|mostrar|ense[nñ]ar|contar)|(?:mando|publico|subo|comparto|ense[nñ]o|cuento))`;
+const GAP = String.raw`[^.!?\n,;"“”«»]{0,25}?`;
+// "eu vazo X" / "vou mandar <sensível>" — com X do alvo
+const LEX_EU_EXPONHO_SENS = [new RegExp(String.raw`\b(?:${EU_VAZAR}|${EU_MANDAR})\b${GAP}\b${EXPO_SENS}`, "gi"),
+  new RegExp(String.raw`\b${EU_VAZAR}\b${GAP}\b${EXPO_COMUM}`, "gi")];
+// dentro da extorsão, o comum com verbo neutro também conta ("si no me pagas, publico tus fotos")
+const LEX_EU_EXPONHO_COMUM = [new RegExp(String.raw`\b${EU_MANDAR}\b${GAP}\b${EXPO_COMUM}`, "gi")];
+// a consequência pública ("todo mundo vai ver seus nudes", "everyone will know") — só dentro da extorsão
+const LEX_TODOS_SABEM = [
+  /\b(todo\s+mundo|geral|a\s+escola\s+(toda|inteira)|o\s+servidor\s+(todo|inteiro))\s+(vai|v[aã]o)\s+(saber|ver|descobrir)\b/gi,
+  /\b(everyone|everybody|the\s+whole\s+(server|school))\s+(will|is\s+gonna|gonna|is\s+going\s+to)\s+(know|see|find\s+out)\b/gi,
+  /\b(todos|todo\s+el\s+mundo)\s+(van|va|se\s+van|se\s+va)\s+a\s+(saber|ver|enterar)\b/gi,
+];
+// a exigência ao alvo
+const LEX_EXIGENCIA = [
+  /\b(me\s+)?(paga|pague|pagar|transfere|transfira|transferir|deposita|deposite|depositar)\b/i,
+  /\b(pix|dinheiro|grana)\b/i, /\bme\s+(manda|mandar|mande|envia|enviar|envie|der|d[aá])\b/i,
+  /\bfizer\s+o\s+que\s+eu\b|\bfa[zç]a?\s+o\s+que\s+eu\s+(mandar|disser|quero)\b|\bobedecer\b/i,
+  /\bpay\b/i, /\b(money|cash|btc|bitcoin|crypto|venmo|paypal)\b/i, /\b(send|give)\s+me\b/i, /\bdo\s+what\s+i\s+(say|tell|want)\b/i,
+  /\b(p[aá]game|pagas|pagar|paga|transfi[eé]reme|transfiere|deposita)\b/i, /\b(dinero|plata)\b/i,
+  /\bme\s+(mandas|env[ií]as|das|mandes|env[ií]es)\b/i, /\bhaces\s+lo\s+que\s+(te\s+)?(digo|pido)\b/i,
+];
+// condição dirigida ao alvo ("se você não…", "if you don't…", "si no me pagas…")
+const LEX_CONDICAO_SE = [
+  /\bse\s+(voc[eê]|vc|tu)\s+n[aã]o\b/i,
+  /\bse\s+n[aã]o\s+(me\s+)?(pagar|fizer|fazer|mandar|enviar|obedecer|transferir|depositar|der|devolver|parar|apagar|sair|responder)\b/i,
+  /\bif\s+(you|u)\s+(don['’]?t|do\s+not|dont|won['’]?t|wont|refuse|fail)\b/i, /\bunless\s+(you|u)\b/i,
+  /\bsi\s+(t[uú]\s+)?no\s+(me\s+)?(pagas|haces|mandas|env[ií]as|obedeces|transfieres|depositas|das|devuelves|paras|borras|respondes|vienes)\b/i,
+  /\bsi\s+t[uú]\s+no\b/i,
+];
+// prazo ou alternativa ("até sexta", "ou então", "or else", "hasta el viernes") — sozinho é conversa
+const LEX_ULTIMATO = [
+  /\bou\s+ent[aã]o\b/i, /\bsen[aã]o\b/i, /\bcaso\s+contr[aá]rio\b/i,
+  /\bat[eé]\s+(amanh[aã]|hoje|sexta|segunda|ter[cç]a|quarta|quinta|s[aá]bado|domingo|o\s+fim\s+d[oa]|meia[\s-]?noite|o\s+meio[\s-]dia|[aà]s?\s+\d)/i,
+  /\b(voc[eê]|vc|tu)\s+tem\s+(at[eé]|\d+\s*(h|horas?|dias?|min(utos)?)\b)/i,
+  /\bou\s+(vai|voc[eê]\s+vai|vc\s+vai|eu\s+(vou|vazo|exponho|espalho|posto|mando|conto)|todo\s+mundo)\b/i,
+  /\bor\s+else\b/i, /\bor\s+(you['’]?ll|i['’]?ll|you\s+will|i\s+will|everyone|everybody)\b/i,
+  /\b(by|until|till|before)\s+(tomorrow|tonight|today|friday|monday|tuesday|wednesday|thursday|saturday|sunday|midnight|noon|the\s+end\s+of)\b/i,
+  /\b(you|u)\s+(have|got)\s+(until|till|\d+\s*(h|hours?|days?|mins?|minutes?)\b)/i,
+  /\bo\s+si\s+no\b/i, /\bde\s+lo\s+contrario\b/i, /\bo\s+(te\s+vas|vas\s+a|voy\s+a|todos)\b/i,
+  /\b(hasta|antes\s+del?)\s+(el\s+)?(ma[nñ]ana|hoy|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|medianoche|mediod[ií]a|las\s+\d|fin\s+de)/i,
+  /\btienes\s+(hasta|\d+\s*(h|horas?|d[ií]as?|min(utos)?)\b)/i,
+];
+// a alternativa que cobra ("paga até sexta ou…", "ou então", "or else", "o si no")
+const LEX_ALTERNATIVA = [
+  /\bou\s*(\.{3}|…)/i, /\bor\s*(\.{3}|…)/i, /\bo\s*(\.{3}|…)/i, /\bou\s+ent[aã]o\b/i, /\bsen[aã]o\b/i, /\bor\s+else\b/i, /\bo\s+si\s+no\b/i,
+  /\bou\s+(vai|voc[eê]\s+vai|vc\s+vai|eu\s+(vou|vazo|exponho|espalho|posto|mando|conto))\b/i,
+  /\bor\s+(you['’]?ll|i['’]?ll|you\s+will|i\s+will)\b/i, /\bo\s+(te\s+vas|vas\s+a|voy\s+a)\b/i,
+];
+// o "não/don't/no" que faz parte da condição (para tirar antes de procurar tom de alerta)
+const RE_CONDICAO_NEGADA = /\b(if\s+(?:you|u)|se\s+(?:voc[eê]s?|vcs?|tu)|si(?:\s+t[uú])?)\s+(?:don['’]?t|dont|do\s+not|n[aã]o|no)\s+/gi;
+// a condição de cortesia não é condição: "se você não se importar", "if you don't mind", "si no te importa"
+const RE_CORTESIA = /\bse\s+((voc[eê]|vc|tu)\s+)?n[aã]o\s+(se\s+)?(importar|incomodar|ligar)\b|\bif\s+(you|u)\s+(don['’]?t|do\s+not|dont)\s+mind\b|\bsi\s+no\s+te\s+(importa|molesta)\b/gi;
+// a cobrança (sem exigência de exposição): "paga", "pay me", "págame"
+const LEX_COBRANCA = [
+  /\b(me\s+)?(paga|pague|pagar|transfere|transfira|deposita|deposite)\b/i,
+  /\bmanda\s+(o\s+)?(pix|dinheiro|grana|valor)\b/i, /\b(quero|cad[eê])\s+(o\s+)?(meu\s+)?(dinheiro|pix|grana)\b/i,
+  /\bpay\s+(me|up|now|what\s+you\s+owe)\b/i, /\bsend\s+(me\s+)?(the\s+)?(money|cash|btc|bitcoin|crypto|payment)\b/i, /\bi\s+want\s+my\s+money\b/i,
+  /\b(p[aá]game|transfi[eé]reme|transfiere)\b/i, /\bmanda(me)?\s+(el\s+)?(dinero|plata|pago)\b/i, /\bquiero\s+mi\s+(dinero|plata)\b/i,
+];
+// citação entre aspas: o que está citado não é o autor falando
+const RE_CITACAO = /"[^"\n]{0,400}"|“[^”\n]{0,400}”|«[^»\n]{0,400}»|„[^“”\n]{0,400}[“”]/g;
+// fala relatada, pedido de ajuda e alerta: quem escreve é a VÍTIMA ou quem avisa
+const LEX_RELATO = [
+  /\b(algu[eé]m|um\s+cara|uma\s+mina|uma\s+pessoa|ele|ela|eles|elas|o\s+cara|o\s+golpista|um\s+golpista)\s+(me\s+)?(mandou|mandaram|disse|disseram|falou|falaram|escreveu|amea[cç]ou|amea[cç]a|t[aá]\s+(me\s+)?amea[cç]ando|est[aá]\s+(me\s+)?amea[cç]ando)\b/i,
+  /\bme\s+(mandaram|disseram|falaram|escreveram|amea[cç]aram)\b/i, /\b(disse|disseram|falou|falaram|contou|contaram)\s+que\b/i, /\brecebi\s+(uma\s+|essa\s+|esta\s+)?(mensagem|dm|isso|amea[cç]a)/i,
+  /\bo\s+que\s+(eu\s+)?fa[cç]o\b/i, /\bdenunci\w*/i, /\bcuidado\s+com\b/i, /\b[eé]\s+crime\b/i, /\bgolpistas?\b/i, /\bme\s+ajud(a|em|ar)\b/i,
+  /\b(someone|somebody|a\s+guy|some\s+guy|he|she|they|the\s+scammer)\s+(just\s+)?(told|sent|messaged|dmed|dm['’]?d|threatened|threatens|says|said|wrote)\b/i,
+  /\b(said|told\s+me)\s+that\b/i, /\bi\s+(got|received)\s+(a\s+|this\s+)?(message|dm|threat|this)\b/i, /\bwhat\s+(should|do|can)\s+i\s+do\b/i, /\breport\w*/i,
+  /\bbe\s+careful\b|\bwatch\s+out\b/i, /\bhelp\s+me\b/i, /\bscammers?\b/i, /\bis\s+a\s+crime\b/i,
+  /\b(alguien|un\s+tipo|una\s+persona|[eé]l|ella|ellos|el\s+estafador)\s+(me\s+)?(dijo|dijeron|mand[oó]|mandaron|escribi[oó]|amenaz[oó]|amenaza)\b/i,
+  /\bme\s+(dijeron|mandaron|escribieron|amenazaron)\b/i, /\b(dijo|dijeron|cont[oó])\s+que\b/i, /\bqu[eé]\s+hago\b/i, /\bcuidado\s+con\b/i, /\bes\s+(un\s+)?delito\b/i, /\bestafador(es)?\b/i, /\bay[uú]dame\b/i,
+];
+// tom de festa/presente/surpresa: mandar o endereço da mãe pro grupo é para levar o bolo
+const RE_AMIGAVEL = /\b(festa|anivers[aá]rio|surpresa|bolo|presente|parab[eé]ns|buscar|carona|uber|motorista|entrega|relaxa|party|driver|delivery|birthday|surprise|gifts?|cake|pick\s+(you|u)\s+up|ride|fiesta|cumplea[nñ]os|sorpresa|regalos?|pastel|recoger)\b/i;
+// negação logo antes do verbo (só auxiliares no meio): "não vou vazar", "I won't leak", "no voy a filtrar"
+// (revisão do P5) o "não/don't/no" da própria CONDIÇÃO ("se você não…", "if you don't…", "si no…") não nega a ameaça
+const RE_NEGADO = /(?<!\b(?:if\s+(?:you|u)|se\s+(?:voc[eê]|vc|tu)|se|si(?:\s+t[uú])?)\s+)\b(n[aã]o|nunca|jamais|never|not|don['’]?t|dont|won['’]?t|wont|wouldn['’]?t|no|ni)\s+((vou|vo|irei|eu|te|ia|voy|vamos|a|lo|la|will|would|gonna|ever|i)\s+){0,3}$/i;
+// ... ou logo depois ("leak your address? no way, I'd never", "jk", "brincadeira")
+const RE_NEGADO_DEPOIS = /^[^\n]{0,30}?\b(no\s+way|never|nunca|jamais|de\s+jeito\s+nenhum|nem\s+pensar|nem\s+fodendo|ni\s+de\s+broma|ni\s+loc[oa]|de\s+ninguna\s+manera|jk|just\s+kidding|brincadeira|zueira|zoeira|mentira)\b/i;
+function casaSemNegacao(t, lista) {
+  for (const re of lista) {
+    for (const m of t.matchAll(re)) {
+      const clausula = t.slice(Math.max(0, m.index - 40), m.index).split(/[,.;:!?\n]/).pop();
+      if (RE_NEGADO.test(clausula)) continue;
+      if (RE_NEGADO_DEPOIS.test(t.slice(m.index + m[0].length, m.index + m[0].length + 40))) continue;
+      return true;
+    }
+  }
+  return false;
+}
+
 // ─── Vocabulário extra (lexico-extra.js) ────────────────────────────────────
 // Texto vira frase literal, palavra inteira, sem diferenciar maiúsculas;
 // RegExp vale como está. Grupos/insultos/violentos entram nas alternâncias das
@@ -353,9 +493,11 @@ export const PESO_DANO = {
   vazar: 1.5, coercao: 1.5, desprezo: 0.5, link_convite: 1,
   injuria: 1.5, odio: 2, simbolo_odio: 1, ameaca: 2,
   conj_desafio_extremo: 1.5, conj_desafio_humilhacao: 1.5,
+  extorsao: 2, exposicao: 1,   // (P5) extorsão e exposição
 };
 const LADO_AGRESSOR = new Set(["desafio", "humilhacao", "dados_pessoais", "dox",
-  "vazar", "coercao", "desprezo", "link_convite", "injuria", "odio", "simbolo_odio", "ameaca"]);
+  "vazar", "coercao", "desprezo", "link_convite", "injuria", "odio", "simbolo_odio", "ameaca",
+  "extorsao", "exposicao"]);
 
 export function danoDe(features) {
   let soma = 0;
@@ -426,7 +568,23 @@ export const PESOS = {
   conj_ganho_recrutamento: 2,  // promessa de dinheiro + "trabalhe comigo"/"te ajudo a ganhar"
   pedido_dados:    1.5,   // "manda sua conta", "send your bank info" (17 out 2026)
   conj_golpe_dados: 3,    // brinde/promessa de dinheiro + pedido dos dados da vítima
+  // ameaça condicional e exposição (P5, 3 nov 2026) — a estrutura, sem palavrão
+  // (revisão do P5) antes: conj_exposicao 6, conj_cobranca_ameaca 4; agora só a extorsão pune
+  extorsao:             6,   // condição/prazo + exigência + "eu vazo/vou mandar" um dado do alvo (como `ameaca`)
+  exposicao:            3,   // "vou vazar suas fotos", "vou mandar onde você mora pro grupo" — sozinha < 3,5
+  ultimato:             1,   // cobrança com condição/alternativa ("paga até sexta ou…") — contexto
+  // o classificador de texto (P5): já vem em pontos (ver TETO_CLASSIFICADOR)
+  classificador:        1,
 };
+
+// (P5, 3 nov 2026) O classificador de texto é um SINAL, nunca o juiz: cada classe acima do
+// limiar dela soma PONTOS_POR_CLASSE, e o total para no TETO_CLASSIFICADOR — abaixo do menor
+// limiar que o sentinela usa (3,5: o piso do confianca.limiarPara, de conta nova em raid na
+// sensibilidade alta). Sozinho, nem o pior caso pune; com outro sinal (uma conjunção fraca, um
+// link encurtado, uma cobrança com prazo), ele empurra a nota. Entra também no alerta de padrão
+// à staff (nota ≥ 3), que não pune. A bateria mede os dois números para manter 0 falso positivo.
+export const PONTOS_POR_CLASSE = 2;
+export const TETO_CLASSIFICADOR = 3;
 
 const contar = (txt, lista, cap = 99) => {
   let n = 0;
@@ -506,6 +664,14 @@ export function normalizarParaAnalise(texto) {
 // e fica com a de nota maior.
 const RE_ESTICADA = /(\p{L})\1{2,}/gu;
 
+// Sinais que não são CONTEÚDO: sozinhos não destravam a repetição (duplicata) — e o classificador
+// (P5) também é um deles: ele não destrava nada.
+const NEUTROS = new Set(["duplicata", "afirmacao", "cta", "taxa_alta", "pergunta", "negacao", "classificador"]);
+// (revisão do P5, R3) para o classificador somar, falta um sinal além destes
+const CONTEXTO = new Set([...NEUTROS, "urgencia", "link_simples", "ultimato"]);
+// (revisão do P5) o que a fala relatada / o pedido de ajuda zera
+const FAMILIA_EXTORSAO = ["extorsao", "exposicao", "ultimato", "coercao", "vazar", "dados_pessoais", "dox"];
+
 function extrairFeatures(texto, opts = {}) {
   const cru = texto ?? "";
   let t = normalizarParaAnalise(cru);
@@ -541,15 +707,40 @@ function extrairFeatures(texto, opts = {}) {
   f.autolesao      = contar(t, LEX_AUTOLESAO, 2);
   f.desafio        = contar(t, LEX_DESAFIO, 1);
   f.humilhacao     = contar(t, LEX_HUMILHACAO, 2);
-  f.dados_pessoais = contar(t, LEX_DADOS_PESSOAIS, 1);
-  f.dox            = contar(t, LEX_DOX, 1);
-  f.vazar          = contar(t, LEX_VAZAR, 1);
-  f.coercao        = contar(t, LEX_COERCAO, 1);
+  // (revisão do P5) o que está entre aspas é citação, não o autor ameaçando
+  const tAm = t.replace(RE_CITACAO, " ");
+  f.dados_pessoais = contar(tAm, LEX_DADOS_PESSOAIS, 1);
+  f.dox            = contar(tAm, LEX_DOX, 1);
+  f.vazar          = contar(tAm, LEX_VAZAR, 1);
+  f.coercao        = contar(tAm, LEX_COERCAO, 1);
   f.desprezo       = contar(t, LEX_DESPREZO, 1);
   f.injuria        = contar(t, LEX_INJURIA, 1);
   f.odio           = contar(t, LEX_ODIO_CONJ, 1);
   f.simbolo_odio   = Math.min(3, (t.match(RE_SIMBOLO_ODIO) ?? []).length);
   f.ameaca         = contar(t, LEX_AMEACA, 1);
+
+  // Extorsão e exposição (P5, refeito na revisão): a estrutura (ver EU_VAZAR e cia.)
+  const tc = tAm.replace(RE_CORTESIA, " ");
+  const condSe = contar(tc, LEX_CONDICAO_SE, 1) > 0;
+  const cond = condSe || contar(tc, LEX_ULTIMATO, 1) > 0;
+  const exponhoSens = casaSemNegacao(tAm, LEX_EU_EXPONHO_SENS);
+  if (cond && contar(tAm, LEX_EXIGENCIA, 1) > 0
+      && (exponhoSens || casaSemNegacao(tAm, LEX_EU_EXPONHO_COMUM) || casaSemNegacao(tAm, LEX_TODOS_SABEM))) f.extorsao = 1;
+  else if (exponhoSens && !RE_AMIGAVEL.test(tAm)) f.exposicao = 1;
+  if (contar(tAm, LEX_COBRANCA, 1) > 0 && (condSe || contar(tc, LEX_ALTERNATIVA, 1) > 0)) f.ultimato = 1;
+  // "vazar/expor/espalhar" (o léxico antigo) sem coerção, extorsão nem dado pessoal não é ameaça
+  // ("vou espalhar suas fotos no grupo da família, ficaram lindas"); a exposição já é a `exposicao`
+  if (!f.coercao && !f.extorsao && !f.dados_pessoais && !f.dox) f.vazar = 0;
+  // fala relatada, pedido de ajuda, alerta: quem escreve é a vítima ou quem avisa — a família toda a 0
+  if (contar(t, LEX_RELATO, 1) > 0) for (const k of FAMILIA_EXTORSAO) f[k] = 0;
+
+  // O classificador de texto (P5): as classes acima do limiar vêm de fora (opts.classes, do
+  // classificador-texto.js — o scorecard segue puro); aparecem nos sinais e somam com teto.
+  if (opts.classes && typeof opts.classes === "object") {
+    const nomes = Object.keys(opts.classes).filter((c) => /^[a-z]{1,20}$/.test(c));
+    for (const c of nomes) f[`classe_${c}`] = 1;
+    if (nomes.length) f.classificador = Math.min(TETO_CLASSIFICADOR, nomes.length * PONTOS_POR_CLASSE);
+  }
 
   // Tipo de link (apenas o de maior prioridade conta)
   if (LINK_FILEHOST.test(t) || LINK_IMITACAO.test(t)) f.link_filehost = 1;
@@ -561,7 +752,10 @@ function extrairFeatures(texto, opts = {}) {
   if (/@everyone|@here|@online/i.test(t) && LINK_SIMPLES.test(t)) f.mass_ping = 1;
 
   // Ato de fala
-  const negacao = contar(t, LEX_NEGACAO) > 0;
+  let negacao = contar(t, LEX_NEGACAO) > 0;
+  // (revisão do P5) na extorsão, o "if you don't send…" é a CONDIÇÃO, não o alerta "don't send" (que desconta 4):
+  // sem a condição, sobrou algum tom de alerta? Senão, não desconta
+  if (negacao && f.extorsao) negacao = contar(t.replace(RE_CONDICAO_NEGADA, "$1 "), LEX_NEGACAO) > 0;
   if (negacao) f.negacao = 1;
   if (PERGUNTA.test(t)) f.pergunta = 1;
   if (AFIRMACAO.test(t) || f.oferta > 0 || f.cta > 0) f.afirmacao = 1;
@@ -576,7 +770,6 @@ function extrairFeatures(texto, opts = {}) {
   // como "conteúdo proibido" para quem tinha pouco XP. Repetir texto inocente
   // é com o anti-duplicata (que tem folga e o primeiro toque).
   if (f.duplicata) {
-    const NEUTROS = new Set(["duplicata", "afirmacao", "cta", "taxa_alta", "pergunta", "negacao"]);
     const temConteudo = Object.entries(f).some(([k, v]) => v > 0 && !NEUTROS.has(k) && (PESOS[k] ?? 0) > 0);
     // Sem conteúdo suspeito, texto curto não soma nada; parede de texto
     // repetida (comportamento de bot — o caso do Stork) continua somando.
@@ -619,7 +812,11 @@ function extrairFeatures(texto, opts = {}) {
   if (isca) f.pergunta = 0;
   // A interrogação suaviza golpe ("isso é golpe?"), mas não suaviza ódio:
   // "vc é um ciganinho né?" continua sendo uma injúria.
-  if (f.injuria || f.odio || f.simbolo_odio || f.ameaca) f.pergunta = 0;
+  if (f.injuria || f.odio || f.simbolo_odio || f.ameaca || f.extorsao || f.exposicao) f.pergunta = 0;
+  // (revisão do P5, R3) o classificador só soma com OUTRO sinal de conteúdo: contexto (repetição,
+  // contato, imperativo, urgência, link comum, ultimato) não destrava — "bora jogar mais tarde" 3× ou
+  // "… chama no zap" com o classificador errando não punem
+  if (f.classificador && !Object.entries(f).some(([k, v]) => v > 0 && !CONTEXTO.has(k) && (PESOS[k] ?? 0) > 0)) f.classificador = 0;
   return f;
 }
 
@@ -643,4 +840,34 @@ export function analisarConteudo(texto, opts = {}) {
     .filter(([, v]) => v)
     .map(([k, v]) => `${k}${v > 1 ? "×" + v : ""}`);
   return { nota, grave, sinais, features: f, dano: danoDe(f) };
+}
+
+// (P5, 3 nov 2026) A categoria de uma nota do sentinela — a família que mais somou pontos — para a
+// segunda análise do dono rotular o caso (área dados): golpe, ameaca, odio, chocante (gore), adulto
+// ou grave (ilícito/abuso). Os pontos do classificador vão para a família da classe dele. Só sinal de
+// contexto (afirmação, urgência, repetição…) → "sentinela".
+const FAMILIAS = {
+  golpe: ["scam", "oferta", "cta", "link_filehost", "link_encurtador", "link_mascarado", "link_ofuscado", "mass_ping",
+    "recrutamento", "conta_alheia", "divisao_lucro", "mula", "pretexto_conta", "pedido_dados", "conj_emprego_conta",
+    "conj_mula_conta", "conj_pretexto_ganho", "conj_mula_ganho", "conj_recrutamento_lucro", "conj_ganho_recrutamento",
+    "conj_golpe_dados", "conj_topico_link", "conj_topico_cta"],
+  ameaca: ["ameaca", "extorsao", "exposicao", "ultimato", "coercao", "vazar", "dados_pessoais", "dox",
+    "conj_doxxing", "conj_extorsao", "autolesao", "desafio", "humilhacao", "conj_desafio_autolesao", "conj_desafio_extremo",
+    "conj_desafio_humilhacao"],
+  odio: ["injuria", "odio", "simbolo_odio"],
+  chocante: ["gore"],
+  adulto: ["adulto"],
+  grave: ["grave", "conj_grave_oferta", "conj_grave_contexto"],
+};
+export function categoriaDoConteudo(features = {}, pesos = PESOS) {
+  if (features.conj_grave_oferta > 0 || features.conj_grave_contexto > 0) return "grave";
+  const soma = {};
+  for (const [fam, chaves] of Object.entries(FAMILIAS)) {
+    soma[fam] = chaves.reduce((a, k) => a + Math.max(0, (pesos[k] ?? 0) * (features[k] ?? 0)), 0);
+  }
+  const classes = Object.keys(features).filter((k) => k.startsWith("classe_") && features[k] > 0).map((k) => k.slice(7));
+  for (const c of classes) if (c in soma) soma[c] += (features.classificador ?? 0) / classes.length;
+  let melhor = "sentinela", max = 0;
+  for (const [fam, v] of Object.entries(soma)) if (v > max) { melhor = fam; max = v; }
+  return melhor;
 }

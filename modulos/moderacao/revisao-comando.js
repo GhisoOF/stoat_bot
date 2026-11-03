@@ -34,10 +34,11 @@ export async function cmdCaso(message, args, ctx) {
     const enviados = await revisao.enviarAgora();
     if (enviados.length) return null;   // os casos são a resposta
     const s = revisao.situacao();
+    // (P5) e a segunda análise (🔁), com o teto dela
     return responder(ctx, message.channel,
-      `📋 Esperando **${s.esperando}** · enviados hoje **${s.hoje}/${s.teto}**`,
-      `📋 Waiting **${s.esperando}** · sent today **${s.hoje}/${s.teto}**`,
-      `📋 Esperando **${s.esperando}** · enviados hoy **${s.hoje}/${s.teto}**`, "info");
+      `📋 Esperando **${s.esperando}** · enviados hoje **${s.hoje}/${s.teto}** · 🔁 **${s.problemasHoje}/${s.tetoProblemas}**`,
+      `📋 Waiting **${s.esperando}** · sent today **${s.hoje}/${s.teto}** · 🔁 **${s.problemasHoje}/${s.tetoProblemas}**`,
+      `📋 Esperando **${s.esperando}** · enviados hoy **${s.hoje}/${s.teto}** · 🔁 **${s.problemasHoje}/${s.tetoProblemas}**`, "info");
   }
 
   if (sub === "exportar") return exportar(message, ctx);
@@ -60,7 +61,7 @@ export async function cmdCaso(message, args, ctx) {
     if (msg?.id) {
       if (caso.dmMsgId && caso.dmMsgId !== msg.id) await revisao.encurtarDmAntiga(caso);   // a antiga perde o trecho
       db.filaAtualizar(codigo, { dmMsgId: msg.id, dmCanalId: message.channel?.id ?? message.channelId ?? null,
-        ...(caso.estado === "candidato" || caso.estado === "amostra" || caso.estado === "registro" ? { estado: "enviado", enviadoEm: Date.now() } : {}) });
+        ...(["candidato", "amostra", "registro", "problema"].includes(caso.estado) ? { estado: "enviado", enviadoEm: Date.now() } : {}) });
       if (!caso.veredito) for (const e of ["✅", "❌"]) {
         try { await msg.react?.(encodeURIComponent(e)); } catch (err) { registrarErro("CASO:react", err); break; }
       }

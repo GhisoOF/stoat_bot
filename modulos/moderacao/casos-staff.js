@@ -18,6 +18,11 @@
 //     dia, no ciclo de 6 h (`recalcularLimiares`, a mesma conta do limiar global, partindo dele).
 // Retenção (PRIVACIDADE.md; db.js, bloco "P3a staff"): esperando reação, o mínimo para agir,
 // no máximo 14 dias; julgado, só impressão/hash + categoria + nota + veredito + servidor.
+// (3 nov 2026, P5) E o vetor do texto (a impressão de treino, treino.js): a bateria só MEDE com ele (uso
+// "medir", sem servidor) — o veredito da staff nunca treina o modelo global. (P5 revisão) O vetor permite
+// reconstruir o texto: sai 7 dias depois do alerta (db.staffReter), com o pseudônimo `vetorPessoa`. O trecho seguro (até 300 caracteres) e o link de origem do alerta que espera ficam SÓ
+// na memória do processo (`trechos`, com teto e validade; reiniciou, esquece), para a segunda análise
+// do dono se a staff marcar ❌ (segunda-analise.js) — o banco continua sem o texto.
 
 import * as db from "../core/db.js";
 import * as revisao from "./revisao.js";
@@ -28,6 +33,9 @@ import { registrarErro } from "../core/erros.js";
 import { tr } from "../core/i18n.js";
 import { LIMIAR_ALTA_PADRAO } from "./assuntos.js";
 import { PADRAO as PADRAO_CERTEZA } from "./certeza.js";
+import * as treino from "./treino.js";
+import { pseudonimo } from "../core/pseudonimo.js";
+import * as segunda from "./segunda-analise.js";
 
 export const TIPOS = new Set(["assunto", "perfil-imagem", "perfil-texto"]);
 const CATEGORIA = /^[a-z0-9][a-z0-9:_-]{0,39}$/;
@@ -138,17 +146,46 @@ export async function alertar({ ctx, server, embed, caso, oQueFaz, agora = Date.
   catch (e) { registrarErro("STAFF:alerta", e); }
   if (!msg?.id) return null;
   const nota = typeof caso.nota === "number" && Number.isFinite(caso.nota) ? Math.min(1, Math.max(0, caso.nota)) : null;
-  const { hash, impressao } = revisao.impressoesDe(caso.evidencia ?? {});
+  const ev = caso.evidencia ?? {};
+  const { hash, impressao } = revisao.impressoesDe(ev);
+  const { vetor, versaoSinais } = treino.vetorDe(tipo, ev.texto ?? ev.trecho ?? "");   // (P5) agora, enquanto o texto existe
   const novo = db.staffInserir({
     serverId, tipo, categoria, nota, parte: PARTE.test(String(caso.parte ?? "")) ? String(caso.parte) : null,
     userId: id(caso.userId), canalId: id(caso.canalId), msgId: id(caso.msgId),
     alertaCanalId: destino.id ?? null, alertaMsgId: String(msg.id), hash, impressao, criadoEm: agora,
+    certeza: caso.certeza === "media" || caso.certeza === "baixa" ? caso.certeza : null, vetor, versaoSinais,
+    // (3 nov 2026, P5 revisão) o julgado perde o userId na hora; enquanto o vetor vive (7 dias), o pseudônimo
+    // (HMAC com o segredo) liga o caso à pessoa só para o `&privacidade apagar` o alcançar
+    vetorPessoa: vetor && id(caso.userId) ? pseudonimo(id(caso.userId)) : null,
   });
+  lembrarTrecho(novo, { userId: id(caso.userId), trecho: revisao.trechoSeguro(ev.trecho ?? ev.texto), link: revisao.linkDeOrigem(ev.link) }, agora);
   for (const e of ["✅", "❌"]) {
     try { await msg.react?.(encodeURIComponent(e)); } catch (err) { registrarErro("STAFF:react", err); break; }
   }
   return { id: novo, msgId: String(msg.id) };
 }
+
+// (P5) O trecho e o link do alerta que espera, só na memória (para a segunda análise do ❌)
+export const TRECHOS_MAX = 500, TRECHOS_VALIDADE_MS = 14 * 86400e3;   // a validade = o prazo do caso que espera (STAFF_DIAS_PENDENTE)
+const trechos = new Map();   // id do caso → { userId, trecho, link, quando }
+function lembrarTrecho(casoId, { userId, trecho, link }, agora) {
+  if (!casoId || (!trecho && !link)) return;
+  for (const [k, t] of trechos) { if (agora - t.quando <= TRECHOS_VALIDADE_MS) break; trechos.delete(k); }   // os vencidos saem (os mais velhos vêm antes)
+  trechos.set(Number(casoId), { userId, trecho, link, quando: agora });
+  while (trechos.size > TRECHOS_MAX) trechos.delete(trechos.keys().next().value);
+}
+function tirarTrecho(casoId, agora = Date.now()) {
+  const t = trechos.get(Number(casoId));
+  trechos.delete(Number(casoId));
+  return t && agora - t.quando <= TRECHOS_VALIDADE_MS ? t : null;
+}
+// `&privacidade apagar`: a pessoa sai da memória
+export function esquecerPessoa(userId) {
+  let n = 0;
+  for (const [k, t] of trechos) if (t.userId && t.userId === String(userId ?? "")) { trechos.delete(k); n++; }
+  return n;
+}
+export const _trechos = () => trechos;
 
 // ── a reação da staff ──
 // Cada tipo de caso tem o seu executor (o detector):
@@ -221,6 +258,12 @@ export async function julgar(caso, veredito, { ctx, server, quem, mod = null, ag
   const reabrir = !!r?.reabrir;
   const feito = typeof r === "string" ? r : r?.feito ?? null;
   if (reabrir) db.staffReabrir(caso);
+  // (P5) o ❌ da staff vai, à parte, à segunda análise do dono (só calibra e treina; a decisão daqui fica)
+  else {
+    const t = tirarTrecho(caso.id, agora);
+    if (veredito === "errou") segunda.staffErrou({ ...caso, trecho: t?.trecho ?? null, link: t?.link ?? null }, { agora });
+  }
+  if (caso.vetor) treino.pedirReescrita();   // (P5) o arquivo da bateria: este veredito só MEDE
   const s = veredito === "certo" ? "✅" : "❌";
   const alvo = caso.userId ? `<@${caso.userId}>` : "—";
   const t3 = reabrir
@@ -237,4 +280,4 @@ export async function julgar(caso, veredito, { ctx, server, quem, mod = null, ag
 }
 
 // Só para testes
-export function _zerar() { refs = new Map(); limiares.clear(); travas.clear(); }
+export function _zerar() { refs = new Map(); limiares.clear(); travas.clear(); trechos.clear(); }

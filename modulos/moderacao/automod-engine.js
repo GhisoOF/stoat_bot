@@ -1,7 +1,7 @@
 
 import * as rajada from "./rajada.js";
 import { citar, citarInterno } from "../core/aliases.js";
-import { analisarConteudo, normalizarParaAnalise } from "./scorecard.js";
+import { analisarConteudo, normalizarParaAnalise, categoriaDoConteudo } from "./scorecard.js";
 import * as db  from "../core/db.js";
 import { descreverErro, tipoDoErro, registrarErro } from "../core/erros.js";
 import { banir } from "../core/banir.js";
@@ -14,8 +14,13 @@ import { aplicarTimeout, CONFIRMAR_MS } from "./timeout.js";
 import { editarCargos } from "../core/hierarquia.js";
 import * as imagemSentinela from "./imagem.js";
 import * as assuntos from "./assuntos.js";
+import * as segunda from "./segunda-analise.js";
 import { analisarCaracteres, analisarRepeticao, analisarDuplicata, digital, textoHumano, razaoDeCaixaAlta, ehSoRisada, RISADA_SEGUIDA, tituloComGrito } from "./caracteres.js";
-import { lingua, tr } from "../core/i18n.js";
+import { lingua, tr, idiomaDe } from "../core/i18n.js";
+// (P5, 3 nov 2026) os motivos no idioma do servidor, o classificador de texto e o tempo por mensagem
+import { textoDoMotivo, comAvisos } from "./motivos.js";
+import * as classificador from "./classificador-texto.js";
+import * as tempoAutomod from "../core/tempo-automod.js";
 import {
   ConstrutorIndice, criarIndiceVazio, carregarCache, salvarCache, idadeDoCache,
 } from "./indice-dominios.js";
@@ -372,6 +377,9 @@ export async function aplicarPunicao(ctx, opts) {
       return { recusado: true, permissao };
     }
   }
+  // (P5) punição AUTOMÁTICA (ninguém da staff decidindo) que pode ser desfeita: lembrada para a segunda
+  // análise do dono, se a staff a desfizer ou se ela falhar (quarentena) — segunda-analise.js
+  const paraSegunda = !podeAplicar && pol.modo !== "avisar" && pol.modo !== "apagar" ? segunda.lembrarDoAutomod(opts, sidP) : null;
 
   const linhaNota = (nota != null)
     ? `\n**${tr(ctx, "Nota", "Score", "Puntuación")}:** ${nota.toFixed(1)}/10` : "";
@@ -476,6 +484,7 @@ export async function aplicarPunicao(ctx, opts) {
       // Sem silêncio, a pessoa seguia postando (raid de 27/09: suásticas por
       // mais 1 min, e as mensagens só sumiram quando a staff acordou).
       confianca.quarentenar(ctx.serverId ?? server?.id, userId);
+      segunda.quarentena(paraSegunda);   // (P5) a punição falhou: segunda análise
       acao += tr(ctx,
         " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**",
         " — until then, **everything they post in the next 30 min is deleted**",
@@ -544,6 +553,7 @@ export async function aplicarPunicao(ctx, opts) {
       // porque o BOT não tinha a permissão (9 out 2026).
       if (!opts.ruido || confianca.contaNova(sid, userId) || confianca.emModoRaid(sid)) {
         confianca.quarentenar(ctx.serverId ?? server?.id, userId);
+        segunda.quarentena(paraSegunda);   // (P5) a punição falhou: segunda análise
         acao += tr(ctx,
           " — enquanto isso, **tudo o que a pessoa mandar nos próximos 30 min é apagado**",
           " — until then, **everything they post in the next 30 min is deleted**",
@@ -571,8 +581,10 @@ export async function aplicarPunicao(ctx, opts) {
   // ── último degrau: ban ──
   let acao = tr(ctx, "banido", "banned", "baneado");
   try {
-    await banir(server, userId, { reason: `[AutoMod] ${motivo} (${count} avisos)` });
-    await banGlobal.registrar(ctx, userId, `${motivo} (${count} avisos)`, origemBan,
+    // (revisão do P5, R4) "(N avisos)" no idioma do servidor, como o motivo
+    const motivoBan = comAvisos(motivo, count, idiomaDe(ctx));
+    await banir(server, userId, { reason: `[AutoMod] ${motivoBan}` });
+    await banGlobal.registrar(ctx, userId, motivoBan, origemBan,
       { nome: message?.author?.username ?? null, membro: message?.member ?? message?.author ?? null });
   } catch (e) {
     console.error("[PUNIÇÃO][BAN]", descreverErro(e));
@@ -893,11 +905,16 @@ export function rotuloDegrau(degrau, lang = "pt") {
 // não pode derrubar o processamento da mensagem — antes, `repeticao 1.5` lançava
 // exceção em TODA mensagem e os comandos de quem não é staff morriam junto.
 export async function runAutomod(message, ctx, opts = {}) {
+  // (P5, R11) o tempo de cada mensagem, inteiro (com a punição, quando há), vai para os contadores
+  // por hora do tempo-automod.js — só o número, nada da mensagem
+  const t0 = performance.now();
   try {
     return await analisarMensagem(message, ctx, opts);
   } catch (e) {
     registrarErro("AUTOMOD", e);
     return false;
+  } finally {
+    tempoAutomod.registrar("total", performance.now() - t0);
   }
 }
 
@@ -957,25 +974,35 @@ async function analisarMensagem(message, ctx, opts = {}) {
   }
 
   const sid = ctx.serverId ?? server?.id;
-  const barrar = async (pol, motivo, rotulo) => {
+  // (P5) o motivo de cada punição sai do motivos.js, no idioma do servidor (pt | en | es)
+  const idioma = idiomaDe(ctx);
+  const motivoDe = (chave, params) => textoDoMotivo(chave, params, idioma);
+  // barrar/punirRuido recebem QUAL motivo (a chave do motivos.js): o texto sai no idioma do servidor e a
+  // chave vira a categoria do caso (`automod:<chave>`) para a segunda análise do dono (área dados)
+  const qual = (chave, params = {}) => ({ chave, params });
+  const categoriaDe = (m) => `automod:${m.chave.toLowerCase()}`;
+  const barrar = async (pol, m, rotulo) => {
     dbg(ctx, `  ✗ BLOQUEADA por ${rotulo}`);
     // quem apaga é o aplicarPunicao, uma vez só (15 out 2026: antes apagava
     // aqui E lá). Regra fixa apaga até no modo avisar — e agora o aviso diz isso.
-    await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol, motivo, regraFixa: true });
+    await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol, motivo: motivoDe(m.chave, m.params), regraFixa: true,
+      tipo: "mensagem", categoria: categoriaDe(m) });
     return true;
   };
 
   // Filtros de ruído: a primeira vez é só um toque (ver primeiroToque).
   const novato = confianca.contaNova(sid, userId);
   const raid = confianca.emModoRaid(sid);
-  const punirRuido = async (pol, motivo, rotulo) => {
+  const punirRuido = async (pol, m, rotulo) => {
     dbg(ctx, `  ✗ BLOQUEADA por ${rotulo}`);
+    const motivo = motivoDe(m.chave, m.params);
     if (modoEfetivo(config, pol) === "acumular" && primeiroToque(sid, userId, { novato, raid })) {
       dbg(ctx, "  → primeiro toque: apaga e explica, sem contar aviso");
       await darToque(ctx, { server, channel: canal, message, userId, motivo });
       return true;
     }
-    await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol, motivo, ruido: true, regraFixa: true });
+    await aplicarPunicao(ctx, { server, channel: canal, message, userId, pol, motivo, ruido: true, regraFixa: true,
+      tipo: "mensagem", categoria: categoriaDe(m) });
     return true;
   };
 
@@ -984,7 +1011,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
     const termo = rajada.acharOdio(content, am.antiOdio?.termos ?? []);
     dbg(ctx, `  [anti-ódio] ${termo ? "ACHOU termo da lista" : "nada"}`);
     // o termo não vai para o motivo: a punição é publicada no canal
-    if (termo) return barrar(am.antiOdio?.punicao, "linguagem de ódio não é tolerada aqui", "anti-ódio");
+    if (termo) return barrar(am.antiOdio?.punicao, qual("odio"), "anti-ódio");
   }
 
   // ── Enxurrada de emoji (o ataque colava ~170 emojis por mensagem) ──
@@ -994,7 +1021,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
     const maxE = am.antiEmoji?.maxEmojis ?? 20;
     const e = rajada.enxurradaDeEmoji(content, { max: maxE, minimo: novato ? 10 : maxE });
     dbg(ctx, `  [anti-emoji] ${rajada.contarEmojis(content)} emoji(s)${e ? " — ENXURRADA" : ""}`);
-    if (e) return punirRuido(am.antiEmoji?.punicao, `muitos emojis numa mensagem só (${e.n})`, "anti-emoji");
+    if (e) return punirRuido(am.antiEmoji?.punicao, qual("emoji", { n: e.n }), "anti-emoji");
   }
 
   // ── Rajada de mídia: muitos anexos em pouco tempo, somando TODOS os canais ──
@@ -1006,7 +1033,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
     const n = rajada.contarMidias(estado.midiaData, `${sid}:${userId}`, anexos);
     const max = novato ? (am.antiMidia?.maxNovato ?? 3) : (am.antiMidia?.maxPorMinuto ?? 8);
     dbg(ctx, `  [anti-mídia] ${n} anexo(s) no último minuto (máx. ${max}${novato ? ", conta nova" : ""})`);
-    if (n > max) return punirRuido(am.antiMidia?.punicao, `muitas imagens/arquivos em pouco tempo (${n} em 1 min)`, "anti-mídia");
+    if (n > max) return punirRuido(am.antiMidia?.punicao, qual("midia", { n }), "anti-mídia");
   }
 
   // ── Quantas vezes esta MESMA mensagem já veio deste autor ──
@@ -1051,7 +1078,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
       dbg(ctx, `  [anti-invite] ${naoPermitidos.length} fora da lista de permitidos`);
       if (naoPermitidos.length > 0) {
         // (P2) convite e link bloqueado seguem a MESMA rota de punição (regra fixa)
-        return barrar(am.antiInvite.punicao, "não é permitido enviar convites neste servidor", "anti-invite");
+        return barrar(am.antiInvite.punicao, qual("convite"), "anti-invite");
       }
     }
   } else {
@@ -1061,7 +1088,13 @@ async function analisarMensagem(message, ctx, opts = {}) {
   // ── Conteúdo proibido (scorecard único: golpe/+18/gore/ilícito/CSAM) ──
   if (am.antiScam?.enabled) {
     const rate = taxaPorSegundo(estado, userId, ctx.serverId ?? server?.id);
-    const r = analisarConteudo(content, { rate, repetidas });
+    // (P5) o classificador de texto (se houver o arquivo do modelo e CLASSIFICADOR_TEXTO≠0): as
+    // classes acima do limiar entram como sinal na nota, com teto (scorecard.TETO_CLASSIFICADOR)
+    const tS = performance.now();
+    const classes = classificador.classesAcima(content);
+    if (classes) tempoAutomod.registrar("classificador", performance.now() - tS);
+    const r = analisarConteudo(content, { rate, repetidas, classes });
+    tempoAutomod.registrar("sentinela", performance.now() - tS);
     // +0,5 em cada sensibilidade desde 12 out 2026 (mais suave)
     const base = limiarBase(am.antiScam.sensitivity);
 
@@ -1095,7 +1128,8 @@ async function analisarMensagem(message, ctx, opts = {}) {
     if (r.nota >= limiar) {
       dbg(ctx, `  ✗ CONTEÚDO PROIBIDO (nota ${r.nota.toFixed(1)} ≥ ${limiar})`);
       await aplicarPunicao(ctx, { server, channel: canal, message, userId,
-        pol: am.antiScam.punicao, motivo: "conteúdo proibido detectado", nota: r.nota, grave: r.grave });
+        pol: am.antiScam.punicao, motivo: motivoDe("conteudo"), nota: r.nota, grave: r.grave,
+        tipo: "mensagem", categoria: categoriaDoConteudo(r.features) });
       return true;
     }
   } else {
@@ -1117,7 +1151,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
     const bloqueado = dominios.find((d) =>
       !nuncaBloquear(d) && !dominioBloqueado(d, permitidos) && dominioBloqueado(d, estado.blockedDomains));
     if (bloqueado) {
-      return barrar(am.antiLink.punicao, "este link está em uma lista de bloqueio do servidor", "anti-link");
+      return barrar(am.antiLink.punicao, qual("link"), "anti-link");
     } else if (dominios.length > 0) {
       dbg(ctx, "  [anti-link] nenhum domínio da mensagem está na lista");
     }
@@ -1131,7 +1165,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
     const n = unicas.size;
     dbg(ctx, `  [anti-mass-mention] ON → ${n} menção(ões) (limite ${am.antiMassMention.maxMentions})`);
     if (n > am.antiMassMention.maxMentions) {
-      return punirRuido(am.antiMassMention.punicao, `você mencionou ${n} usuários diferentes de uma só vez`, "anti-mass-mention");
+      return punirRuido(am.antiMassMention.punicao, qual("mencoes", { n }), "anti-mass-mention");
     }
   } else {
     dbg(ctx, "  [anti-mass-mention] OFF");
@@ -1142,7 +1176,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
   const titulo = am.antiCaps.enabled ? tituloComGrito(content, am.antiCaps.threshold) : null;
   if (titulo) {
     dbg(ctx, `  [anti-caps] ON → título ${titulo.tipo === "risada" ? "só com risada" : "em CAIXA ALTA"}`);
-    return punirRuido(am.antiCaps.punicao, titulo.tipo === "risada" ? "título só com risada é grito" : "evite escrever em CAIXA ALTA em excesso (título)", "anti-caps (título)");
+    return punirRuido(am.antiCaps.punicao, qual(titulo.tipo === "risada" ? "risadaTitulo" : "capsTitulo"), "anti-caps (título)");
   }
   if (am.antiCaps.enabled && textoEstilo.length >= am.antiCaps.minLength) {
     // Siglas curtas ficam fora da conta; `null` = texto insuficiente.
@@ -1150,7 +1184,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
     if (ratio !== null) {
       dbg(ctx, `  [anti-caps] ON → ${(ratio * 100).toFixed(0)}% maiúsculas (limite ${(am.antiCaps.threshold * 100).toFixed(0)}%)`);
       if (ratio >= am.antiCaps.threshold) {
-        return punirRuido(am.antiCaps.punicao, "evite escrever em CAIXA ALTA em excesso", "anti-caps");
+        return punirRuido(am.antiCaps.punicao, qual("caps"), "anti-caps");
       }
     }
   } else if (am.antiCaps.enabled) {
@@ -1166,7 +1200,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
     });
     dbg(ctx, `  [anti-caracteres] ON → ${r ? "detectado: " + r.tipo : "ok"}`);
     if (r) {
-      return punirRuido(am.antiCaracteres.punicao, r.motivo, `anti-caracteres (${r.tipo})`);
+      return punirRuido(am.antiCaracteres.punicao, qual(r.chave, r), `anti-caracteres (${r.tipo})`);
     }
   } else {
     dbg(ctx, "  [anti-caracteres] OFF");
@@ -1179,7 +1213,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
     });
     dbg(ctx, `  [anti-repeticao] ON → ${r ? "detectado" : "ok"} (ignora "${am.antiRepeticao.ignorar ?? "k"}")`);
     if (r) {
-      return punirRuido(am.antiRepeticao.punicao, r.motivo, "anti-repeticao");
+      return punirRuido(am.antiRepeticao.punicao, qual(r.chave, r), "anti-repeticao");
     }
   } else {
     dbg(ctx, "  [anti-repeticao] OFF");
@@ -1193,12 +1227,12 @@ async function analisarMensagem(message, ctx, opts = {}) {
     const limiteDup = novato ? Math.max(2, (dup.maxRepetidas ?? 3) - 1) : (dup.maxRepetidas ?? 3);
     if (risadasSeguidas >= RISADA_SEGUIDA.vezes) {
       dbg(ctx, `  [anti-duplicata] ON → ${risadasSeguidas}ª risada seguida em 1 min (limite ${RISADA_SEGUIDA.vezes})`);
-      return punirRuido(dup.punicao, `risada em sequência (${risadasSeguidas} mensagens só de risada em 1 minuto)`, "anti-duplicata (risada)");
+      return punirRuido(dup.punicao, qual("risadaSeguida", { n: risadasSeguidas }), "anti-duplicata (risada)");
     }
     const r = risadasSeguidas ? null : analisarDuplicata(content, anterioresDigitais, { maxRepetidas: limiteDup });
     dbg(ctx, `  [anti-duplicata] ON → ${repetidas}ª vez desta mensagem (limite ${limiteDup})`);
     if (r) {
-      return punirRuido(dup.punicao, r.motivo, "anti-duplicata");
+      return punirRuido(dup.punicao, qual(r.chave, { n: r.vezes }), "anti-duplicata");
     }
   } else {
     dbg(ctx, "  [anti-duplicata] OFF");
@@ -1220,7 +1254,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
         dbg(ctx, "  ✗ BLOQUEADA por anti-mass-spam");
         estado.spamData.delete(chaveSpam);
         await aplicarPunicao(ctx, { server, channel: canal, message, userId,
-          pol: am.antiMassSpam.punicao, motivo: "flood de mensagens (mass spam)" });
+          pol: am.antiMassSpam.punicao, motivo: motivoDe("massSpam"), tipo: "mensagem", categoria: "automod:massspam" });
         return true;
       }
     }
@@ -1230,7 +1264,7 @@ async function analisarMensagem(message, ctx, opts = {}) {
       dbg(ctx, `  [anti-spam] ON → ${c} msg em ${am.antiSpam.windowMs}ms (limite ${am.antiSpam.maxMessages})`);
       if (c >= am.antiSpam.maxMessages) {
         estado.spamData.set(chaveSpam, []);
-        return punirRuido(am.antiSpam.punicao, "você está enviando mensagens muito rapidamente", "anti-spam");
+        return punirRuido(am.antiSpam.punicao, qual("spam"), "anti-spam");
       }
     }
   } else {

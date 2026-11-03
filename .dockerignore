@@ -28,3 +28,13 @@ blocklist-cache.bin
 *.db-wal
 *.db-shm
 /dados/
+
+# Arquivos que o bot grava AO LADO DO BANCO (3 nov 2026, P5): rodando fora do Docker sem DB_PATH,
+# o banco é ./stoat.db e eles caem na raiz (o log-segredo.key de um teste caiu aqui). Ancorados com
+# `/`: só os da raiz — o modulos/moderacao/dados/classificador-texto.json (o modelo dentro do
+# código) NÃO é ignorado.
+/log-segredo.key
+/bateria-imagens.jsonl
+/bateria-treino.jsonl
+/bateria-aviso.chave
+/classificador-texto.json

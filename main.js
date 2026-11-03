@@ -421,6 +421,7 @@ client.on("ready", async () => {
       if (v.palavras) console.info(`[PRIVACIDADE] ${v.palavras} palavra(s) tentada(s) com mais de 30 dias apagada(s)`);
       if (v.perfilSilencio) console.info(`[PRIVACIDADE] ${v.perfilSilencio} registro(s) de silêncio do perfil com mais de 28 dias apagado(s)`);
       if (v.casosStaff) console.info(`[PRIVACIDADE] ${v.casosStaff} caso(s) duvidoso(s) sem reação da staff há 14 dias apagado(s)`);
+      if (v.temporarios) console.info(`[PRIVACIDADE] ${v.temporarios} temporário(s) órfão(s) de escrita interrompida apagado(s)`);
       if (v.casosStaffAntigos) console.info(`[PRIVACIDADE] ${v.casosStaffAntigos} caso(s) julgado(s) pela staff além dos 500 mais recentes por servidor e categoria apagado(s)`);
     } catch (e) { console.error("[PRIVACIDADE] vencidos:", e?.message); }
     // (31 out 2026, P3a, staff) o limiar de cada servidor com os vereditos da staff dele (uma vez por

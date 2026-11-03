@@ -238,7 +238,8 @@ function dominioBloqueado(dominio, blockedDomains) {
   return false;
 }
 
-// a digital de "mensagem só de risada" (nunca é igual a uma digital de texto: estas só têm a-z0-9)
+// a digital de "mensagem só de risada" (nunca é igual a uma digital de texto: estas só têm letra,
+// número e espaço — de qualquer escrita desde o P6 — e nunca um caractere de controle)
 const DIGITAL_RISADA = "\u0001risada";
 
 export function agendarLimpezaSpam(ctx) {

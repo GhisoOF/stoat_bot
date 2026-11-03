@@ -2289,10 +2289,22 @@ t("mensagem inofensiva, sozinha, continua com nota baixa", () => {
   assert.ok(r.nota < 5, `nota ${r.nota} alta demais para texto inofensivo`);
   assert.ok(!r.sinais.includes("duplicata"));
 });
-t("a mesma mensagem repetida SOBE a nota", () => {
+// (3 nov 2026, P6, R3) antes: "a mesma mensagem repetida SOBE a nota" — o Stork 4× somava a duplicata no
+// sentinela por ter ≥ 80 caracteres (a "parede"). Agora: a repetição só soma no sentinela com sinal de
+// CONTEÚDO (a bateria achou aí o maior falso positivo: benigna repetida 3× → 704/4000 punidas). A parede
+// repetida é do anti-duplicata, e este teste prova que ele continua pegando o Stork; o golpe repetido
+// continua subindo a nota do sentinela.
+t("a parede repetida sem conteúdo não sobe a nota do sentinela — o anti-duplicata pega o Stork; o golpe repetido sobe", () => {
   const sozinha = analisarConteudo(STORK, { rate: 1, repetidas: 1 }).nota;
-  const repetida = analisarConteudo(STORK, { rate: 1, repetidas: 4 }).nota;
-  assert.ok(repetida > sozinha, `repetida (${repetida}) devia passar de sozinha (${sozinha})`);
+  for (const n of [2, 3, 4]) {
+    const r = analisarConteudo(STORK, { rate: 1, repetidas: n });
+    assert.equal(r.nota, sozinha, `${n}×: ${r.sinais}`);
+    assert.ok(!r.features.duplicata, `${n}×: a repetição sem conteúdo não soma`);
+  }
+  const pego = analisarDuplicata(STORK, [digital(STORK), digital(STORK)]);
+  assert.ok(pego, "o anti-duplicata pega a 3ª"); assert.equal(pego.vezes, 3);
+  const golpe = "free nitro giveaway click here";
+  assert.ok(analisarConteudo(golpe, { rate: 1, repetidas: 3 }).nota > analisarConteudo(golpe, { rate: 1, repetidas: 1 }).nota);
 });
 t("a repetição sozinha NÃO condena um texto limpo", () => {
   // Importante: repetir não é crime. O sinal soma, mas quem condena é o
@@ -22522,13 +22534,16 @@ const SEC = { pt: secao("Português"), en: secao("English"), es: secao("Español
 
 console.log("── NOVIDADES ──");
 const nov = await import("./modulos/ferramentas/novidades.js");
-await t("★ a entrada do P4 (id, pacote e data) logo abaixo da do P5, que é o topo (= docs/pacote.json), e a trava do build passa", () => {
+await t("★ a entrada do P4 (id, pacote e data) logo abaixo da do P5, que vem logo abaixo do topo (= docs/pacote.json), e a trava do build passa", () => {
   const pac = JSON.parse(ler("docs/pacote.json"));
   // (3 nov 2026, P5) antes: docs/pacote.json = P4/2026-11-02 e NOVIDADES[0] = a entrada do P4; agora: o pacote é o
   // P5/2026-11-03 (o topo, conferido na p5-integracao) e a do P4 é a NOVIDADES[1], com os mesmos id, pacote e data
-  assert.deepEqual([pac.pacote, pac.data], ["P5", "2026-11-03"]);
-  assert.deepEqual([nov.NOVIDADES[0].id, nov.NOVIDADES[0].pacote, nov.NOVIDADES[0].data], ["2026-11-03-p5", "P5", "2026-11-03"]);
-  assert.deepEqual([nov.NOVIDADES[1].id, nov.NOVIDADES[1].pacote, nov.NOVIDADES[1].data], ["2026-11-02-p4", "P4", "2026-11-02"]);
+  // (3 nov 2026, P6) antes: o pacote P5 e o P5 no topo; agora: o pacote é o P6 (o topo, conferido na p6-escrita), a do
+  // P5 é a NOVIDADES[1] e a do P4 a NOVIDADES[2] — os mesmos id, pacote e data
+  assert.deepEqual([pac.pacote, pac.data], ["P6", "2026-11-03"]);
+  assert.deepEqual([nov.NOVIDADES[0].id, nov.NOVIDADES[0].pacote, nov.NOVIDADES[0].data], ["2026-11-03-p6", "P6", "2026-11-03"]);
+  assert.deepEqual([nov.NOVIDADES[1].id, nov.NOVIDADES[1].pacote, nov.NOVIDADES[1].data], ["2026-11-03-p5", "P5", "2026-11-03"]);
+  assert.deepEqual([nov.NOVIDADES[2].id, nov.NOVIDADES[2].pacote, nov.NOVIDADES[2].data], ["2026-11-02-p4", "P4", "2026-11-02"]);
   assert.equal(nov.problemaDaTrava(nov.NOVIDADES, pac), null);
   assert.equal(new Set(nov.NOVIDADES.map((n) => n.id)).size, nov.NOVIDADES.length, "id repetido");
 });
@@ -24472,7 +24487,11 @@ await t("★ as constantes do contrato: 2^18 posições, teto de 2.000, versão 
 });
 await t("★ a versão é a impressão do extrator: muda se a normalização mudar (este valor fixo avisa — retreinar o modelo)", () => {
   // (3 nov 2026, P5 revisão) antes: "1.c9055195"; agora "1.1c131c13" — a área dados pôs o marcador de número (R2)
-  assert.equal(ts.VERSAO_SINAIS, "1.1c131c13", "o extrator mudou: a versão mudou junto e o modelo/impressões antigos deixam de valer. Confira, atualize este valor e avise a bateria");
+  // (3 nov 2026, P6) antes: "1.1c131c13"; agora "1.0a8832f2" — o cirílico de verdade fica cirílico (o homoglifo só
+  // vira latino no disfarce), o árabe é unificado e a SONDA ganhou uma frase cirílica e uma árabe (retreinar)
+  // (3 nov 2026, revisão do P6) antes: "1.0a8832f2"; agora "1.4a6bc271" — o homoglifo é trocado por PALAVRA (sem olhar a
+  // dominante: o disfarce com tudo em cirílico voltava a passar) e depois de juntar as letras separadas
+  assert.equal(ts.VERSAO_SINAIS, "1.4a6bc271", "o extrator mudou: a versão mudou junto e o modelo/impressões antigos deixam de valer. Confira, atualize este valor e avise a bateria");
 });
 await t("★ FNV-1a 32 bits sobre os bytes UTF-8: valores conhecidos e igual à referência em acento, cirílico, emoji", () => {
   assert.equal(ts.fnv1a(""), 0x811c9dc5); assert.equal(ts.fnv1a("a"), 0xe40c292c); assert.equal(ts.fnv1a("foobar"), 0xbf9cf968);
@@ -25562,16 +25581,21 @@ await t("★ PRIVACIDADE (pt/en/es): o classificador roda na máquina do operado
 
 console.log("── NOVIDADES e pacote ──");
 const nov = await import("./modulos/ferramentas/novidades.js");
-await t("★ o topo é a entrada do P5 (= docs/pacote.json P5 / 2026-11-03) e a trava do build passa", () => {
+await t("★ a entrada do P5 logo abaixo do topo (o P6 = docs/pacote.json P6 / 2026-11-03) e a trava do build passa", () => {
   const pac = JSON.parse(ler("docs/pacote.json"));
-  assert.deepEqual([pac.pacote, pac.data], ["P5", "2026-11-03"]);
-  const n = nov.NOVIDADES[0];
+  // (3 nov 2026, P6) antes: docs/pacote.json = P5 e NOVIDADES[0] = a do P5; agora: o pacote é o P6 (o topo, conferido
+  // na p6-escrita) e a do P5 é a NOVIDADES[1], com os mesmos id, pacote e data
+  assert.deepEqual([pac.pacote, pac.data], ["P6", "2026-11-03"]);
+  assert.equal(nov.NOVIDADES[0].id, "2026-11-03-p6");
+  const n = nov.NOVIDADES[1];
   assert.deepEqual([n.id, n.pacote, n.data], ["2026-11-03-p5", "P5", "2026-11-03"]);
   assert.equal(nov.problemaDaTrava(nov.NOVIDADES, pac), null);
   assert.equal(new Set(nov.NOVIDADES.map((x) => x.id)).size, nov.NOVIDADES.length);
 });
 await t("★ a entrada do P5: ameaça/exposição de dados reconhecidas e motivos no idioma do servidor — curta, nos 3 idiomas, citando comando; nada do dono nem do que não está ligado", () => {
-  const n = nov.NOVIDADES[0];
+  // (3 nov 2026, P6) antes: NOVIDADES[0]; agora: a entrada pelo id (o topo é a do P6) — as mesmas checagens
+  const n = nov.NOVIDADES.find((x) => x.id === "2026-11-03-p5");
+  assert.ok(n, "a entrada do P5 continua na lista");
   const RE = {
     pt: [/Ameaças sem palavrão:\*\* o `\{&automod\.sentinela\}` agora reconhece cobrança com ultimato/, /ameaça de expor dados ou fotos de alguém \("se você não… vou mandar seu endereço pro grupo"\)/, /Motivos no idioma do servidor:\*\* .*`\{&config\.idioma\}`/],
     en: [/Threats without swear words:\*\* `\{&automod\.sentinela\}` now recognizes payment ultimatums/, /threats to expose someone's data or photos \("if you don't… I'll send your address to the group"\)/, /Reasons in the server's language:\*\* .*`\{&config\.idioma\}`/],
@@ -25590,6 +25614,657 @@ await t("★ a entrada do P5: ameaça/exposição de dados reconhecidas e motivo
 });
 
 console.log(`\nP5 INTEGRAÇÃO: ${ok} ok, ${falhou} falha(s)`);
+fs.rmSync(DIR, { recursive: true, force: true });
+process.exit(falhou ? 1 : 0);
+};
+
+// ════════════════════════════════════════════════════════════════════════════
+// p6-escrita  (P6, 3 nov 2026) — qualquer escrita; a repetição no sentinela; a porta do classificador
+// ════════════════════════════════════════════════════════════════════════════
+SUITES["p6-escrita"] = async () => {
+// "Tem gente que escreve em árabe ou russo de propósito… não quero bloquear os caracteres, apenas o
+// conteúdo interno quero que seja levado em conta" (o dono, 3 nov 2026). Esta suíte trava:
+//   1. escrita.js (contrato 1 do BRIEF-P6): escritaDoTexto, ESCRITAS_COBERTAS, escritaCoberta;
+//   2. o sentinela: `escrita_nao_coberta` (peso 0) abre a porta do classificador só até o alerta (3),
+//      `classificadorPorta` ("conteudo" | "contexto"), e a repetição (duplicata) só com sinal de conteúdo;
+//   3. os detectores de comportamento em qualquer escrita (anti-duplicata, caixa alta, risada,
+//      invisíveis da própria escrita, letras ignoradas do anti-repetição) — e nunca punir pela escrita;
+//   4. os homoglifos só no disfarce; o árabe unificado no extrator de sinais; a SONDA;
+//   5. `fontes.compartilhaIgual` no modelo e a trava do verificar-build;
+//   6. R12: NOVIDADES, pacote, ajuda, PRIVACIDADE.
+const assert = (await import("node:assert")).default;
+const fs = (await import("node:fs")).default;
+const os = (await import("node:os")).default;
+const path = (await import("node:path")).default;
+const { spawnSync } = await import("node:child_process");
+const DIR = fs.mkdtempSync(path.join(os.tmpdir(), "p6-escrita-"));
+Object.assign(process.env, { DB_PATH: path.join(DIR, "p6.db"), CONFIG_PATH: path.join(DIR, "p6.json") });
+for (const v of ["CLASSIFICADOR_TEXTO", "CLASSIFICADOR_TEXTO_ARQUIVO", "AUTOMOD_DEBUG", "IA", "IA_MODO", "LLM_URL", "IA_SERVICO_URL", "RELATORIO_SERVIDOR"]) delete process.env[v];
+
+let ok = 0, falhou = 0;
+const t = async (nome, fn) => { try { await fn(); console.log(`  ✅ ${nome}`); ok++; } catch (e) { console.log(`  ❌ ${nome}\n     ${String(e?.stack ?? e).split("\n").slice(0, 5).join("\n     ")}`); falhou++; } };
+const comLog = async (fn) => { const log = [], o = [console.log, console.info, console.warn, console.error]; console.log = console.info = console.warn = console.error = (...a) => log.push(a.map(String).join(" ")); try { return { r: await fn(), log }; } finally { [console.log, console.info, console.warn, console.error] = o; } };
+const quieto = async (fn) => (await comLog(fn)).r;
+const ler = (f) => fs.readFileSync(f, "utf8");
+const semComent = (s) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/[^\n]*/g, "$1");
+
+const db = await import("./modulos/core/db.js");
+await quieto(() => db.abrirBanco(process.env.DB_PATH));
+const esc = await import("./modulos/moderacao/escrita.js");
+const sc = await import("./modulos/moderacao/scorecard.js");
+const ts = await import("./modulos/moderacao/texto-sinais.js");
+const cl = await import("./modulos/moderacao/classificador-texto.js");
+const car = await import("./modulos/moderacao/caracteres.js");
+const confianca = await import("./modulos/moderacao/confianca.js");
+
+// As benignas em outras escritas (o que a gente de verdade escreve: cumprimento, pergunta, combinar o jogo)
+const BENIGNAS = {
+  russo: "Привет всем, как у вас дела? Сегодня вечером будем играть вместе",
+  arabe: "مرحبا بالجميع، كيف حالكم؟ سنلعب معا هذا المساء",
+  grego: "Γεια σε όλους, τι κάνετε; Απόψε θα παίξουμε μαζί",
+  chines: "大家好，你们今天过得怎么样？今晚我们一起玩游戏吧",
+  hebraico: "שלום לכולם, מה שלומכם? הערב נשחק ביחד",
+  japones: "みなさんこんにちは、今夜一緒にゲームしましょう",
+  coreano: "안녕하세요 여러분, 오늘 밤에 같이 게임해요",
+  hindi: "नमस्ते दोस्तों, आज रात हम साथ में खेलेंगे",
+  // persa com o não-juntador (U+200C) dentro das palavras, como o teclado escreve
+  persa: "می\u200cخواهم امشب با شما بازی کنم، می\u200cآیید؟ نمی\u200cدانم کی می\u200cرسم",
+};
+const DOMINANTE = { russo: "cirilica", arabe: "arabe", grego: "grega", chines: "cjk", hebraico: "hebraica", japones: "cjk", coreano: "coreana", hindi: "devanagari", persa: "arabe" };
+const TODAS_AS_CLASSES = { golpe: 0.99, ameaca: 0.99, odio: 0.99, chocante: 0.99 };
+// O texto real do bot "Stork" (23 set 2026): a parede repetida que só o anti-duplicata pega
+const STORK = "Spam can refer to unsolicited junk messages or the iconic canned "
+  + "meat. Since your request is broad, here is a quick look at both: 📧 Digital "
+  + "Spam (Unsolicited Messages)Digital spam is bulk, unsolicited communication "
+  + "sent across email, text messages, or phone calls.The Purpose: Most spam is "
+  + "sent by automated bots to advertise products, but dangerous varieties like "
+  + "phishing attempt to steal passwords, financial details, or install malware.";
+
+// o modelo de teste (como na p5-sinais): cada classe "decora" as frases dadas
+function modeloDe(porClasse, extra = {}) {
+  const classes = Object.keys(porClasse);
+  const pesos = {}, vies = {}, limiares = {};
+  for (const c of classes) {
+    const acc = new Map();
+    for (const f of porClasse[c]) for (const [i, v] of ts.sinais(f)) acc.set(i, (acc.get(i) ?? 0) + 8 * v);
+    pesos[c] = [...acc].sort((a, b) => a[0] - b[0]);
+    vies[c] = -4; limiares[c] = 0.8;
+  }
+  return { formato: 1, versaoSinais: ts.VERSAO_SINAIS, dimensoes: ts.DIMENSOES, classes, pesos, vies, limiares, treinadoEm: "2026-11-03T00:00:00Z", ...extra };
+}
+let nArq = 0;
+const gravar = (o) => { const p = path.join(DIR, `modelo-${++nArq}.json`); fs.writeFileSync(p, JSON.stringify(o)); return p; };
+cl.descarregar(); await quieto(() => cl.carregar(path.join(DIR, "nao-existe.json")));
+
+// o runAutomod de verdade (como na p5-sinais)
+const store = await import("./modulos/core/config-store.js");
+const engine = await import("./modulos/moderacao/automod-engine.js");
+const { ConstrutorIndice } = await import("./modulos/moderacao/indice-dominios.js");
+const c0 = new ConstrutorIndice();
+const vazio = c0.construir?.() ?? c0.finalizar?.() ?? c0;
+let nSrv = 0;
+const novoEstado = () => ({ blockedDomains: vazio, spamData: new Map(), ecoData: new Map(), massSpamData: new Map() });
+const cfg = (lang, mexer = () => {}) => {
+  const c = structuredClone(store.configDoServidor(`01SRVP6${String(++nSrv).padStart(19, "0")}`));
+  c.language = lang;
+  c.automod.antiSpam.enabled = false; c.automod.antiMassSpam.enabled = false;
+  mexer(c.automod); return c;
+};
+const AUTOR = "01AUTORP600000000000000001";
+async function rodar(texto, { config, estado = novoEstado(), autor = AUTOR, debug = false, sid = "01SRVP6", entrou = null }) {
+  let apagou = false;
+  const enviados = [];
+  const message = { id: `M${++nSrv}`, authorId: autor, content: texto, channelId: "c", channel: { id: "c", sendMessage: async () => ({}) },
+    delete: async () => { apagou = true; }, member: { roles: [], joinedAt: entrou }, attachments: [], mentionIds: [] };
+  const ctx = { config, serverId: sid, COR: { info: 1, aviso: 2, erro: 3, sucesso: 4, mod: 5 }, PREFIXO: "&", estado, cfgGlobal: { debug },
+    getServer: async () => ({ id: sid, fetchMember: async () => ({ edit: async () => {} }) }),
+    membroTemPermissao: () => false, sendEmbed: async (_c, e) => { enviados.push(e); return {}; }, salvarConfig: () => {},
+    client: { channels: { fetch: async () => ({ sendMessage: async () => ({}) }) } } };
+  const { log } = await comLog(() => engine.runAutomod(message, ctx));
+  return { apagou, enviados, texto: enviados.map((e) => `${e.title ?? ""}\n${e.description ?? ""}`).join("\n"), log };
+}
+// a conta criada AGORA (o rigor máximo) e a de semanas atrás; média e alta (o piso 3,5 na conta nova)
+const ulidAgora = (sufixo) => { const enc = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"; let x = Date.now(), r = ""; for (let i = 0; i < 10; i++) { r = enc[x % 32] + r; x = Math.floor(x / 32); } return `${r}${sufixo.padStart(16, "0")}`; };
+const PERFIS = [
+  { nome: "estabelecido, média", sens: "media", autor: "01ARZ3NDEKTSV4RRFFQ69G5FB1", entrou: Date.now() - 15 * 86_400_000 },
+  { nome: "estabelecido, alta", sens: "alta", autor: "01ARZ3NDEKTSV4RRFFQ69G5FB2", entrou: Date.now() - 15 * 86_400_000 },
+  { nome: "conta nova, média", sens: "media", autor: ulidAgora("C"), entrou: Date.now() - 60_000 },
+  { nome: "conta nova, alta", sens: "alta", autor: ulidAgora("D"), entrou: Date.now() - 60_000 },
+];
+const sentinelaPerfil = (sens) => (am) => { am.antiScam = { ...am.antiScam, enabled: true, sensitivity: sens, porAntiguidade: true, alertarAdmin: false, punicao: { modo: "apagar" } }; };
+
+console.log("── 1. escrita.js (contrato 1) ──");
+await t("★ escritaDoTexto: a dominante de cada escrita, as letras contadas e as frações (somam 1); kana é cjk; letra \"fancy\" é latina", () => {
+  for (const [k, txt] of Object.entries(BENIGNAS)) {
+    const e = esc.escritaDoTexto(txt);
+    assert.equal(e.dominante, DOMINANTE[k], k);
+    assert.ok(e.letras >= 10, `${k}: ${e.letras}`);
+    assert.ok(Math.abs(Object.values(e.fracoes).reduce((a, b) => a + b, 0) - 1) < 1e-9, k);
+    assert.equal(e.fracoes[DOMINANTE[k]], 1, `${k}: só a escrita dela (pontuação, espaço e U+200C não são letra)`);
+  }
+  assert.deepEqual(esc.escritaDoTexto("カタカナーです"), { dominante: "cjk", letras: 7, fracoes: { cjk: 1 } }, "o \"ー\" do katakana conta como cjk");
+  assert.deepEqual(esc.escritaDoTexto("สวัสดีครับ"), { dominante: "tailandesa", letras: 7, fracoes: { tailandesa: 1 } }, "a vogal tailandesa é marca, não letra");
+  assert.equal(esc.escritaDoTexto("𝐠𝐚𝐧𝐡𝐞 ｄｉｎｈｅｉｒｏ").dominante, "latina");
+  assert.equal(esc.escritaDoTexto("ሰላም ለሁላችሁ").dominante, "outra", "etíope: letra fora da lista");
+  // a mistura: a de mais letras; empate → a primeira da lista (latina)
+  const m = esc.escritaDoTexto("abcd абвгде");
+  assert.deepEqual([m.dominante, m.letras, m.fracoes.latina, m.fracoes.cirilica], ["cirilica", 10, 0.4, 0.6]);
+  assert.equal(esc.escritaDoTexto("abc абв").dominante, "latina");
+  assert.deepEqual(esc.ESCRITAS, ["latina", "cirilica", "grega", "arabe", "hebraica", "cjk", "coreana", "devanagari", "tailandesa", "outra"]);
+});
+await t("★ menos de 4 letras → dominante null; menção, ID, link e emoji nomeado não contam (\"убью тебя <@ID>\" é cirílico)", () => {
+  for (const x of ["", null, undefined, "ok", "абв", "123 456 !!!", "😀😀😀😀", "你好吗"]) assert.equal(esc.escritaDoTexto(x).dominante, null, String(x));
+  assert.equal(esc.escritaDoTexto("ok").letras, 2);
+  const e = esc.escritaDoTexto("убью тебя <@01ARZ3NDEKTSV4RRFFQ69G5FAV> https://example.com/abcdefghij :pepega: `codigo latino aqui` 01ARZ3NDEKTSV4RRFFQ69G5FAV");
+  assert.deepEqual(e, { dominante: "cirilica", letras: 8, fracoes: { cirilica: 1 } });
+});
+await t("★ ESCRITAS_COBERTAS = {latina}; escritaCoberta: true para latina e para null, false para as outras; puro (sem estado nem I/O)", () => {
+  assert.ok(esc.ESCRITAS_COBERTAS instanceof Set);
+  assert.deepEqual([...esc.ESCRITAS_COBERTAS], ["latina"]);
+  assert.equal(esc.escritaCoberta("bom dia pessoal, tudo certo?"), true);
+  assert.equal(esc.escritaCoberta("ok"), true, "texto curto: sem dominante → coberta");
+  assert.equal(esc.escritaCoberta(""), true);
+  for (const [k, txt] of Object.entries(BENIGNAS)) assert.equal(esc.escritaCoberta(txt), false, k);
+  for (let i = 0; i < 3; i++) assert.deepEqual(esc.escritaDoTexto(BENIGNAS.russo), esc.escritaDoTexto(BENIGNAS.russo));
+  const src = semComent(ler("modulos/moderacao/escrita.js"));
+  assert.doesNotMatch(src, /\bimport\b|process\.|require\(|^(?:let|var)\s|setTimeout|setInterval/m, "sem import, ambiente, estado (variável de módulo) nem timer");
+  // o textoHumano mora no escrita.js e o caracteres.js o reexporta (quem importava de lá segue igual)
+  assert.equal(car.textoHumano, esc.textoHumano);
+});
+
+console.log("── 2. o sentinela: escrita não coberta, a porta do classificador e a repetição ──");
+await t("★ benignas em russo, árabe, grego, chinês, hebraico (e japonês, coreano, hindi, persa): nota 0 sozinhas e repetidas 1×, 2× e 3× — o sinal `escrita_nao_coberta` aparece e não pesa", () => {
+  assert.equal(sc.PESOS.escrita_nao_coberta, 0);
+  for (const [k, txt] of Object.entries(BENIGNAS)) {
+    for (const repetidas of [1, 2, 3]) {
+      const r = sc.analisarConteudo(txt, { rate: 1, repetidas });
+      assert.equal(r.nota, 0, `${k} ${repetidas}×: ${r.sinais}`);
+      assert.ok(r.sinais.includes("escrita_nao_coberta"), `${k}: o sinal aparece`);
+      assert.ok(!r.features.duplicata, `${k} ${repetidas}×: a repetição não destrava sozinha`);
+      assert.equal(r.grave, false); assert.equal(r.dano.soma, 0);
+    }
+  }
+  // no latino o sinal não aparece
+  assert.ok(!sc.analisarConteudo("bom dia pessoal, tudo certo por aí?").sinais.includes("escrita_nao_coberta"));
+});
+await t("★ o classificador numa escrita não coberta: soma sem outro sinal, até 3 (o teto), e nunca chega a 3,5 sozinho — nem repetido, nem com só contexto (link comum, contato)", () => {
+  assert.equal(sc.TETO_CLASSIFICADOR, 3);
+  for (const [k, txt] of Object.entries(BENIGNAS)) {
+    // (a pergunta desconta 3: quem tem "?" fica abaixo de 3; quem não tem, exatamente 3)
+    const semPergunta = txt.replace(/[?？؟;]/g, ".");
+    for (const repetidas of [1, 2, 3]) {
+      for (const x of [txt, semPergunta]) {
+        const r = sc.analisarConteudo(x, { rate: 1, repetidas, classes: TODAS_AS_CLASSES });
+        assert.equal(r.features.classificador, 3, `${k} ${repetidas}×: ${r.sinais}`);
+        assert.ok(r.nota <= 3, `${k} ${repetidas}×: ${r.nota}`);
+        assert.ok(!r.features.duplicata);
+      }
+      assert.equal(sc.analisarConteudo(semPergunta, { rate: 1, repetidas, classes: TODAS_AS_CLASSES }).nota, 3, `${k} ${repetidas}× sem pergunta`);
+    }
+    const uma = sc.analisarConteudo(semPergunta, { classes: { ameaca: 0.9 } });
+    assert.equal(uma.features.classificador, 2, `${k}: uma classe = 2 pontos`);
+    assert.equal(uma.nota, 2);
+  }
+  // só contexto junto: o classificador para no que falta até 3 (antes de passar do teto, ele encolhe)
+  const comLink = sc.analisarConteudo(`${BENIGNAS.russo.replace("?", ".")} https://example.com/agenda`, { classes: TODAS_AS_CLASSES });
+  assert.ok(comLink.features.link_simples && comLink.features.escrita_nao_coberta, comLink.sinais.join(","));
+  assert.equal(comLink.nota, 3); assert.equal(comLink.features.classificador, 2.5);
+  const comContato = sc.analisarConteudo("Напиши мне в telegram, у меня есть для тебя кое-что интересное сегодня", { classes: TODAS_AS_CLASSES, repetidas: 3 });
+  assert.ok(comContato.features.cta && comContato.features.escrita_nao_coberta, comContato.sinais.join(","));
+  assert.ok(comContato.nota <= 3, `contato + classificador: ${comContato.nota}`);
+  // contexto que sozinho já passa de 3: o classificador não soma nada (como no latino)
+  const MUITO = "Пиши в telegram, dm me, жду тебя сразу, отвечу быстро всем";
+  const muitoContato = sc.analisarConteudo(MUITO, { classes: TODAS_AS_CLASSES }), semModelo = sc.analisarConteudo(MUITO);
+  assert.ok(muitoContato.features.escrita_nao_coberta && semModelo.nota > 3, `${semModelo.nota}: ${semModelo.sinais}`);
+  assert.equal(muitoContato.features.classificador, 0); assert.equal(muitoContato.nota, semModelo.nota, "o classificador não somou nada");
+  // com sinal de CONTEÚDO (um link encurtado), soma inteiro — como no latino
+  const comConteudo = sc.analisarConteudo(`${BENIGNAS.russo.replace("?", ".")} bit.ly/abc`, { classes: TODAS_AS_CLASSES });
+  assert.equal(comConteudo.features.classificador, 3); assert.equal(comConteudo.nota, 5);
+  // e no latino, sem sinal de conteúdo, segue a 0 (o P5)
+  assert.equal(sc.analisarConteudo("bora jogar mais tarde galera", { classes: TODAS_AS_CLASSES, repetidas: 3 }).nota, 0);
+  // o piso dos limiares continua acima do teto
+  assert.match(ler("modulos/moderacao/confianca.js"), /Math\.max\(3\.5, /);
+});
+await t("★ `classificadorPorta`: \"contexto\" destrava com urgência, link comum e ultimato; \"conteudo\" (o padrão) e qualquer outro valor não; NEUTROS nunca destravam", () => {
+  const C = { ameaca: 0.9 };
+  const casos = [["bora jogar mais tarde, corre", "urgencia"], ["bora jogar mais tarde https://example.com/sala", "link_simples"], ["paga até sexta ou…", "ultimato"]];
+  for (const [txt, sinal] of casos) {
+    const solta = sc.analisarConteudo(txt, { classes: C, classificadorPorta: "contexto" });
+    assert.ok(solta.features[sinal], `${txt}: ${solta.sinais}`);
+    assert.equal(solta.features.classificador, 2, `contexto destrava com ${sinal}`);
+    for (const porta of [undefined, "conteudo", "", "solta", "CONTEXTO", null, 1, {}]) {
+      assert.equal(sc.analisarConteudo(txt, { classes: C, classificadorPorta: porta }).features.classificador, 0, `${sinal} com porta ${JSON.stringify(porta)}`);
+    }
+  }
+  // contato, imperativo, repetição e taxa (NEUTROS) não destravam nem a porta solta
+  for (const [txt, o] of [["bora jogar mais tarde, chama no zap", {}], ["bora jogar mais tarde galera", { repetidas: 3 }], ["bora jogar mais tarde galera", { rate: 5 }], ["entre aqui e jogue", {}]]) {
+    assert.equal(sc.analisarConteudo(txt, { ...o, classes: C, classificadorPorta: "contexto" }).features.classificador, 0, txt);
+  }
+  // o bot de produção nunca passa a opção
+  for (const a of ["modulos/moderacao/automod-engine.js", "modulos/moderacao/automod-comandos.js", "main.js"]) assert.doesNotMatch(ler(a), /classificadorPorta/, a);
+});
+await t("★ (R3) a repetição no sentinela só soma com sinal de CONTEÚDO: as benignas com urgência ou link comum 3× ficam abaixo de 3,5 (antes 4,5), a \"parede\" sem sinal fica a 0 (antes 4,0)", () => {
+  // (3 nov 2026, P6) antes: um sinal fora de NEUTROS (urgência 0,5, link comum 0,5) destravava a duplicata, e o texto de
+  // ≥ 80 caracteres somava sem sinal nenhum; agora: só sinal fora de CONTEXTO (o mesmo da porta do classificador)
+  const SORTEIO = "corre lá no canal de eventos que o sorteio já começou";
+  const r3 = sc.analisarConteudo(SORTEIO, { repetidas: 3 });
+  assert.equal(r3.nota, 0.5, `antes 4,5: ${r3.sinais}`); assert.ok(r3.features.urgencia && !r3.features.duplicata);
+  const SITE = "o cronograma do evento de sábado está no site https://eventos.example.com/agenda";
+  for (const n of [1, 2, 3, 4]) {
+    const r = sc.analisarConteudo(SITE, { repetidas: n });
+    assert.ok(r.features.link_simples && !r.features.duplicata, `${n}×: ${r.sinais}`);
+    assert.equal(r.nota, 0.5);
+  }
+  const PAREDE = "acabei de chegar em casa do trabalho e vou jogar um pouco antes de dormir, amanhã acordo cedo de novo";
+  assert.ok(PAREDE.length >= 80);
+  for (const n of [1, 2, 3, 4]) assert.equal(sc.analisarConteudo(PAREDE, { repetidas: n }).nota, 0, `${n}× (antes 4,0 na 3ª)`);
+  for (const p of [3.5]) for (const txt of [SORTEIO, SITE, PAREDE]) assert.ok(sc.analisarConteudo(txt, { repetidas: 3 }).nota < p, txt);
+  // o golpe repetido continua pesando (sinal de conteúdo destrava)
+  const golpe = "free nitro giveaway click here";
+  assert.equal(sc.analisarConteudo(golpe, { repetidas: 3 }).features.duplicata, 2);
+  assert.ok(sc.analisarConteudo(golpe, { repetidas: 3 }).nota > sc.analisarConteudo(golpe).nota);
+  // e o classificador não destrava a repetição (ele é CONTEXTO), nem na escrita não coberta
+  assert.ok(!sc.analisarConteudo(PAREDE, { repetidas: 3, classes: TODAS_AS_CLASSES }).features.duplicata);
+  assert.ok(!sc.analisarConteudo(BENIGNAS.russo, { repetidas: 3, classes: TODAS_AS_CLASSES }).features.duplicata);
+  // a exceção dos 80 caracteres saiu do código
+  assert.doesNotMatch(semComent(ler("modulos/moderacao/scorecard.js")), /length\s*<\s*80/);
+});
+
+console.log("── 3. comportamento em qualquer escrita ──");
+await t("★ digital(): o cirílico, o árabe, o grego e o CJK entram (antes viravam \"\"); acento, harakat, tatweel, caixa, pontuação e letra \"fancy\" não disfarçam", () => {
+  const d = car.digital(BENIGNAS.russo);
+  assert.equal(d, "привет всем как у вас дела сегодня вечером будем играть вместе");
+  assert.equal(car.digital(BENIGNAS.arabe), "مرحبا بالجميع كيف حالكم سنلعب معا هذا المساء");
+  assert.ok(car.digital(BENIGNAS.chines).includes("今晚我们一起玩游戏吧"));
+  assert.ok(car.digital(BENIGNAS.coreano).startsWith("안녕하세요"), "o coreano volta inteiro (NFC depois do NFD)");
+  assert.equal(car.digital(BENIGNAS.russo.toUpperCase().replace(/,/g, "!!")), d, "caixa e pontuação");
+  assert.equal(car.digital("مَرْحَبًا بِالْجَمِيعِ، كَيْفَ حَالُكُمْ؟"), car.digital("مرحبا بالجميع، كيف حالكم؟"), "harakat");
+  assert.equal(car.digital("مرحبـــا بالجميـــع، كيف حالكم؟"), car.digital("مرحبا بالجميع، كيف حالكم؟"), "tatweel");
+  assert.equal(car.digital("ｇａｎｈｅ ｄｉｎｈｅｉｒｏ ｆａｃｉｌ"), car.digital("ganhe dinheiro fácil"), "letra fancy");
+  // (revisão do P6) só saem os diacríticos (U+0300–036F e os blocos de zalgo), os harakat e o tatweel: a vogal do
+  // devanágari e do tailandês é parte da palavra — antes as frases abaixo davam a MESMA digital
+  for (const [a, b] of [["आज रात हम सब खेलेंगे", "आज रात हम सब खेलोगे"], ["मैं घर जा रहा हूँ अभी", "में घर जा रही हूं अभी"], ["เขาไม่ได้มาวันนี้นะ", "เขาไม่ได้มาวันนั้นนะ"]]) {
+    assert.notEqual(car.digital(a), car.digital(b), `${a} × ${b}`);
+  }
+  assert.equal(car.digital("आज रात हम सब खेलेंगे"), "आज रात हम सब खेलेंगे");
+  assert.equal(car.digital("Йогурт и ёлка сегодня утром"), "иогурт и елка сегодня утром", "o breve e o trema do cirílico saem");
+  assert.equal(car.digital("eu te amo ❤\ufe0f muito mesmo"), car.digital("eu te amo ❤ muito mesmo"), "seletor de variação do emoji");
+  assert.equal(car.digital("z\u0300\u0301\u1ab0\u1dc0\u20d0ero um dois tres quatro"), car.digital("zero um dois tres quatro"), "zalgo");
+  assert.notEqual(car.digital("Привет всем, как у вас дела сегодня?"), car.digital("Пока всем, увидимся завтра вечером!"), "textos diferentes, digitais diferentes");
+  // curta continua sem digital, em qualquer escrita
+  for (const curta of ["да", "ок ок", "你好", "ㅋㅋㅋ", "شكرا"]) assert.equal(car.digital(curta), null, curta);
+  // a digital só tem letra, número e espaço (nunca o \u0001 da digital de risada do engine)
+  assert.match(d, /^[\p{L}\p{N} ]+$/u);
+  assert.doesNotMatch(semComent(ler("modulos/moderacao/caracteres.js")), /\[\^a-z0-9|A-ZÀ|a-zA-ZÀ-ÿ/, "nenhuma classe só-latina nos detectores");
+});
+await t("★ spam idêntico em cirílico ou árabe repetido 3× é pego pelo anti-duplicata, como em latim (e o CJK sem espaço não ganha folga eterna)", () => {
+  const SPAM = {
+    latim: "entrem no meu canal agora, sorteio de skins todo dia, link no perfil",
+    cirilico: "Заходите на мой канал прямо сейчас, раздача скинов каждый день, ссылка в профиле",
+    arabe: "ادخلوا قناتي الآن، توزيع جوائز كل يوم، الرابط في الملف الشخصي",
+    chines: "快来我的频道看看吧每天都有抽奖活动链接在我的个人资料里面",
+  };
+  for (const [k, s] of Object.entries(SPAM)) {
+    const d = car.digital(s);
+    assert.ok(d && d.length >= 25, `${k}: ${d}`);
+    assert.equal(car.ehCurta(d), false, `${k}: longa`);
+    assert.equal(car.analisarDuplicata(s, [d]), null, `${k}: a 2ª passa`);
+    const r = car.analisarDuplicata(s, [d, d]);
+    assert.ok(r, `${k}: a 3ª é pega`); assert.equal(r.vezes, 3); assert.equal(r.chave, "duplicata");
+  }
+  // curta em CJK (menos de 25 caracteres) segue com a folga, como "Miguel miguel"
+  const curta = "今晚一起玩游戏吧大家快来啊";
+  const dc = car.digital(curta);
+  assert.ok(dc && car.ehCurta(dc));
+  assert.equal(car.analisarDuplicata(curta, [dc, dc, dc]), null); assert.ok(car.analisarDuplicata(curta, [dc, dc, dc, dc]));
+  // e o latino de 3 palavras longas segue curto
+  assert.equal(car.ehCurta("internacionalizacao desenvolvimento responsabilidade"), true);
+});
+await t("★ pelo runAutomod: spam cirílico e árabe 3× cai no anti-duplicata (não no sentinela); o Stork também; as benignas 1×–3× com o anti-duplicata desligado nunca são punidas", async () => {
+  // (a config de servidor novo vem com o automod desligado: cada módulo é ligado aqui)
+  const config = cfg("pt", (am) => { sentinelaPerfil("alta")(am); am.punicao = { ...(am.punicao ?? {}), modo: "apagar" }; am.antiDuplicata = { ...am.antiDuplicata, enabled: true }; });
+  for (const s of ["Заходите на мой канал прямо сейчас, раздача скинов каждый день, ссылка в профиле", "ادخلوا قناتي الآن، توزيع جوائز كل يوم، الرابط في الملف الشخصي", STORK]) {
+    const estado = novoEstado();
+    const out = [];
+    for (let n = 1; n <= 3; n++) out.push(await rodar(s, { config, estado, debug: true }));
+    assert.deepEqual(out.map((r) => r.apagou), [false, false, true], s.slice(0, 30));
+    assert.ok(out[2].log.some((l) => /\[anti-duplicata\] ON → 3ª vez/.test(l)), out[2].log.join("\n"));
+    assert.ok(!out.some((r) => r.log.some((l) => /CONTEÚDO PROIBIDO/.test(l))), "o sentinela não pune");
+  }
+  for (const p of PERFIS) {
+    // todo o resto ligado (caixa alta, caracteres, repetição de letra, ódio, emoji): nada pune pela escrita
+    const sem = cfg("pt", (am) => { sentinelaPerfil(p.sens)(am); am.antiDuplicata = { ...am.antiDuplicata, enabled: false };
+      for (const m of ["antiCaps", "antiCaracteres", "antiRepeticao", "antiOdio", "antiEmoji", "antiMassMention", "antiInvite"]) am[m] = { ...am[m], enabled: true }; });
+    sem.xp = { ...(sem.xp ?? {}), enabled: false };
+    for (const [k, txt] of Object.entries(BENIGNAS)) {
+      const estado = novoEstado();
+      for (let n = 1; n <= 3; n++) assert.equal((await rodar(txt, { config: sem, estado, autor: p.autor, entrou: p.entrou })).apagou, false, `${p.nome}: ${k} ${n}×`);
+    }
+  }
+});
+await t("★ pelo runAutomod, com um modelo que ERRA nas benignas de outra escrita (ameaça + ódio): a conta nova (limiar 3,5) não é punida nem com 3 repetições", async () => {
+  const ERRADO = modeloDe({ ameaca: Object.values(BENIGNAS), odio: Object.values(BENIGNAS) });
+  await quieto(() => cl.carregar(gravar(ERRADO)));
+  try {
+    for (const [k, txt] of Object.entries(BENIGNAS)) assert.deepEqual(Object.keys(cl.classesAcima(txt)).sort(), ["ameaca", "odio"], `o modelo erra de propósito: ${k}`);
+    for (const p of PERFIS) {
+      const config = cfg("pt", (am) => { sentinelaPerfil(p.sens)(am); am.antiDuplicata = { ...am.antiDuplicata, enabled: false }; });
+      config.xp = { ...(config.xp ?? {}), enabled: false };
+      assert.ok(confianca.limiarPara("01SRVP6", p.autor, p.sens === "alta" ? 5.5 : 6.5, { ativo: true, xpAtivo: false, entrouEm: p.entrou }).limiar >= 3.5);
+      for (const [k, txt] of Object.entries(BENIGNAS)) {
+        const estado = novoEstado();
+        for (let n = 1; n <= 3; n++) {
+          const r = await rodar(txt, { config, estado, autor: p.autor, entrou: p.entrou, debug: true });
+          assert.equal(r.apagou, false, `${p.nome}: ${k} ${n}×`);
+          const nota = Number(r.log.map((l) => l.match(/\[sentinela\] ON → nota (\d+\.\d)\/10/)?.[1]).find(Boolean));
+          assert.ok(nota <= 3, `${k}: a nota fica no alerta (≤ 3), não na punição — ${nota}`);
+          if (!/[?？؟;]/.test(txt)) assert.equal(nota, 3, `${k}: sem pergunta, exatamente 3`);
+        }
+      }
+    }
+  } finally { cl.descarregar(); await quieto(() => cl.carregar(path.join(DIR, "nao-existe.json"))); }
+});
+await t("★ CAIXA ALTA em cirílico e grego conta como a latina; risada (ХАХАХА, χαχαχα, ㅋㅋㅋ, ههههه, 哈哈哈) não; árabe, hebraico e CJK nunca são \"caixa alta\"", () => {
+  const latina = car.razaoDeCaixaAlta("ATENÇÃO TODO MUNDO ISSO É MUITO IMPORTANTE");
+  assert.ok(latina >= 0.7);
+  for (const g of ["ВНИМАНИЕ ВСЕМ ЭТО ОЧЕНЬ ВАЖНО", "ΠΡΟΣΟΧΗ ΣΕ ΟΛΟΥΣ ΑΥΤΟ ΕΙΝΑΙ ΣΗΜΑΝΤΙΚΟ"]) assert.equal(car.razaoDeCaixaAlta(g), 1, g);
+  assert.ok(car.razaoDeCaixaAlta("Внимание всем, это очень важно") < 0.2);
+  for (const r of ["ХАХАХАХАХАХА ХАХАХАХА", "ХЕХЕХЕХЕХЕХЕ ХИХИХИХИХИХИ", "ΧΑΧΑΧΑΧΑΧΑΧΑ ΧΑΧΑΧΑ", "АХАХАХАХАХАХА"]) assert.ok(!(car.razaoDeCaixaAlta(car.textoHumano(r)) >= 0.7), r);
+  for (const k of ["arabe", "hebraico", "chines", "japones", "coreano", "hindi", "persa"]) assert.equal(car.razaoDeCaixaAlta(BENIGNAS[k]), 0, k);
+  // (revisão do P6) a caixa alta só conta nas escritas em que é escolha: latina, cirílica, grega e ARMÊNIA. O cherokee
+  // escrito normalmente já sai em maiúsculas, e o mtavruli georgiano é título — nunca é grito
+  assert.equal(car.razaoDeCaixaAlta("ԲԱՐԵՎ ԲՈԼՈՐԻՆ ՀԻՄԱ ԻՍԿ"), 1, "armênio");
+  for (const t of ["ᏣᎳᎩ ᎦᏬᏂᎯᏍᏗ ᎠᏂᏴᏫ ᎣᏍᏓ", "ᲒᲐᲛᲐᲠᲯᲝᲑᲐ ᲧᲕᲔᲚᲐᲡ ᲛᲔᲒᲝᲑᲠᲔᲑᲝ"]) {
+    assert.equal(car.razaoDeCaixaAlta(t), 0, t);
+    assert.equal(car.tituloComGrito(`# ${t}`), null, t);
+  }
+  for (const r of ["хахахаха", "ХАХАХА", "χαχαχα", "ㅋㅋㅋㅋ", "ههههه", "哈哈哈哈", "חחחח"]) assert.equal(car.ehSoRisada(r), true, r);
+  assert.equal(car.ehSoRisada("Привет всем"), false);
+  assert.deepEqual(car.tituloComGrito("# ВНИМАНИЕ ВСЕМ"), { tipo: "caps" });
+  assert.equal(car.tituloComGrito("# Правила сервера"), null);
+  assert.deepEqual(car.tituloComGrito("# ХАХАХАХА"), { tipo: "risada" });
+});
+await t("★ pelo runAutomod: CAIXA ALTA em cirílico é pega como a latina (mesmo motivo); a mesma frase em minúsculas não", async () => {
+  const config = cfg("pt", (am) => { am.antiCaps = { ...am.antiCaps, enabled: true }; am.punicao = { ...(am.punicao ?? {}), modo: "apagar" }; });
+  const lat = await rodar("ATENÇÃO TODO MUNDO ISSO É MUITO IMPORTANTE", { config });
+  const cir = await rodar("ВНИМАНИЕ ВСЕМ ЭТО ОЧЕНЬ ВАЖНО СЕГОДНЯ", { config, autor: "01AUTORP600000000000000002" });
+  assert.equal(lat.apagou, true); assert.equal(cir.apagou, true);
+  assert.equal(cir.texto.replace(/\d+/g, "#"), lat.texto.replace(/\d+/g, "#"), "o mesmo aviso");
+  assert.equal((await rodar("Внимание всем, это очень важно сегодня", { config, autor: "01AUTORP600000000000000003" })).apagou, false);
+});
+await t("★ invisíveis da própria escrita não são \"caracteres invisíveis\": o não-juntador do persa e do hindi, a marca de direção e o isolamento num texto árabe/hebraico — o disfarce latino e a inversão (U+202E) seguem pegos", () => {
+  const Z = "\u200c", J = "\u200d", RLM = "\u200f", LRM = "\u200e", RLI = "\u2067", PDI = "\u2069", RLO = "\u202e", RLE = "\u202b", PDF = "\u202c";
+  assert.equal(car.analisarCaracteres(BENIGNAS.persa), null);
+  assert.equal(car.analisarCaracteres(`${BENIGNAS.persa} ${BENIGNAS.persa}`), null, "6 não-juntadores entre letras persas");
+  assert.equal(car.analisarCaracteres(`क्${J}ष क्${J}ष क्${J}ष क्${Z}ष`), null, "hindi");
+  assert.equal(car.analisarCaracteres(`שלום${RLM} לכולם${RLM} ok${LRM} ${RLM}טוב`), null, "hebraico com marcas de direção");
+  assert.equal(car.analisarCaracteres(`${RLI}مرحبا${PDI} hello ${RLE}سلام${PDF}`), null, "árabe com isolamento/encaixe");
+  // o que continua pego
+  assert.equal(car.analisarCaracteres(`ga${Z}n${Z}h${Z}e dinheiro`)?.chave, "invisiveis", "não-juntador entre letras latinas");
+  assert.equal(car.analisarCaracteres(`${RLI}hello${PDI} world`)?.chave, "invisiveis", "isolamento sem texto da direita para a esquerda");
+  assert.equal(car.analisarCaracteres(`مرحبا ${RLO}olleh`)?.chave, "invisiveis", "a inversão é grave em qualquer texto");
+  assert.equal(car.analisarCaracteres(`مرحبا\u200b\u200b\u200bسلام`)?.chave, "invisiveis", "espaço de largura zero não é da escrita");
+  assert.equal(car.analisarCaracteres(`\u0645${Z}${Z}${Z}a${Z}b${Z}c`)?.chave, "invisiveis", "não-juntador fora de letra da escrita");
+  // (revisão do P6) só o controle VIZINHO de letra árabe/hebraica é ignorado: uma letra árabe em outro lugar do texto não
+  // desliga a conta no texto inteiro (antes "o\u200ei\u200et\u200eu\u200ed\u200eo ب" passava)
+  assert.equal(car.analisarCaracteres(`o${LRM}i${LRM}t${LRM}u${LRM}d${LRM}o \u0628`)?.chave, "invisiveis");
+  assert.equal(car.analisarCaracteres(`${RLI}abc${PDI} ${RLI}def${PDI} \u05e9\u05dc\u05d5\u05dd`)?.chave, "invisiveis", "isolamentos longe do hebraico");
+  assert.equal(car.analisarCaracteres(`\u0645\u0631\u062d\u0628\u0627 ${LRM}ok${LRM} \u0628\u0627\u0644\u062c\u0645\u064a\u0639`), null, "LRM em volta do latino, vizinho do árabe (pulando o espaço)");
+});
+await t("★ (revisão do P6, R10) sem ReDoS: 4000 caracteres de zalgo, de árabe com harakat e de texto misto com controles — rápido (< 20 ms) e linear nos detectores de caracteres", () => {
+  const Z = "\u200c";
+  const casos = {
+    zalgo: "a" + "\u064e".repeat(3998) + Z,
+    zalgoLatino: "a" + "\u0301".repeat(3999),
+    arabeHarakat: ("\u0645\u064e\u0631\u0652\u062d\u064e\u0628\u064b\u0627 ").repeat(400).slice(0, 4000),
+    misto: ("\u202a\u200f" + "abc\u0628" + Z + "\u0628 \u0915\u094d\u200d\u0937 ").repeat(300).slice(0, 4000),
+    juntadores: ("\u0628" + Z.repeat(30)).repeat(130).slice(0, 4000),
+  };
+  // (coordenador, P6) antes: < 5 ms absoluto, o melhor de 3 — falhava à toa com a rodada em paralelo (-j 4: 6,3 ms).
+  // agora: o melhor de 7, teto de 20 ms (o ReDoS dava 83–360 ms) E crescimento linear: 4× o texto → no máximo 6× o tempo
+  const medir = (txt) => {
+    let melhor = Infinity;
+    for (let i = 0; i < 7; i++) { const t0 = performance.now(); car.analisarCaracteres(txt); car.digital(txt); car.razaoDeCaixaAlta(txt); melhor = Math.min(melhor, performance.now() - t0); }
+    return melhor;
+  };
+  for (const [k, txt] of Object.entries(casos)) {
+    const t1 = medir(txt), t4 = medir(txt.repeat(4));
+    assert.ok(t1 < 20, `${k}: ${t1.toFixed(1)} ms`);
+    assert.ok(t4 < 6 * t1 + 2, `${k}: não linear — ${t1.toFixed(1)} ms → ${t4.toFixed(1)} ms com 4× o texto`);
+  }
+  // nenhuma regex nova do P6 com lookbehind de tamanho variável (o padrão do ReDoS)
+  for (const a of ["modulos/moderacao/caracteres.js", "modulos/moderacao/escrita.js", "modulos/moderacao/texto-sinais.js"]) {
+    assert.doesNotMatch(semComent(ler(a)), /\(\?<[=!][^)]*[*+]/, `${a}: lookbehind com * ou +`);
+  }
+  const homo = ler("modulos/moderacao/scorecard.js").match(/function desfazerHomoglifos[\s\S]*?\n\}/)[0];
+  assert.doesNotMatch(homo, /\(\?<[=!]/, "a troca de homoglifo sem lookbehind");
+});
+await t("★ anti-repetição: as letras ignoradas (a risada) podem ser de qualquer escrita — ㅋ, ه; o setter usa a mesma limpeza", () => {
+  assert.equal(car.letrasIgnoradas("Kㅋ ه!"), "kㅋه");
+  assert.equal(car.letrasIgnoradas("abcdefghijklmn"), "abcdefghij", "até 10");
+  assert.equal(car.letrasIgnoradas("]^\\-[.*"), "", "nada de metacaractere");
+  assert.equal(car.letrasIgnoradas(null), "");
+  const kk = "ㅋ".repeat(20), hh = "ه".repeat(20);
+  assert.ok(car.analisarRepeticao(kk, { ignorar: "k" }), "sem ignorar o ㅋ: repetição (como \"hhhh…\" no latino)");
+  assert.equal(car.analisarRepeticao(kk, { ignorar: "kㅋه" }), null);
+  assert.equal(car.analisarRepeticao(hh, { ignorar: "kㅋه" }), null);
+  assert.ok(car.analisarRepeticao("а".repeat(20), { ignorar: "kㅋه" }), "o grito cirílico continua contando");
+  assert.equal(car.analisarRepeticao("k".repeat(20), { ignorar: "kㅋه" }), null);
+  assert.match(ler("modulos/moderacao/automod-comandos.js"), /mod\[ck\] = letrasIgnoradas\(bruto\);/);
+});
+
+console.log("── 4. homoglifos só no disfarce; o árabe no extrator ──");
+await t("★ \"убью тебя\" fica cirílico (na normalização do sentinela e nos sinais); palavra russa/grega com letra não confundível fica intacta; só as feitas de confundíveis viram latinas (o preço aceito)", () => {
+  assert.equal(sc.normalizarParaAnalise("убью тебя"), "убью тебя");
+  assert.equal(ts.normalizar("убью тебя"), "убью тебя");
+  assert.equal(ts.normalizar("Убью ТЕБЯ."), "убью тебя");
+  assert.equal(sc.normalizarParaAnalise(BENIGNAS.grego), BENIGNAS.grego.replace(" τι ", " ti "), "grego: só o \"τι\" (confundível) trocou");
+  // (3 nov 2026, revisão do P6) antes: o russo inteiro ficava intacto e "сосо" sozinho/num texto russo também (a troca
+  // dependia da dominante latina); agora a troca é por palavra: a feita SÓ de confundíveis vira latina em qualquer texto
+  // ("у", "сосо", "орех", "сухо" — decisão do dono: o disfarce com tudo em cirílico pesa mais); a que tem uma letra não
+  // confundível fica intacta, mesmo misturada ("пpивет")
+  assert.equal(sc.normalizarParaAnalise(BENIGNAS.russo), BENIGNAS.russo.replace(" у ", " y "), "só o \"у\" (confundível) trocou");
+  assert.equal(sc.normalizarParaAnalise("сосо"), "coco");
+  assert.equal(sc.normalizarParaAnalise("купил сосо и ехал домой"), "купил coco и ехал домой", "\"ехал\" tem л: fica");
+  assert.equal(sc.normalizarParaAnalise("орех и сухо"), "opex и cyxo", "o preço aceito");
+  assert.equal(sc.normalizarParaAnalise("пpивет друзья"), "пpивет друзья", "misturada, mas com letra não confundível: fica");
+  for (const w of ["убью", "тебя", "Привет", "друзья", "Καλημέρα", "λόγος"]) assert.equal(sc.normalizarParaAnalise(w), w.normalize("NFKC"), w);
+  // o vetor do russo de verdade não é o do latino trocado
+  assert.notDeepEqual(ts.sinais("убью тебя"), ts.sinais("yбью тeбя"));
+});
+await t("★ o disfarce continua pego: \"раураl\" misturado, \"gаnhе\" com \"а\" cirílico, letras separadas, grego no meio; \"сосо\" no meio do português vira \"coco\" (decisão)", () => {
+  assert.equal(sc.normalizarParaAnalise("раураl"), "paypal");
+  assert.equal(sc.normalizarParaAnalise("entra no раураl agora"), "entra no paypal agora");
+  assert.equal(sc.normalizarParaAnalise("gаnhе dinheiro fácil no pix"), "ganhe dinheiro fácil no pix");
+  assert.equal(sc.normalizarParaAnalise("g.а.n.h.е dinheiro"), "ganhe dinheiro");
+  assert.equal(sc.normalizarParaAnalise("g а n h е dinheiro"), "ganhe dinheiro");
+  assert.equal(sc.normalizarParaAnalise("frее nitrο giveaway"), "free nitro giveaway", "cirílico e grego misturados ao latino");
+  assert.equal(sc.normalizarParaAnalise("olha o сосо aqui no grupo"), "olha o coco aqui no grupo");
+  assert.equal(sc.normalizarParaAnalise("ɡanhe dinheıro"), "ganhe dinheiro", "as latinas estendidas trocam sempre");
+  // (revisão do P6) a ferramenta que troca TODA letra confundível (o cirílico vira a maioria) e as letras separadas
+  for (const [disf, limpo] of [["ѕеі оnԁе νосе mоrа", "sei onde voce mora"], ["νоυ еѕτυрrаr νосе", "vou estuprar voce"],
+    ["ѕ.е.υ m.а.с.а.с.о і.m.υ.n.ԁ.о", "seu macaco imundo"], ["frее nіτrо gіfτ сӏісκ һеrе һττрѕ://bіτ.ӏу/аbс", "free nitro gift click here https://bit.ly/abc"], ["ср", "cp"]]) {
+    assert.equal(sc.normalizarParaAnalise(disf), limpo, disf);
+    assert.equal(sc.analisarConteudo(disf).nota, sc.analisarConteudo(limpo).nota, disf);
+  }
+  assert.ok(sc.analisarConteudo("ѕеі оnԁе νосе mоrа").nota >= 6 && sc.analisarConteudo("νоυ еѕτυрrаr νосе").nota >= 6 && sc.analisarConteudo("ѕ.е.υ m.а.с.а.с.о і.m.υ.n.ԁ.о").nota >= 6);
+  assert.equal(sc.analisarConteudo("ср").nota, 1.5, "texto curto também troca (antes caía a 0)");
+  // a nota do disfarce é a do texto limpo
+  for (const [disf, limpo] of [["gаnhе dinheiro fácil no pix", "ganhe dinheiro fácil no pix"], ["frее nitrо giveaway сlick hеre", "free nitro giveaway click here"], ["entra no раураl e manda o pix", "entra no paypal e manda o pix"]]) {
+    assert.equal(sc.analisarConteudo(disf).nota, sc.analisarConteudo(limpo).nota, disf);
+    assert.ok(sc.analisarConteudo(disf).nota > 0, disf);
+    assert.deepEqual(ts.sinais(disf), ts.sinais(limpo), `o vetor: ${disf}`);
+  }
+});
+await t("★ (revisão do P6) pelo runAutomod: o disfarce com tudo em cirílico/grego e com letras separadas é punido (conta nova e antiga); o convite com \"ѕττ\" num texto cirílico é achado", async () => {
+  const ATAQUES = ["ѕеі оnԁе νосе mоrа", "νоυ еѕτυрrаr νосе", "ѕ.е.υ m.а.с.а.с.о і.m.υ.n.ԁ.о", "frее nіτrо gіfτ сӏісκ һеrе һττрѕ://bіτ.ӏу/аbс"];
+  const LIMPOS = ["sei onde voce mora", "vou estuprar voce", "seu macaco imundo", "free nitro gift click here https://bit.ly/abc"];
+  let punidos = 0;
+  for (const p of PERFIS) {
+    const config = cfg("pt", sentinelaPerfil(p.sens)); config.xp = { ...(config.xp ?? {}), enabled: false };
+    for (let i = 0; i < ATAQUES.length; i++) {
+      const disf = (await rodar(ATAQUES[i], { config, autor: p.autor, entrou: p.entrou })).apagou;
+      // o disfarce tem o mesmo destino do texto limpo, em cada perfil
+      assert.equal(disf, (await rodar(LIMPOS[i], { config, autor: p.autor, entrou: p.entrou })).apagou, `${p.nome}: ${ATAQUES[i]}`);
+      if (disf) punidos++;
+      if (p.nome.startsWith("conta nova")) assert.equal(disf, true, `${p.nome}: ${ATAQUES[i]}`);
+    }
+  }
+  assert.ok(punidos >= 12, `punidos: ${punidos}`);
+  for (const [txt, cod] of [["ѕττ.gg/abc заходи", ["abc"]], ["ѕττ.gg/асе", ["ace"]], ["entra: ѕττ.gg/abc", ["abc"]]]) assert.deepEqual(engine.codigosDeConvite(txt), cod, txt);
+});
+await t("★ árabe no extrator: tatweel sai; أ إ آ ٱ → ا; ى ی → ي; ک → ك; ة → ه; harakat saem; dígitos arábicos viram o marcador de número", () => {
+  assert.equal(ts.normalizar("أحمد إبراهيم آمال ٱلله"), "احمد ابراهيم امال الله");
+  assert.equal(ts.normalizar("على علی علي"), "علي علي علي");
+  assert.equal(ts.normalizar("کتاب كتاب"), "كتاب كتاب");
+  assert.equal(ts.normalizar("مدرسة"), "مدرسه");
+  assert.equal(ts.normalizar("مـــرحبا"), "مرحبا");
+  assert.equal(ts.normalizar("مَرْحَبًا"), "مرحبا");
+  assert.equal(ts.normalizar("١٢٣ ۴۵"), `${ts.MARCADORES.numero} ${ts.MARCADORES.numero}`);
+  // as variantes caem no mesmo vetor
+  assert.deepEqual(ts.sinais("أنت ستدفع الآن ـــ مدرسة على"), ts.sinais("انت ستدفع الان مدرسه علي"));
+  const src = ler("modulos/moderacao/texto-sinais.js");
+  assert.doesNotMatch(src.match(/const ARABE[\s\S]*?const RE_ARABE[^\n]*/)[0], /[\u0600-ۿ]/, "no código, escape (\\uXXXX)");
+});
+await t("★ a SONDA tem uma frase cirílica e uma árabe (a versão muda sozinha com a normalização delas)", () => {
+  const src = ler("modulos/moderacao/texto-sinais.js");
+  const sonda = src.match(/const SONDA = \[([\s\S]*?)\n\];/)[1];
+  const frases = [...sonda.matchAll(/^\s*"((?:[^"\\]|\\.)*)",?$/gm)].map((m) => JSON.parse(`"${m[1]}"`));
+  assert.ok(frases.some((f) => esc.escritaDoTexto(f).dominante === "cirilica"), "uma frase cirílica");
+  assert.ok(frases.some((f) => esc.escritaDoTexto(f).dominante === "arabe"), "uma frase árabe");
+  assert.match(ts.VERSAO_SINAIS, /^1\.[0-9a-f]{8}$/);
+});
+
+console.log("── 5. o modelo: fontes.compartilhaIgual ──");
+await t("★ validar: `fontes.compartilhaIgual` (até 20 textos de até 200 caracteres) é aceito e fica no modelo; formato errado é recusado; fontes sem ele passa", () => {
+  const base = modeloDe({ golpe: ["ganhe dinheiro fácil no pix"] });
+  const ok1 = cl.validar({ ...base, fontes: { compartilhaIgual: ["told-br (CC BY-SA 4.0)"] } });
+  assert.ok(ok1.modelo, ok1.erro); assert.deepEqual(ok1.modelo.compartilhaIgual, ["told-br (CC BY-SA 4.0)"]);
+  assert.deepEqual(cl.validar(base).modelo.compartilhaIgual, [], "fontes sem a lista");
+  assert.deepEqual(cl.validar({ ...base, fontes: undefined }).modelo.compartilhaIgual, []);
+  assert.ok(cl.validar({ ...base, fontes: { compartilhaIgual: [] } }).modelo);
+  assert.ok(cl.validar({ ...base, fontes: { compartilhaIgual: Array(20).fill("x".repeat(200)) } }).modelo, "no limite");
+  for (const ruim of [{ compartilhaIgual: "told-br" }, { compartilhaIgual: Array(21).fill("x") }, { compartilhaIgual: ["x".repeat(201)] }, { compartilhaIgual: [1] }, { compartilhaIgual: [null] }, { compartilhaIgual: {} }]) {
+    const r = cl.validar({ ...base, fontes: ruim });
+    assert.ok(!r.modelo && /fontes\.compartilhaIgual/.test(r.erro), JSON.stringify(ruim).slice(0, 60));
+  }
+  for (const f of ["told-br", [], null, 3]) assert.match(cl.validar({ ...base, fontes: f }).erro ?? "", /fontes não é um objeto/, JSON.stringify(f));
+  // (revisão do P6) a trava não se dribla com outra grafia
+  for (const torta of ["compartilhaigual", "compartilha_igual", "Compartilha-Igual", "COMPARTILHAIGUAL", "compartilha-igual"]) {
+    const r = cl.validar({ ...base, fontes: { [torta]: ["told-br"] } });
+    assert.ok(!r.modelo, torta); assert.match(r.erro, /escreva exatamente "compartilhaIgual"/, torta);
+    assert.equal(cl.chaveCompartilhaIgualTorta({ fontes: { [torta]: [] } }), torta);
+  }
+  assert.equal(cl.chaveCompartilhaIgualTorta({ fontes: { compartilhaIgual: ["x"], outra: 1 } }), null);
+  assert.deepEqual([cl.MAX_COMPARTILHA_IGUAL, cl.MAX_TEXTO_FONTE], [20, 200]);
+  assert.deepEqual(cl.compartilhaIgualDe({ fontes: { compartilhaIgual: ["a"] } }), ["a"]);
+  assert.deepEqual(cl.compartilhaIgualDe({ fontes: { compartilhaIgual: "a" } }), ["a"], "o build não deixa passar a lista mal escrita");
+  assert.deepEqual(cl.compartilhaIgualDe({}), []);
+});
+await t("★ o modelo compartilha-igual em /data (fora do código) carrega normalmente", async () => {
+  const banco = path.join(DIR, "data");
+  fs.mkdirSync(banco, { recursive: true });
+  const arq = path.join(banco, "classificador-texto.json");
+  fs.writeFileSync(arq, JSON.stringify(modeloDe({ golpe: ["ganhe dinheiro fácil no pix"] }, { fontes: { gerado: 1, compartilhaIgual: ["told-br (CC BY-SA 4.0)"] } })));
+  try {
+    assert.equal(await quieto(() => cl.carregar(arq)), "ligado");
+    assert.deepEqual(Object.keys(cl.classesAcima("ganhe dinheiro fácil no pix")), ["golpe"]);
+  } finally { cl.descarregar(); await quieto(() => cl.carregar(path.join(DIR, "nao-existe.json"))); }
+});
+await t("★ verificar-build: falha se o modelo DO CÓDIGO tiver `fontes.compartilhaIgual` não vazio (ou não for JSON); sem modelo ou com a lista vazia, passa", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "p6-build-"));
+  try {
+    for (const f of spawnSync("git", ["ls-files", "--cached", "--others", "--exclude-standard"], { encoding: "utf8" }).stdout.split("\n").filter(Boolean)) {
+      if (!fs.existsSync(f)) continue;
+      fs.mkdirSync(path.dirname(`${dir}/${f}`), { recursive: true }); fs.copyFileSync(f, `${dir}/${f}`);
+    }
+    fs.symlinkSync(`${process.cwd()}/node_modules`, `${dir}/node_modules`);
+    const rodarBuild = () => spawnSync(process.execPath, ["scripts/verificar-build.js", "--imagem"], { cwd: dir, encoding: "utf8", timeout: 120_000 });
+    const limpo = rodarBuild();
+    assert.equal(limpo.status, 0, limpo.stdout + limpo.stderr);
+    assert.match(limpo.stdout, /✓ classificador: nenhum modelo no código/);
+    const alvo = `${dir}/modulos/moderacao/dados/classificador-texto.json`;
+    fs.mkdirSync(path.dirname(alvo), { recursive: true });
+    fs.writeFileSync(alvo, JSON.stringify(modeloDe({ golpe: ["x y z"] }, { fontes: { compartilhaIgual: ["told-br (CC BY-SA 4.0)"] } })));
+    const ruim = rodarBuild();
+    assert.equal(ruim.status, 1);
+    assert.match(ruim.stderr, /classificador-texto\.json foi treinado com base de licença compartilha-igual \(told-br \(CC BY-SA 4\.0\)\): esse modelo não pode ir ao repositório nem à imagem/);
+    // (revisão do P6) outra grafia da chave também derruba o build
+    for (const torta of ["compartilhaigual", "compartilha_igual"]) {
+      fs.writeFileSync(alvo, JSON.stringify(modeloDe({ golpe: ["x y z"] }, { fontes: { [torta]: ["told-br"] } })));
+      const r = rodarBuild();
+      assert.equal(r.status, 1, torta); assert.match(r.stderr, new RegExp(`tem fontes\\.${torta}: a licença das bases de treino vai em "compartilhaIgual", escrito exatamente assim`), torta);
+    }
+    fs.writeFileSync(alvo, "{");
+    const quebrado = rodarBuild();
+    assert.equal(quebrado.status, 1); assert.match(quebrado.stderr, /não é um JSON válido/);
+    fs.writeFileSync(alvo, JSON.stringify(modeloDe({ golpe: ["x y z"] }, { fontes: { compartilhaIgual: [] } })));
+    const vazio = rodarBuild();
+    assert.equal(vazio.status, 0, vazio.stderr); assert.match(vazio.stdout, /✓ classificador: o modelo do código não usa base compartilha-igual/);
+    // e o .env.example diz onde esse modelo mora (pt e en)
+    const ex = ler(".env.example");
+    assert.match(ex, /# \(P6\) Modelo treinado com base de licença compartilha-igual \(ex\.: ToLD-Br, CC BY-SA\) fica SÓ em\n# \/data: em modulos\/moderacao\/dados\/ o build falha/);
+    assert.match(ex, /# A model trained on a share-alike dataset \(e\.g\. CC BY-SA\) goes only in \/data: in the code, the build fails\./);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+console.log("── 6. R12: NOVIDADES, pacote, ajuda, PRIVACIDADE ──");
+const nov = await import("./modulos/ferramentas/novidades.js");
+await t("★ o topo é a entrada do P6 (= docs/pacote.json P6 / 2026-11-03), a do P5 logo abaixo, e a trava do build passa", () => {
+  const pac = JSON.parse(ler("docs/pacote.json"));
+  assert.deepEqual([pac.pacote, pac.data], ["P6", "2026-11-03"]);
+  assert.deepEqual([nov.NOVIDADES[0].id, nov.NOVIDADES[0].pacote, nov.NOVIDADES[0].data], ["2026-11-03-p6", "P6", "2026-11-03"]);
+  assert.deepEqual([nov.NOVIDADES[1].id, nov.NOVIDADES[1].pacote], ["2026-11-03-p5", "P5"]);
+  assert.equal(nov.problemaDaTrava(nov.NOVIDADES, pac), null);
+  assert.equal(new Set(nov.NOVIDADES.map((x) => x.id)).size, nov.NOVIDADES.length);
+});
+await t("★ a entrada do P6: qualquer escrita (nunca punido pela escrita; repetição e caixa alta valem nelas) e a repetição inocente fora da nota — curta, nos 3 idiomas, citando os comandos", () => {
+  const n = nov.NOVIDADES[0];
+  const RE = {
+    // (revisão do P6) antes: "a repetição e a caixa alta agora valem nessas escritas"; agora a caixa alta só em cirílico,
+    // grego e armênio (as escritas em que ela é escolha)
+    pt: [/Qualquer escrita:\*\* quem escreve em russo, árabe, grego, chinês… nunca é punido pela escrita; a repetição \(`\{&automod\.antiduplicata\}`\) vale nessas escritas como no português, e a caixa alta \(`\{&automod\.antiruido\}`\) conta também em cirílico, grego e armênio\./, /Menos falso positivo:\*\* repetir uma mensagem inocente não pesa mais na nota do `\{&automod\.sentinela\}`/],
+    en: [/Any script:\*\* people writing in Russian, Arabic, Greek, Chinese… are never punished for the script; repetition \(`\{&automod\.antiduplicata\}`\) works in those scripts just like in English, and caps \(`\{&automod\.antiruido\}`\) now also count in Cyrillic, Greek and Armenian\./, /Fewer false positives:\*\* repeating a harmless message no longer weighs on the `\{&automod\.sentinela\}` score/],
+    es: [/Cualquier escritura:\*\* quien escribe en ruso, árabe, griego, chino… nunca recibe un castigo por la escritura; la repetición \(`\{&automod\.antiduplicata\}`\) vale en esas escrituras igual que en español, y las mayúsculas \(`\{&automod\.antiruido\}`\) cuentan también en cirílico, griego y armenio\./, /Menos falsos positivos:\*\* repetir un mensaje inofensivo ya no pesa en la nota de `\{&automod\.sentinela\}`/],
+  };
+  for (const l of ["pt", "en", "es"]) {
+    for (const re of RE[l]) assert.match(n[l], re, l);
+    assert.equal(n[l].split("\n").length, 2, `${l}: dois tópicos (R2)`);
+    assert.ok(n[l].length < 420, `${l}: curta (${n[l].length})`);
+    assert.doesNotMatch(n[l], /classificador|classifier|clasificador|bateria|battery|batería|dono do bot|bot owner|dueño del bot/i, `${l}: nada do que não está ligado nem do dono`);
+    const d = nov.embedNovidades([n], l, "&", {}).description;
+    assert.doesNotMatch(d, /\{&/, `${l}: toda citação resolvida`);
+  }
+});
+await t("★ &help antirepeticao: as letras ignoradas valem em qualquer escrita, nos 3 idiomas (com escape no código)", async () => {
+  const { pagina } = await import("./modulos/core/ajuda-registro.js");
+  const RE = { pt: /letras a ignorar \(risada, em qualquer escrita: `kㅋه`\)/, en: /letters to ignore \(laughter, in any script: `kㅋه`\)/, es: /letras que ignorar \(risa, en cualquier escritura: `kㅋه`\)/ };
+  for (const l of ["pt", "en", "es"]) {
+    const p = pagina("automod", ["antirepeticao"], l, "&");
+    assert.match(JSON.stringify(p), RE[l], l);
+  }
+  assert.doesNotMatch(ler("modulos/comandos/automod.js"), /[ㄱ-ㆎ\u0600-ۿ]/, "no código, escape");
+});
+await t("★ PRIVACIDADE.md: a forma reduzida das últimas mensagens (qualquer escrita, só na memória, 40 por pessoa em cada servidor, janela de 2 min do anti-duplicata) e a escrita calculada na hora, que só aparece como sinal no alerta e no log daquele servidor — nos 3 idiomas", () => {
+  // (revisão do P6) antes: "anti-repetição" (quem guarda as digitais é o anti-duplicata) e "a escrita não é guardada"
+  // (o sinal `escrita_nao_coberta` vai ao alerta à staff e ao log de punições); agora o texto diz o que o código faz
+  const p = ler("PRIVACIDADE.md").replace(/\n  /g, " ");
+  assert.match(p, /\*\*A forma reduzida das últimas mensagens de cada pessoa\*\* \(só letras e números, de qualquer escrita, em minúsculas e sem acento\), para o anti-duplicata comparar uma com a outra: as últimas 40 de cada pessoa em cada servidor, na memória do processo \(só as da janela do anti-duplicata, 2 minutos por padrão, contam; um reinício apaga\)\. Nada vai ao banco\./);
+  assert.match(p, /\*\*A escrita do texto\*\* \(latina, cirílica, árabe…\) é calculada na hora\. Quando não é a latina, só aparece como um sinal \(`escrita_nao_coberta`\) no alerta à staff e no log de punições daquele servidor \(e no log de depuração da máquina, se o operador o ligar\)\./);
+  assert.match(p, /\*\*A reduced form of each person's latest messages\*\* \(only letters and numbers, in any script, lowercase and without accents\), so the anti-duplicate can compare them: the last 40 per person on each server, in the process memory \(only those within the anti-duplicate window, 2 minutes by default, count; a restart erases them\)\. Nothing goes to the database\./);
+  assert.match(p, /\*\*The text's script\*\* \(Latin, Cyrillic, Arabic…\) is worked out on the spot\. When it isn't Latin, it only shows up as a signal \(`escrita_nao_coberta`\) in the staff alert and in that server's punishment log \(and in the machine's debug log, if the operator turns it on\)\./);
+  assert.match(p, /\*\*La forma reducida de los últimos mensajes de cada persona\*\* \(solo letras y números, de cualquier escritura, en minúsculas y sin tildes\), para que el antiduplicado los compare: los últimos 40 de cada persona en cada servidor, en la memoria del proceso \(solo cuentan los de la ventana del antiduplicado, 2 minutos por defecto; un reinicio los borra\)\. Nada va a la base de datos\./);
+  assert.match(p, /\*\*La escritura del texto\*\* \(latina, cirílica, árabe…\) se calcula en el momento\. Cuando no es la latina, solo aparece como una señal \(`escrita_nao_coberta`\) en la alerta al staff y en el registro de castigos de ese servidor \(y en el registro de depuración de la máquina, si el operador lo activa\)\./);
+  assert.doesNotMatch(p, /não é guardada|and not kept|y no se guarda/);
+  // o sinal vai mesmo ao alerta e ao log de punições (é o que a política diz)
+  assert.match(ler("modulos/moderacao/automod-engine.js"), /Sinais: \$\{sinal\.sinais\.join\(", "\) \|\| "—"\}/);
+  // e é o que o código faz: os números do texto batem com o engine e a config padrão
+  const eng = ler("modulos/moderacao/automod-engine.js");
+  assert.match(eng, /recentes\.slice\(-40\)/);
+  assert.match(ler("modulos/core/config-store.js"), /antiDuplicata: +\{ enabled: true, +maxRepetidas: 3, windowMs: 120000/);
+});
+
+console.log(`\nP6 ESCRITA: ${ok} ok, ${falhou} falha(s)`);
 fs.rmSync(DIR, { recursive: true, force: true });
 process.exit(falhou ? 1 : 0);
 };

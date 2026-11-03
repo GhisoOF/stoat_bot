@@ -23,6 +23,14 @@ import { citarNoTexto, marcarTraduzido } from "../core/aliases.js";
 // citação, e uma inventada aborta o build do Docker (aconteceu do P5 ao P7).
 export const NOVIDADES = [
   {
+    id: "2026-11-03-p6",
+    pacote: "P6",
+    data: "2026-11-03",
+    pt: "• **Qualquer escrita:** quem escreve em russo, árabe, grego, chinês… nunca é punido pela escrita; a repetição (`{&automod.antiduplicata}`) vale nessas escritas como no português, e a caixa alta (`{&automod.antiruido}`) conta também em cirílico, grego e armênio.\n• **Menos falso positivo:** repetir uma mensagem inocente não pesa mais na nota do `{&automod.sentinela}`.",
+    en: "• **Any script:** people writing in Russian, Arabic, Greek, Chinese… are never punished for the script; repetition (`{&automod.antiduplicata}`) works in those scripts just like in English, and caps (`{&automod.antiruido}`) now also count in Cyrillic, Greek and Armenian.\n• **Fewer false positives:** repeating a harmless message no longer weighs on the `{&automod.sentinela}` score.",
+    es: "• **Cualquier escritura:** quien escribe en ruso, árabe, griego, chino… nunca recibe un castigo por la escritura; la repetición (`{&automod.antiduplicata}`) vale en esas escrituras igual que en español, y las mayúsculas (`{&automod.antiruido}`) cuentan también en cirílico, griego y armenio.\n• **Menos falsos positivos:** repetir un mensaje inofensivo ya no pesa en la nota de `{&automod.sentinela}`.",
+  },
+  {
     id: "2026-11-03-p5",
     pacote: "P5",
     data: "2026-11-03",

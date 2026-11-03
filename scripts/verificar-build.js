@@ -191,6 +191,26 @@ else {
   }
 }
 
+// 8) (P6, 3 nov 2026) o modelo do classificador DENTRO do código (o que iria ao repositório público e à
+//    imagem) não pode ter sido treinado com base de licença compartilha-igual (CC BY-SA: o ToLD-Br):
+//    o modelo seria obra derivada e o repositório teria de mudar de licença. Esse modelo mora só em
+//    /data (o volume), de onde o bot o carrega normalmente.
+{
+  const MODELO = join(RAIZ, "modulos", "moderacao", "dados", "classificador-texto.json");
+  if (!existsSync(MODELO)) console.log("  ✓ classificador: nenhum modelo no código");
+  else {
+    const { compartilhaIgualDe, chaveCompartilhaIgualTorta } = await import(join(RAIZ, "modulos", "moderacao", "classificador-texto.js"));
+    let o;
+    try { o = JSON.parse(readFileSync(MODELO, "utf8")); } catch { o = undefined; }
+    const ci = o === undefined ? null : compartilhaIgualDe(o);
+    const torta = o === undefined ? null : chaveCompartilhaIgualTorta(o);
+    if (ci === null) falha("modulos/moderacao/dados/classificador-texto.json não é um JSON válido (não dá para conferir a licença das bases de treino)");
+    else if (torta !== null) falha(`modulos/moderacao/dados/classificador-texto.json tem fontes.${String(torta).slice(0, 40)}: a licença das bases de treino vai em "compartilhaIgual", escrito exatamente assim`);
+    else if (ci.length) falha(`modulos/moderacao/dados/classificador-texto.json foi treinado com base de licença compartilha-igual (${ci.map((x) => String(x).slice(0, 60)).join(", ").slice(0, 200)}): esse modelo não pode ir ao repositório nem à imagem — ponha-o em /data (o volume do bot) e tire-o do código`);
+    else console.log("  ✓ classificador: o modelo do código não usa base compartilha-igual");
+  }
+}
+
 if (erros) {
   console.error(`\nBUILD ABORTADO: ${erros} problema(s) de integridade. O repositório está incompleto ou inconsistente.`);
   process.exit(1);

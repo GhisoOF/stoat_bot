@@ -1,4 +1,5 @@
 import { TERMOS_MAX, TERMO_MAX, termoDoFiltro } from "./rajada.js";
+import { letrasIgnoradas } from "./caracteres.js";   // (P6) as letras do anti-repetição, em qualquer escrita
 import { citar, citarInterno } from "../core/aliases.js";
 import { descreverFiltro } from "./config-comando.js";
 import { rebuildBlocklist, fonteValida, nuncaBloquear, DOMINIO_VALIDO, removerCargoSilence, MODULOS_AUTOMOD, GRUPOS_AUTOMOD, estadoDoGrupo, moduloLigado } from "./automod-engine.js";
@@ -387,7 +388,7 @@ export async function cmdAutomod(message, args, ctx) {
       if (!ck || bruto === undefined) return erroUso(`Parâmetro: ${Object.keys(params).map((x) => `\`${x}\``).join(", ")}`, `Parameter: ${Object.keys(params).map((x) => `\`${nomeParam(x, "en")}\``).join(", ")}`, `Parámetro: ${Object.keys(params).map((x) => `\`${nomeParam(x, "es")}\``).join(", ")}`);
       let mostrado;
       if (ck === "ignorar") {
-        mod[ck] = String(bruto).toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 10);
+        mod[ck] = letrasIgnoradas(bruto);   // (P6) antes `[^a-z0-9]`: o "ㅋ" ou o "ه" da risada sumiam
         mostrado = `"${mod[ck]}"`;
       } else {
         const v = valorDoParametro(ck, bruto);

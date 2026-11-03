@@ -17,8 +17,8 @@
 // este arquivo do JUDY_REPO) e daqui a um ano. O que muda o vetor muda a VERSAO_SINAIS, e
 // modelo ou impressão de outra versão são ignorados.
 //
-// A normalização contra disfarces (leet, letras separadas por ponto ou espaço, cirílico,
-// letras "fancy", invisíveis) é a MESMA do sentinela (scorecard.normalizarParaAnalise —
+// A normalização contra disfarces (leet, letras separadas por ponto ou espaço, cirílico só onde
+// é disfarce — o russo de verdade fica russo —, letras "fancy", invisíveis) é a MESMA do sentinela (scorecard.normalizarParaAnalise —
 // DRY: um lugar só); aqui ela só ganha o que o vetor precisa a mais: marcadores, minúsculas,
 // sem acento, letras esticadas juntas, espaços colapsados.
 
@@ -43,6 +43,15 @@ const RE_LINK = /\b(?:https?:\/\/|www\.)[^\s<>]{1,400}/gi;
 const RE_LINK_NU = /\b[a-z0-9][a-z0-9-]{0,62}(?:\.[a-z0-9-]{1,62})*\.(?:com|net|org|ly|gg|io|me|br|link|xyz|site|app|ru|tk|ml|ga|cf|gq|top|click|online|shop|live|gift|icu|cyou|chat|co|info|biz|to)(?:\/[^\s<>]{0,400})?(?![a-z0-9])/gi;
 const RE_ULID = /\b[0-9A-HJKMNP-TV-Z]{26}\b/gi;
 const RE_ESTICADA = /(\p{L})\1{2,}/gu;                  // "griiiátis" → "gratis" (o mesmo do sentinela)
+// (P6, 3 nov 2026) árabe: o conteúdo em qualquer escrita entra no vetor, e no árabe a mesma palavra
+// se escreve de vários jeitos. Sai o tatweel (U+0640, o traço que estica a palavra: é LETRA para o
+// Unicode e não sairia com as marcas); as formas do alef (أ إ آ ٱ) viram ا; ى e ی (persa) viram ي; ک
+// (persa) vira ك; ة vira ه. Os harakat (vogais) já saem com as marcas (\p{M}) e os dígitos
+// arábicos (٠-٩) já viram o marcador de número (\p{N}).
+const RE_TATWEEL = /\u0640/g;
+const ARABE = Object.freeze({ "\u0623": "\u0627", "\u0625": "\u0627", "\u0622": "\u0627", "\u0671": "\u0627",
+  "\u0649": "\u064a", "\u06cc": "\u064a", "\u06a9": "\u0643", "\u0629": "\u0647" });
+const RE_ARABE = /[\u0623\u0625\u0622\u0671\u0649\u06cc\u06a9\u0629]/g;
 
 export function normalizar(texto) {
   let t = String(texto ?? "");
@@ -53,6 +62,7 @@ export function normalizar(texto) {
     .replace(RE_LINK, ` ${MARCADORES.link} `).replace(RE_ULID, ` ${MARCADORES.id} `);
   t = normalizarParaAnalise(t);
   t = t.replace(RE_LINK, ` ${MARCADORES.link} `).replace(RE_LINK_NU, ` ${MARCADORES.link} `);
+  t = t.replace(RE_TATWEEL, "").replace(RE_ARABE, (c) => ARABE[c]);
   t = t.toLowerCase().normalize("NFD").replace(/\p{M}+/gu, "").replace(RE_ESTICADA, "$1");
   // (3 nov 2026, P5 revisão) número que sobrou (telefone, valor, documento) vira marcador: não entra no vetor
   t = t.replace(/\p{N}+/gu, ` ${MARCADORES.numero} `);
@@ -128,5 +138,9 @@ const SONDA = [
   "If you don't pay by Friday I'll leak your address · Si no pagas, filtro tu dirección · <#C1> <%R1> :emoji:",
   // (3 nov 2026, P5 revisão) com número: o marcador de número entra na versão (o vetor de antes não vale mais)
   "me liga 11 98765-4321 ou paga R$ 10.000 até 05/11",
+  // (P6, 3 nov 2026) qualquer escrita: o cirílico de verdade fica cirílico (só o disfarce vira
+  // latino) e o árabe é unificado — o vetor de antes não vale mais
+  "\u0443\u0431\u044c\u044e \u0442\u0435\u0431\u044f \u0437\u0430\u0432\u0442\u0440\u0430 \u00b7 \u0440\u0430\u0443\u0440\u0430l \u0441\u043e\u0441\u043e",
+  "\u0623\u0646\u062a \u0633\u062a\u062f\u0641\u0639 \u0627\u0644\u0622\u0646 \u0640\u0640\u0645\u0631\u062d\u0628\u0627 \u0645\u064e\u062f\u0631\u0633\u0629 \u0639\u0644\u0649 \u0661\u0662\u0663",
 ];
 export const VERSAO_SINAIS = `1.${fnv1a(SONDA.map((s) => `${normalizar(s)}|${sinais(s).map((x) => x.join(":")).join(",")}`).join("\n")).toString(16).padStart(8, "0")}`;

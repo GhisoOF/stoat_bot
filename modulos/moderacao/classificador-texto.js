@@ -62,6 +62,25 @@ let placar = null;          // a soma por classe, reaproveitada a cada mensagem 
 
 export const desligadoNoEnv = () => !classificadorTextoLigado();
 
+// (P6, 3 nov 2026) `fontes.compartilhaIgual` (opcional): as bases de treino com licença que obriga a
+// compartilhar igual (ex.: ["told-br (CC BY-SA 4.0)"]). Um modelo treinado com elas NUNCA entra no
+// repositório público — o scripts/verificar-build.js falha se o modelo do código tiver a lista
+// não vazia —, mas o bot o carrega normalmente de /data (o volume, fora do Git e da imagem).
+export const MAX_COMPARTILHA_IGUAL = 20, MAX_TEXTO_FONTE = 200;
+// As bases compartilha-igual declaradas no objeto do modelo (lista; vazia = nenhuma). Não valida.
+export const compartilhaIgualDe = (o) => {
+  const ci = o?.fontes?.compartilhaIgual;
+  return Array.isArray(ci) ? ci : ci ? [ci] : [];
+};
+// (revisão do P6) A trava não pode ser driblada com outra grafia ("compartilhaigual",
+// "compartilha_igual", "Compartilha-Igual"): a chave de `fontes` que, em minúsculas e sem `_`/`-`,
+// é "compartilhaigual" mas não está escrita exatamente "compartilhaIgual" → o nome dela (senão null).
+export const chaveCompartilhaIgualTorta = (o) => {
+  const f = o?.fontes;
+  if (!f || typeof f !== "object" || Array.isArray(f)) return null;
+  return Object.keys(f).find((k) => k !== "compartilhaIgual" && k.toLowerCase().replace(/[_-]/g, "") === "compartilhaigual") ?? null;
+};
+
 const finito = (x) => typeof x === "number" && Number.isFinite(x);
 const objetoSimples = (x) => !!x && typeof x === "object" && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
 const mesmasChaves = (obj, classes) => objetoSimples(obj) && Object.keys(obj).length === classes.length && classes.every((c) => Object.hasOwn(obj, c));
@@ -82,6 +101,16 @@ export function validar(o) {
     if (!mesmasChaves(o[campo], classes)) return { erro: `${campo}: uma chave por classe, nem mais nem menos` };
   }
   if (o.treinadoEm !== undefined && (typeof o.treinadoEm !== "string" || o.treinadoEm.length > 40)) return { erro: "treinadoEm inválido" };
+  if (o.fontes !== undefined) {
+    if (!objetoSimples(o.fontes)) return { erro: "fontes não é um objeto" };
+    const torta = chaveCompartilhaIgualTorta(o);
+    if (torta !== null) return { erro: `fontes.${paraOLog(torta).slice(0, 40)}: escreva exatamente "compartilhaIgual"` };
+    const ci = o.fontes.compartilhaIgual;
+    if (ci !== undefined && (!Array.isArray(ci) || ci.length > MAX_COMPARTILHA_IGUAL
+        || !ci.every((x) => typeof x === "string" && x.length <= MAX_TEXTO_FONTE))) {
+      return { erro: `fontes.compartilhaIgual: uma lista de até ${MAX_COMPARTILHA_IGUAL} textos de até ${MAX_TEXTO_FONTE} caracteres` };
+    }
+  }
   const k = classes.length;
   const vies = new Float64Array(k), limiares = new Float64Array(k);
   const pesos = new Map();
@@ -108,7 +137,7 @@ export function validar(o) {
       linha[c] = w; n++;
     }
   }
-  return { modelo: { classes: [...classes], vies, limiares, pesos, n, treinadoEm: o.treinadoEm ?? null } };
+  return { modelo: { classes: [...classes], vies, limiares, pesos, n, treinadoEm: o.treinadoEm ?? null, compartilhaIgual: [...compartilhaIgualDe(o)] } };
 }
 
 // (revisão do P5) o que vai ao log e ao painel: uma linha, sem caractere de controle nem crase, no máximo

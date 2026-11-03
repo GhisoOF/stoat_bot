@@ -51,6 +51,14 @@ subida. As cópias de segurança de antes saem no prazo delas (30 dias).
   dos últimos 15 minutos, até 300 caracteres cada) só na memória do processo; quando a
   nota de uma mensagem passa do limiar, o juiz (o modelo local) lê a mensagem e até 8
   dessas anteriores, com quem escreveu trocado por uma letra (A, B…). Nada vai ao banco.
+- **A forma reduzida das últimas mensagens de cada pessoa** (só letras e números, de
+  qualquer escrita, em minúsculas e sem acento), para o anti-duplicata comparar uma com
+  a outra: as últimas 40 de cada pessoa em cada servidor, na memória do processo (só as
+  da janela do anti-duplicata, 2 minutos por padrão, contam; um reinício apaga). Nada
+  vai ao banco.
+- **A escrita do texto** (latina, cirílica, árabe…) é calculada na hora. Quando não é a
+  latina, só aparece como um sinal (`escrita_nao_coberta`) no alerta à staff e no log de
+  punições daquele servidor (e no log de depuração da máquina, se o operador o ligar).
 - **O classificador de texto** (um modelo pequeno, na máquina do operador, só quando há
   o arquivo do modelo) dá à mensagem que o automod já analisa uma nota a mais: nada sai
   da máquina e ele não guarda nada — o resultado só entra na nota, como os outros
@@ -179,6 +187,15 @@ before go after their usual period (30 days).
   score passes the threshold, the judge (the local model) reads the message and up to 8
   of those before it, with whoever wrote each one replaced by a letter (A, B…). Nothing
   goes to the database.
+- **A reduced form of each person's latest messages** (only letters and numbers, in any
+  script, lowercase and without accents), so the anti-duplicate can compare them: the
+  last 40 per person on each server, in the process memory (only those within the
+  anti-duplicate window, 2 minutes by default, count; a restart erases them). Nothing
+  goes to the database.
+- **The text's script** (Latin, Cyrillic, Arabic…) is worked out on the spot. When it
+  isn't Latin, it only shows up as a signal (`escrita_nao_coberta`) in the staff alert
+  and in that server's punishment log (and in the machine's debug log, if the operator
+  turns it on).
 - **The text classifier** (a small model, on the operator's machine, only when the model
   file is there) gives the message the automod already analyzes one more score: nothing
   leaves the machine and it keeps nothing — the result only goes into the score, like
@@ -310,6 +327,15 @@ copias de seguridad de antes salen en su plazo (30 días).
   en la memoria del proceso; cuando la nota de un mensaje pasa del umbral, el juez (el
   modelo local) lee el mensaje y hasta 8 de esos anteriores, con quien escribió
   cambiado por una letra (A, B…). Nada va a la base de datos.
+- **La forma reducida de los últimos mensajes de cada persona** (solo letras y números,
+  de cualquier escritura, en minúsculas y sin tildes), para que el antiduplicado los
+  compare: los últimos 40 de cada persona en cada servidor, en la memoria del proceso
+  (solo cuentan los de la ventana del antiduplicado, 2 minutos por defecto; un reinicio
+  los borra). Nada va a la base de datos.
+- **La escritura del texto** (latina, cirílica, árabe…) se calcula en el momento. Cuando
+  no es la latina, solo aparece como una señal (`escrita_nao_coberta`) en la alerta al
+  staff y en el registro de castigos de ese servidor (y en el registro de depuración de
+  la máquina, si el operador lo activa).
 - **El clasificador de texto** (un modelo pequeño, en la máquina del operador, solo
   cuando está el archivo del modelo) le da al mensaje que el automod ya analiza una nota
   más: nada sale de la máquina y no guarda nada — el resultado solo entra en la nota,

@@ -1,4 +1,5 @@
 import LEXICO_EXTRA from "./lexico-extra.js";
+import { escritaCoberta } from "./escrita.js";
 
 const LEX_SCAM = [
   /\bfree\s*(nitro|robux|vbucks|gift|steam|skins?)\b/i,
@@ -575,6 +576,9 @@ export const PESOS = {
   ultimato:             1,   // cobrança com condição/alternativa ("paga até sexta ou…") — contexto
   // o classificador de texto (P5): já vem em pontos (ver TETO_CLASSIFICADOR)
   classificador:        1,
+  // (P6) o texto está numa escrita que os léxicos daqui não leem (cirílico, árabe, CJK…): só aparece
+  // nos sinais e abre a porta do classificador — não pesa nada (escrever em russo não é suspeito)
+  escrita_nao_coberta:  0,
 };
 
 // (P5, 3 nov 2026) O classificador de texto é um SINAL, nunca o juiz: cada classe acima do
@@ -616,7 +620,34 @@ const HOMOGLIFOS = {
   // latinos "estendidos" usados como disfarce
   "ɡ": "g", "ı": "i", "ʟ": "l", "ɴ": "n", "ʀ": "r", "ꜱ": "s",
 };
-const RE_HOMOGLIFO = new RegExp(`[${Object.keys(HOMOGLIFOS).join("")}]`, "g");
+// (P6, 3 nov 2026) antes: TODO cirílico/grego confundível virava latino, em qualquer texto — "убью
+// тебя" virava "yбью тeбя" e o russo e o grego de verdade chegavam estragados ao classificador.
+// Agora a troca é POR PALAVRA, sem olhar a escrita dominante do texto (revisão do P6: a ferramenta de
+// homoglifo troca toda letra que pode, o cirílico vira a maioria e uma regra pela dominante deixava
+// "ѕеі оnԁе νосе mоrа" passar):
+//   • palavra feita só de letras confundíveis, com ou sem latinas no meio ("раураl", "gаnhе",
+//     "ѕеі", "νосе") → troca;
+//   • palavra com pelo menos UMA letra cirílica/grega que não se passa por latina (б д ж л п ш…) →
+//     fica intacta, mesmo misturada: é russo/grego de verdade ("убью тебя", "Привет", "пpивет").
+// O preço, aceito (decisão do dono): as poucas palavras russas/gregas reais feitas só de confundíveis
+// ("орех", "сухо", "у", "а", "ВСЕ") viram latinas aqui — só nesta normalização, que nunca é exibida.
+// As latinas "estendidas" (ɡ ı ʟ ɴ ʀ ꜱ) são da própria escrita latina: trocam sempre, como antes.
+// As letras separadas por ponto/espaço já foram juntadas antes (normalizarParaAnalise): "ѕ.е.і" é
+// uma palavra quando chega aqui.
+const LATINAS_ESTENDIDAS = new Set(["ɡ", "ı", "ʟ", "ɴ", "ʀ", "ꜱ"]);
+const CONFUNDIVEIS = new Set(Object.keys(HOMOGLIFOS).filter((c) => !LATINAS_ESTENDIDAS.has(c)));
+const RE_LATINA_ESTENDIDA = new RegExp(`[${[...LATINAS_ESTENDIDAS].join("")}]`, "g");
+const RE_CONFUNDIVEL = new RegExp(`[${[...CONFUNDIVEIS].join("")}]`, "g");
+const RE_CIRILICO_GREGO = /[\p{Script=Cyrillic}\p{Script=Greek}]/u;
+const RE_CIRILICO_GREGO_G = /[\p{Script=Cyrillic}\p{Script=Greek}]/gu;
+const RE_PALAVRA = /[\p{L}\p{M}\p{N}]+/gu;
+// toda letra cirílica/grega da palavra é confundível?
+const soConfundiveis = (palavra) => (palavra.match(RE_CIRILICO_GREGO_G) ?? []).every((c) => CONFUNDIVEIS.has(c));
+function desfazerHomoglifos(t) {
+  t = t.replace(RE_LATINA_ESTENDIDA, (c) => HOMOGLIFOS[c]);
+  if (!RE_CIRILICO_GREGO.test(t)) return t;
+  return t.replace(RE_PALAVRA, (p) => (RE_CIRILICO_GREGO.test(p) && soConfundiveis(p) ? p.replace(RE_CONFUNDIVEL, (c) => HOMOGLIFOS[c]) : p));
+}
 const LEET = { "4": "a", "@": "a", "3": "e", "1": "i", "!": "i", "0": "o", "5": "s", "$": "s", "7": "t", "8": "b", "9": "g" };
 
 export function normalizarParaAnalise(texto) {
@@ -626,9 +657,6 @@ export function normalizarParaAnalise(texto) {
   t = t.normalize("NFKC");
   // invisíveis: espaço de largura zero, joiner, hífen suave, marca de direção
   t = t.replace(/[\u00AD\u180E\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/g, "");
-  // alfabetos que se passam por latino
-  t = t.replace(RE_HOMOGLIFO, (c) => HOMOGLIFOS[c]);
-
   // link disfarçado: bit[.]ly · bit(.)ly · bit (ponto) ly · bit . ly / x
   t = t.replace(/\s*[\[\(\{]\s*(?:\.|dot|ponto)\s*[\]\)\}]\s*/gi, ".");
   t = t.replace(/([\p{L}\p{N}])\s+\.\s+([\p{L}\p{N}])/gu, "$1.$2");
@@ -640,6 +668,10 @@ export function normalizarParaAnalise(texto) {
   // letras separadas por UM espaço (4+, para não juntar "e o a"): g a n h e
   t = t.replace(/(?<![\p{L}\p{N}])\p{L}(?: \p{L}){3,}(?![\p{L}\p{N}])/gu,
     (m) => m.replace(/ /g, ""));
+
+  // alfabetos que se passam por latino — só onde é disfarce (P6: ver desfazerHomoglifos). Depois de
+  // juntar as letras separadas (revisão do P6): "ѕ.е.і" já é a palavra "ѕеі" e é trocada inteira.
+  t = desfazerHomoglifos(t);
 
   // leetspeak — só em palavra que MISTURA letras e números ("g4nh3", "n0").
   // Número puro (50, 2024), dinheiro ("R$50") e link ficam como estão. Este
@@ -666,17 +698,26 @@ const RE_ESTICADA = /(\p{L})\1{2,}/gu;
 
 // Sinais que não são CONTEÚDO: sozinhos não destravam a repetição (duplicata) — e o classificador
 // (P5) também é um deles: ele não destrava nada.
-const NEUTROS = new Set(["duplicata", "afirmacao", "cta", "taxa_alta", "pergunta", "negacao", "classificador"]);
+// (P6) + a escrita não coberta: ela abre a porta do classificador, mas não é conteúdo
+const NEUTROS = new Set(["duplicata", "afirmacao", "cta", "taxa_alta", "pergunta", "negacao", "classificador", "escrita_nao_coberta"]);
 // (revisão do P5, R3) para o classificador somar, falta um sinal além destes
+// (P6) e para a repetição (duplicata) somar também — o mesmo critério
 const CONTEXTO = new Set([...NEUTROS, "urgencia", "link_simples", "ultimato"]);
 // (revisão do P5) o que a fala relatada / o pedido de ajuda zera
 const FAMILIA_EXTORSAO = ["extorsao", "exposicao", "ultimato", "coercao", "vazar", "dados_pessoais", "dox"];
+
+// (P6) Há sinal de CONTEÚDO (peso positivo) fora de `livres`?
+const temSinalFora = (f, livres) => Object.entries(f).some(([k, v]) => v > 0 && !livres.has(k) && (PESOS[k] ?? 0) > 0);
 
 function extrairFeatures(texto, opts = {}) {
   const cru = texto ?? "";
   let t = normalizarParaAnalise(cru);
   if (opts.colapsar) t = t.replace(RE_ESTICADA, "$1");
   const f = {};
+  // (P6, 3 nov 2026) uma escrita que os léxicos daqui não leem: não pesa nada (nunca se pune pela
+  // escrita); só aparece nos sinais e abre a porta do classificador (ver o fim desta função)
+  const naoCoberta = !escritaCoberta(cru);
+  if (naoCoberta) f.escrita_nao_coberta = 1;
 
   // Link ofuscado: bit[.]ly, bit (ponto) ly, bit . ly — ninguém escreve
   // assim sem querer esconder o link de um filtro.
@@ -769,12 +810,15 @@ function extrairFeatures(texto, opts = {}) {
   // há algum sinal de CONTEÚDO. Antes "Miguel miguel" 4× dava nota 6 e saía
   // como "conteúdo proibido" para quem tinha pouco XP. Repetir texto inocente
   // é com o anti-duplicata (que tem folga e o primeiro toque).
-  if (f.duplicata) {
-    const temConteudo = Object.entries(f).some(([k, v]) => v > 0 && !NEUTROS.has(k) && (PESOS[k] ?? 0) > 0);
-    // Sem conteúdo suspeito, texto curto não soma nada; parede de texto
-    // repetida (comportamento de bot — o caso do Stork) continua somando.
-    if (!temConteudo && String(texto ?? "").length < 80) f.duplicata = 0;
-  }
+  // (P6, 3 nov 2026, R3) antes: qualquer sinal fora de NEUTROS destravava a repetição (urgência 0,5,
+  // link comum…), e o texto de ≥ 80 caracteres somava mesmo sem sinal nenhum ("parede"). A bateria
+  // mostrou o maior falso positivo da tabela aí: benigna repetida 3× → 704/4000 punidas (conta
+  // nova); "corre lá no canal de eventos que o sorteio já começou" 3× dava 4,5, "acabei de chegar
+  // em casa do trabalho…" 3× dava 4,0. Agora: só soma com sinal de CONTEÚDO fora de CONTEXTO (o
+  // mesmo critério da porta do classificador). A parede repetida (o Stork) é do anti-duplicata do
+  // engine (analisarDuplicata, com folga e limite próprios), que continua pegando — o sentinela
+  // não precisa somar de novo.
+  if (f.duplicata && !temSinalFora(f, CONTEXTO)) f.duplicata = 0;
 
   // Conjunções (o "E" que o somatório linear sozinho não captura)
   const temContexto = (f.oferta > 0 || f.cta > 0 || f.link_filehost || f.link_encurtador || f.link_convite || f.link_simples || f.afirmacao > 0);
@@ -816,7 +860,24 @@ function extrairFeatures(texto, opts = {}) {
   // (revisão do P5, R3) o classificador só soma com OUTRO sinal de conteúdo: contexto (repetição,
   // contato, imperativo, urgência, link comum, ultimato) não destrava — "bora jogar mais tarde" 3× ou
   // "… chama no zap" com o classificador errando não punem
-  if (f.classificador && !Object.entries(f).some(([k, v]) => v > 0 && !CONTEXTO.has(k) && (PESOS[k] ?? 0) > 0)) f.classificador = 0;
+  // (P6) `opts.classificadorPorta`: "conteudo" (o padrão, o de cima) ou "contexto" — SÓ para a bateria
+  // medir uma porta mais solta: aí basta um sinal fora de NEUTROS (urgência, link comum, ultimato
+  // destravam). Qualquer outro valor = o padrão. O bot de produção nunca passa esta opção.
+  // (P6) Numa escrita não coberta (as regras não leem o conteúdo), a porta abre sem outro sinal — mas
+  // só até o alerta: o classificador mais o contexto que já somou param no TETO_CLASSIFICADOR (3 < o
+  // piso 3,5). Sozinho, ou com só contexto (um link comum, "telegram"), ele leva ao alerta para a
+  // staff (nota ≥ 3), nunca à punição (R13). Com sinal de conteúdo, soma inteiro, como no latino.
+  if (f.classificador) {
+    const livres = opts.classificadorPorta === "contexto" ? NEUTROS : CONTEXTO;
+    if (!temSinalFora(f, livres)) {
+      if (!naoCoberta) f.classificador = 0;
+      else {
+        let outros = 0;
+        for (const [k, v] of Object.entries(f)) if (k !== "classificador") outros += (PESOS[k] ?? 0) * v;
+        f.classificador = clamp(TETO_CLASSIFICADOR - outros, 0, f.classificador);
+      }
+    }
+  }
   return f;
 }
 
